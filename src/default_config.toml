@@ -21,6 +21,11 @@ mouse_scroll_lines = 3
 # "never" - never prompt when discarding.
 confirm_discard = "line"
 
+[delta]
+enabled = false
+path = "delta"
+args = []
+
 [style]
 # fg / bg can be either of:
 # - a hex value: "#707070"

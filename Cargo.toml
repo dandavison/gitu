@@ -28,6 +28,7 @@ opt-level = 1
 strip = true
 
 [dependencies]
+ansi-to-tui = "7.0.0"
 arboard = { version = "3.6.1", default-features = false, features = [
     "windows-sys",
 ] }

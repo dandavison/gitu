@@ -14,6 +14,7 @@ const DEFAULT_CONFIG: &str = include_str!("default_config.toml");
 
 pub struct Config {
     pub general: GeneralConfig,
+    pub delta: DeltaConfig,
     pub style: StyleConfig,
     pub bindings: Bindings,
     pub picker_bindings: PickerBindings,
@@ -44,6 +45,8 @@ pub(crate) struct BindingsConfig {
 /// parsed to be turned into a useful [`Config`].
 pub(crate) struct FigmentConfig {
     pub general: GeneralConfig,
+    #[serde(default)]
+    pub delta: DeltaConfig,
     pub style: StyleConfig,
     pub bindings: BindingsConfig,
 }
@@ -75,6 +78,20 @@ pub enum ConfirmDiscardOption {
     Hunk,
     File,
     Never,
+}
+
+fn default_delta_path() -> String {
+    "delta".into()
+}
+
+#[derive(Default, Debug, Deserialize)]
+pub struct DeltaConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_delta_path")]
+    pub path: String,
+    #[serde(default)]
+    pub args: Vec<String>,
 }
 
 #[derive(Default, Debug, Deserialize)]
@@ -315,6 +332,7 @@ pub fn init_config(path: Option<PathBuf>) -> Res<Config> {
 
     let FigmentConfig {
         general,
+        delta,
         style,
         bindings: bindings_config,
     } = Figment::new()
@@ -328,6 +346,7 @@ pub fn init_config(path: Option<PathBuf>) -> Res<Config> {
 
     Ok(Config {
         general,
+        delta,
         style,
         bindings,
         picker_bindings,
@@ -345,6 +364,7 @@ pub fn config_path() -> PathBuf {
 pub(crate) fn init_test_config() -> Res<Config> {
     let FigmentConfig {
         mut general,
+        delta,
         style,
         bindings: bindings_config,
     } = Figment::new()
@@ -358,6 +378,7 @@ pub(crate) fn init_test_config() -> Res<Config> {
 
     Ok(Config {
         general,
+        delta,
         style,
         bindings: Bindings::try_from(bindings_config.menus).unwrap(),
         picker_bindings: PickerBindings::try_from(bindings_config.picker).unwrap(),

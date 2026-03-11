@@ -408,6 +408,32 @@ fn syntax_highlighted() {
 }
 
 #[test]
+fn delta_highlighted() {
+    if std::process::Command::new("delta")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        return;
+    }
+
+    let mut ctx = setup_clone!();
+    ctx.config().delta.enabled = true;
+    commit(
+        &ctx.dir,
+        "delta-test.rs",
+        "fn main() {\n    println!(\"Hey\");\n}\n",
+    );
+    fs::write(
+        ctx.dir.join("delta-test.rs"),
+        "fn main() {\n    println!(\"Bye\");\n}\n",
+    )
+    .unwrap();
+
+    snapshot!(ctx, "jj<tab>");
+}
+
+#[test]
 fn crlf_diff() {
     let mut ctx = setup_clone!();
     let mut app = ctx.init_app();

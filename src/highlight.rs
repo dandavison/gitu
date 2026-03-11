@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::config::DiffHighlightConfig;
 use crate::config::SyntaxHighlightConfig;
+use crate::delta_highlight;
 use crate::git::diff::Diff;
 use crate::gitu_diff;
 use crate::syntax_parser;
@@ -28,6 +29,12 @@ pub(crate) fn highlight_hunk(
     file_index: usize,
     hunk_index: usize,
 ) -> Arc<HunkHighlights> {
+    if config.delta.enabled {
+        return delta_highlight::highlight_hunk_with_delta(
+            &config.delta, diff, file_index, hunk_index,
+        );
+    }
+
     let file_diff = &diff.file_diffs[file_index];
 
     let hunk_content = diff.hunk_content(file_index, hunk_index);
@@ -55,16 +62,13 @@ pub(crate) fn highlight_hunk(
         zip_styles(diff_highlights, diff_context_highlights),
     );
 
-    let mut highlights = HunkHighlights {
-        spans: vec![],
-        line_index: vec![],
-    };
+    let mut highlights = HunkHighlights::new();
 
     for (line_range, _) in line_range_iterator(hunk_content) {
-        let start = highlights.spans.len();
+        let start = highlights.spans_len();
 
         collect_line_highlights(&mut highlights_iterator, &line_range, &mut highlights.spans);
-        highlights.line_index.push(start..highlights.spans.len());
+        highlights.push_line_index(start);
     }
 
     Arc::new(highlights)
@@ -72,13 +76,30 @@ pub(crate) fn highlight_hunk(
 
 #[derive(Clone)]
 pub struct HunkHighlights {
-    spans: Vec<(Range<usize>, Style)>,
+    pub(crate) spans: Vec<(Range<usize>, Style)>,
     line_index: Vec<Range<usize>>,
 }
 
-impl HunkHighlights {}
-
 impl HunkHighlights {
+    pub(crate) fn new() -> Self {
+        Self {
+            spans: vec![],
+            line_index: vec![],
+        }
+    }
+
+    pub(crate) fn spans_len(&self) -> usize {
+        self.spans.len()
+    }
+
+    pub(crate) fn push_span(&mut self, range: Range<usize>, style: Style) {
+        self.spans.push((range, style));
+    }
+
+    pub(crate) fn push_line_index(&mut self, start: usize) {
+        self.line_index.push(start..self.spans.len());
+    }
+
     /// Get highlight segments for a given hunk line.
     pub fn get_line_highlights(&self, line: usize) -> &[(Range<usize>, Style)] {
         let line_range = &self.line_index[line];

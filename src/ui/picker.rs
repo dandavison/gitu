@@ -151,6 +151,7 @@ mod tests {
 
         Config {
             general: GeneralConfig::default(),
+            delta: Default::default(),
             style: StyleConfig::default(),
             bindings: BTreeMap::new().try_into().unwrap(),
             picker_bindings: PickerBindingsConfig::default().try_into().unwrap(),
