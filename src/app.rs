@@ -233,6 +233,14 @@ impl App {
                 // e.g. '/' becomes '?' on a US keyboard. So just ignore SHIFT.
                 key.modifiers = key.modifiers.difference(KeyModifiers::SHIFT);
 
+                if key.kind == event::KeyEventKind::Press
+                    && key.code == KeyCode::Char('c')
+                    && key.modifiers.contains(KeyModifiers::CONTROL)
+                {
+                    self.state.quit = true;
+                    return Ok(());
+                }
+
                 if self.state.picker.is_some() {
                     self.handle_picker_input(key);
                 } else if self.state.prompt.state.is_focused() {
@@ -593,7 +601,9 @@ impl App {
             let event = term.backend_mut().read_event()?;
             self.handle_event(term, event)?;
 
-            if self.state.prompt.state.status().is_done() {
+            if self.state.quit {
+                return Err(Error::PromptAborted);
+            } else if self.state.prompt.state.status().is_done() {
                 return get_prompt_result(params, self);
             } else if self.state.prompt.state.status().is_aborted() {
                 return Err(Error::PromptAborted);
@@ -622,6 +632,10 @@ impl App {
         loop {
             let event = term.backend_mut().read_event()?;
             self.handle_event(term, event)?;
+
+            if self.state.quit {
+                return Err(Error::PromptAborted);
+            }
 
             match self.state.prompt.state.value() {
                 "y" => {
@@ -681,6 +695,10 @@ impl App {
         loop {
             let event = term.backend_mut().read_event()?;
             self.handle_event(term, event)?;
+
+            if self.state.quit {
+                return Ok(None);
+            }
 
             if let Some(ref picker) = self.state.picker {
                 if picker.is_done() {
