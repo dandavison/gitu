@@ -5,10 +5,10 @@ expression: ctx.redact_buffer()
 ▌Cherry-picking other-branch                                                    |
                                                                                 |
  Unstaged changes (1)                                                           |
- unmerged   conflict-file…                                                      |
+ unmerged   conflict-file                                                       |
                                                                                 |
  Staged changes (1)                                                             |
- unmerged   conflict-file…                                                      |
+ unmerged   conflict-file                                                       |
                                                                                 |
  Recent commits                                                                 |
  487ec57 main modify conflict-file                                              |

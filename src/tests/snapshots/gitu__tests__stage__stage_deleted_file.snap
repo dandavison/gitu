@@ -2,8 +2,7 @@
 source: src/tests/stage.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
- Your branch is ahead of 'origin/main' by 1 commit(s).                          |
+ main                                                                           |
                                                                                 |
  Staged changes (1)                                                             |
 ▌deleted    to-delete…                                                          |
@@ -20,6 +19,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git add to-delete                                                             |
-styles_hash: 86c2e1d85f798b75
+styles_hash: a540901e0039ef31

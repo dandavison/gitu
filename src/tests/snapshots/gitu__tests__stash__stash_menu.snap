@@ -2,8 +2,7 @@
 source: src/tests/stash.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is up to date with 'origin/main'.                                  |
+▌main                                                                           |
                                                                                 |
  Untracked files                                                                |
  file-two                                                                       |
@@ -12,6 +11,7 @@ expression: ctx.redact_buffer()
  added      file-one…                                                           |
                                                                                 |
  Recent commits                                                                 |
+ b66a0bf main origin/main add initial-file                                      |
 ────────────────────────────────────────────────────────────────────────────────|
  Stash                 Arguments                                                |
  z     both            -a Also save untracked and ignored files (--all)         |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  p     pop                                                                      |
  k     drop                                                                     |
  q/esc Quit/Close                                                               |
-styles_hash: 4b344b24bf22a0ea
+styles_hash: ccbfe0dd78edc210

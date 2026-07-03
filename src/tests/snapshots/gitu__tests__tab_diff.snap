@@ -2,8 +2,7 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is ahead of 'origin/main' by 1 commit(s).                          |
+▌main                                                                           |
                                                                                 |
  Unstaged changes (1)                                                           |
  modified   tab.txt                                                             |
@@ -22,4 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 4db1a6e61728c6f7
+                                                                                |
+styles_hash: 3806a7c2b431d3f9

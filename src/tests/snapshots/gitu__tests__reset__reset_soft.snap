@@ -2,8 +2,7 @@
 source: src/tests/reset.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is up to date with 'origin/main'.                                  |
+▌main                                                                           |
                                                                                 |
  Staged changes (1)                                                             |
  added      unwanted-file                                                       |
@@ -22,4 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: fef12cfe8789d4e2
+                                                                                |
+styles_hash: d8581fa6cd9b2eab

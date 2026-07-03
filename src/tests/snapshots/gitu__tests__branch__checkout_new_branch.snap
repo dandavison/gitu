@@ -2,7 +2,7 @@
 source: src/tests/branch.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch new                                                                  |
+▌new                                                                            |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main new origin/main add initial-file                                  |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
 ────────────────────────────────────────────────────────────────────────────────|
 $ git checkout -b new                                                           |
 Switched to a new branch 'new'                                                  |
-styles_hash: fc716abcbd3de04a
+styles_hash: 5f2e5315d39d675e

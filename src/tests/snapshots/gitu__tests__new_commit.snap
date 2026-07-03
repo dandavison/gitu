@@ -2,8 +2,7 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is ahead of 'origin/main' by 1 commit(s).                          |
+▌main                                                                           |
                                                                                 |
  Recent commits                                                                 |
  e7eb2bd main add new-file                                                      |
@@ -22,4 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: e010edc5475641a
+                                                                                |
+styles_hash: 7a6d408befe8b5cb

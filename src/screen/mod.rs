@@ -498,9 +498,13 @@ pub(crate) fn layout_screen<'a>(
                     }
                 });
 
-                // Add ellipsis indicator for collapsed sections
+                // Add ellipsis indicator for collapsed sections that hide children
                 let item = &screen.items[line.item_index];
-                if screen.is_collapsed(item) {
+                let has_children = screen
+                    .items
+                    .get(line.item_index + 1)
+                    .is_some_and(|next| next.depth > item.depth);
+                if has_children && screen.is_collapsed(item) {
                     line_end += 1;
                     layout_span(layout, ("…".into(), bg));
                 }

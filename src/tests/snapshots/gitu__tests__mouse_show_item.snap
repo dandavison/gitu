@@ -2,18 +2,18 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
- commit cd4d2d1f83bf459ce16bd9dbc873ebceac849283                                |
+ commit b66a0bf82020d6a386e94d0fceedec1f817d20c7                                |
  Author: Author Name <author@email.com>                                         |
  Date:   Fri, 16 Feb 2024 11:11:00 +0100                                        |
                                                                                 |
-     add testfile                                                               |
+     add initial-file                                                           |
                                                                                 |
      Commit body goes here                                                      |
                                                                                 |
- added      testfile                                                            |
-▌@@ -0,0 +1,2 @@                                                                |
-▌+testing                                                                       |
-▌+testtest                                                                      |
+ added      initial-file                                                        |
+▌@@ -0,0 +1 @@                                                                  |
+▌+hello                                                                         |
+▌\ No newline at end of file                                                    |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: aa867385650c4035
+styles_hash: 82d423f9cf431a2f

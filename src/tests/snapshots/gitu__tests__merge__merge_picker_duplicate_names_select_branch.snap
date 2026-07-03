@@ -2,8 +2,7 @@
 source: src/tests/merge.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is ahead of 'origin/main' by 1 commit(s).                          |
+▌main                                                                           |
                                                                                 |
  Recent commits                                                                 |
  46369c5 main other v1.0.0 add other commit                                     |
@@ -18,8 +17,9 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git merge v1.0.0                                                              |
 warning: refname 'v1.0.0' is ambiguous.                                         |
 warning: refname 'v1.0.0' is ambiguous.                                         |
-styles_hash: 96ba88c230adae56
+styles_hash: a2539b5cf05487da

@@ -2,8 +2,7 @@
 source: src/tests/stash.rs
 expression: out
 ---
- On branch main                                                                 |
- Your branch is ahead of 'origin/main' by 2 commit(s).                          |
+ main                                                                           |
                                                                                 |
  Unstaged changes (2)                                                           |
 ▌modified   file1.txt                                                           |
@@ -20,9 +19,10 @@ expression: out
 ▌ eight                                                                         |
 ▌ nine                                                                          |
 ▌-ten                                                                           |
+▌+TEN                                                                           |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git stash apply -q stash@{0}                                                  |
-styles_hash: ac8c9cc328d84585
+styles_hash: b59ab14feff9dff1
 
 [files before]
 --- file1.txt ---

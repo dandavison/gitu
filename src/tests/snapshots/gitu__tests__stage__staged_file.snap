@@ -2,11 +2,10 @@
 source: src/tests/stage.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is up to date with 'origin/main'.                                  |
+▌main                                                                           |
                                                                                 |
  Staged changes (1)                                                             |
- added      new-file…                                                           |
+ added      new-file                                                            |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                                      |
@@ -22,4 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: e95ba86e6653e5f8
+                                                                                |
+styles_hash: 289fe9ee0402fb0

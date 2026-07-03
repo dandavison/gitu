@@ -2,7 +2,7 @@
 source: src/tests/pull.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌main                                                                           |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                                      |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  u     upstream, setting that                                                   |
  e     from elsewhere                                                           |
  q/esc Quit/Close                                                               |
-styles_hash: c5e18172f3d27bf5
+styles_hash: 20d3803c48978461

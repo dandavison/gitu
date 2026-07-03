@@ -2,8 +2,7 @@
 source: src/tests/stash.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
- Your branch is up to date with 'origin/main'.                                  |
+ main                                                                           |
                                                                                 |
 ▌Staged changes (2)                                                             |
 ▌added      file-one…                                                           |
@@ -20,6 +19,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 ! Cannot stash: working tree is empty                                           |
-styles_hash: 540759bc87855080
+styles_hash: cd0cc3ed31f3472f

@@ -2,8 +2,7 @@
 source: src/tests/unstage.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
- Your branch is ahead of 'origin/main' by 2 commit(s).                          |
+ main                                                                           |
                                                                                 |
  Unstaged changes (1)                                                           |
 ▌deleted    script.sh…                                                          |
@@ -20,6 +19,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git restore --staged script.sh                                                |
-styles_hash: b62fb270c2647e0a
+styles_hash: dd34a0d9cfc2b3e7
