@@ -2,8 +2,7 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
- Your branch is ahead of 'origin/main' by 2 commit(s).                          |
+ main                                                                           |
                                                                                 |
  Unstaged changes (1)                                                           |
 ▌modified   file-two…                                                           |
@@ -20,6 +19,7 @@ expression: ctx.redact_buffer()
  b66a0bf origin/main add initial-file                                           |
                                                                                 |
                                                                                 |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git apply --cached                                                            |
-styles_hash: ec215853d0f68a99
+styles_hash: 8fa3e4a0eaebe2d7

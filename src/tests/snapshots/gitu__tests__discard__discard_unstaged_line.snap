@@ -2,8 +2,7 @@
 source: src/tests/discard.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
- Your branch is ahead of 'origin/main' by 1 commit(s).                          |
+ main                                                                           |
                                                                                 |
  Unstaged changes (1)                                                           |
  modified   file-one                                                            |
@@ -20,6 +19,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git apply --reverse --recount                                                 |
-styles_hash: baa3baebf7866985
+styles_hash: bbfb26189207753b

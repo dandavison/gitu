@@ -2,14 +2,14 @@
 source: src/tests/commit.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is up to date with 'origin/main'.                                  |
+▌main                                                                           |
                                                                                 |
  Staged changes (1)                                                             |
  added      new_file.txt…                                                       |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                                      |
+                                                                                |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  f     fixup           -R Claim authorship and reset author date (--reset-author|
  F     instant fixup   -s Add Signed-off-by line (--signoff)                    |
  q/esc Quit/Close      -v Show diff of changes to be committed (--verbose)      |
-styles_hash: 811aeb220aee8442
+styles_hash: af9b4107a49eb871

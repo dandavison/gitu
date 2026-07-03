@@ -142,7 +142,7 @@ impl Item {
                     SectionHeader::Tags => "Tags".to_string(),
                     SectionHeader::Branches => "Branches".to_string(),
                     SectionHeader::NoBranch => "No branch".to_string(),
-                    SectionHeader::OnBranch(branch) => format!("On branch {branch}"),
+                    SectionHeader::OnBranch(branch) => branch,
                     SectionHeader::Rebase(head, onto) => format!("Rebasing {head} onto {onto}"),
                     SectionHeader::Merge(head) => format!("Merging {head}"),
                     SectionHeader::Revert(head) => format!("Reverting {head}"),
@@ -160,21 +160,6 @@ impl Item {
                 };
 
                 Line::styled(content, &config.style.section_header)
-            }
-            ItemData::BranchStatus(upstream, ahead, behind) => {
-                let content = if ahead == 0 && behind == 0 {
-                    format!("Your branch is up to date with '{upstream}'.")
-                } else if ahead > 0 && behind == 0 {
-                    format!("Your branch is ahead of '{upstream}' by {ahead} commit(s).",)
-                } else if ahead == 0 && behind > 0 {
-                    format!("Your branch is behind '{upstream}' by {behind} commit(s).",)
-                } else {
-                    format!(
-                        "Your branch and '{upstream}' have diverged,\nand have {ahead} and {behind} different commits each, respectively."
-                    )
-                };
-
-                Line::raw(content)
             }
             ItemData::Error(err) => Line::raw(err),
             ItemData::BlameHeader {

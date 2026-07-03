@@ -2,7 +2,6 @@
 source: src/tests/editor.rs
 expression: ctx.redact_buffer()
 ---
-▌+line 5 (file-1)                                                               |
 ▌+line 6 (file-1)                                                               |
 ▌+line 7 (file-1)                                                               |
 ▌+line 8 (file-1)                                                               |
@@ -22,4 +21,5 @@ expression: ctx.redact_buffer()
  @@ -0,0 +1,20 @@                                                               |
  +line 1 (file-2)                                                               |
  +line 2 (file-2)                                                               |
-styles_hash: ee3d46c497e041fa
+ +line 3 (file-2)                                                               |
+styles_hash: 4da046e0a52d68b8

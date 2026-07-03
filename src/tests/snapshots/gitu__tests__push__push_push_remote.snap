@@ -2,8 +2,7 @@
 source: src/tests/push.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is up to date with 'origin/main'.                                  |
+▌main                                                                           |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                                      |
@@ -19,7 +18,8 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git push origin refs/heads/main:refs/heads/main                               |
 Everything up-to-date                                                           |
-styles_hash: 6a5623491f4acf92
+styles_hash: 40ee3ce01d125a84

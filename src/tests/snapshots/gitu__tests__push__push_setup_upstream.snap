@@ -2,12 +2,12 @@
 source: src/tests/push.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch new-branch                                                           |
-▌Your branch is up to date with 'main'.                                         |
+▌new-branch                                                                     |
                                                                                 |
  Recent commits                                                                 |
  e7eb2bd main new-branch add new-file                                           |
  b66a0bf origin/main add initial-file                                           |
+                                                                                |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  u     to main                    -F Force (--force)                            |
  e     to elsewhere               -f Force with lease (--force-with-lease)      |
  q/esc Quit/Close                 -h Disable hooks (--no-verify)                |
-styles_hash: c595ed9845173179
+styles_hash: 828d91fffaaa4acf

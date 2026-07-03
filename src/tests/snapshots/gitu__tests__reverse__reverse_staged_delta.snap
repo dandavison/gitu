@@ -2,8 +2,7 @@
 source: src/tests/reverse.rs
 expression: out
 ---
- On branch main                                                                 |
- Your branch is ahead of 'origin/main' by 1 commit(s).                          |
+ main                                                                           |
                                                                                 |
  Unstaged changes (1)                                                           |
 ▌modified   file-one                                                            |
@@ -20,9 +19,10 @@ expression: out
  9f4a45e main add file-one                                                      |
  b66a0bf origin/main add initial-file                                           |
                                                                                 |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git apply --reverse                                                           |
-styles_hash: c3e27c3c64b57280
+styles_hash: 6797ec3eb33894d9
 
 [file before]
 blahonga

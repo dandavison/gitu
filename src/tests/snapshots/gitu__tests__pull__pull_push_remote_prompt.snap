@@ -2,8 +2,7 @@
 source: src/tests/pull.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is up to date with 'origin/main'.                                  |
+▌main                                                                           |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                                      |
@@ -20,6 +19,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 ? Set pushRemote then pull: › █                                                 |
-styles_hash: 74c60e97b247cdc3
+styles_hash: dc1e0f95bfad6afc

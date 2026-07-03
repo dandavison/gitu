@@ -2,8 +2,7 @@
 source: src/tests/stash.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is up to date with 'origin/main'.                                  |
+▌main                                                                           |
                                                                                 |
  Untracked files                                                                |
  file-two                                                                       |
@@ -19,7 +18,8 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git stash pop -q 0                                                            |
 Already up to date.                                                             |
-styles_hash: d0f94aafefcbeb56
+styles_hash: 78ccba21d141d06d

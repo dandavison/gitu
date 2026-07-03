@@ -141,35 +141,17 @@ fn untracked_list(files: &[&String]) -> Vec<Item> {
 }
 
 fn branch_status_items(status: &BranchStatus) -> Res<Vec<Item>> {
-    let Some(ref head) = status.local else {
-        return Ok(vec![Item {
-            id: hash(SectionID::BranchStatus),
-            depth: 0,
-            data: ItemData::Header(SectionHeader::NoBranch),
-            ..Default::default()
-        }]);
+    let header = match status.local {
+        Some(ref head) => SectionHeader::OnBranch(head.clone()),
+        None => SectionHeader::NoBranch,
     };
 
-    let mut items = vec![Item {
+    Ok(vec![Item {
         id: hash(SectionID::BranchStatus),
         depth: 0,
-        data: ItemData::Header(SectionHeader::OnBranch(head.clone())),
+        data: ItemData::Header(header),
         ..Default::default()
-    }];
-
-    let Some(ref upstream_name) = status.remote else {
-        return Ok(items);
-    };
-
-    items.push(Item {
-        id: hash(SectionID::BranchStatus),
-        depth: 1,
-        unselectable: true,
-        data: ItemData::BranchStatus(upstream_name.clone(), status.ahead, status.behind),
-        ..Default::default()
-    });
-
-    Ok(items)
+    }])
 }
 
 fn create_status_section_items<'a>(

@@ -2,8 +2,7 @@
 source: src/tests/discard.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
- Your branch is up to date with 'origin/main'.                                  |
+ main                                                                           |
                                                                                 |
  Unstaged changes (1)                                                           |
  modified   initial-file                                                        |
@@ -18,8 +17,9 @@ expression: ctx.redact_buffer()
  \ No ne\ No newline at end of file                                             |
  +added                                                                         |
                                                                                 |
+ Recent commits                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git apply --reverse --index --recount                                         |
 error: initial-file: does not match index                                       |
 ! 'git apply --reverse --index --recount' exited with code: 1                   |
-styles_hash: 9a57d59afd88f922
+styles_hash: 3298740656668668

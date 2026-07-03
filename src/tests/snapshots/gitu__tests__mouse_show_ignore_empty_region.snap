@@ -2,11 +2,10 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
- Your branch is ahead of 'origin/main' by 1 commit(s).                          |
+▌main                                                                           |
                                                                                 |
  Stashes                                                                        |
-▌stash@0 On main: firststash                                                    |
+ stash@0 On main: firststash                                                    |
                                                                                 |
  Recent commits                                                                 |
  cd4d2d1 main add testfile                                                      |
@@ -22,4 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 756a2316769a9390
+                                                                                |
+styles_hash: 37c0c338c736db2b

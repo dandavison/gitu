@@ -2,8 +2,7 @@
 source: src/tests/log.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is ahead of 'origin/main' by 3 commit(s).                          |
+▌main                                                                           |
                                                                                 |
  Recent commits                                                                 |
  8bb5532 main add first commit                                                  |
@@ -20,6 +19,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 ! Couldn't find git revision: failed to parse revision specifier - Invalid patte|
-styles_hash: b15bdaeca3de7005
+styles_hash: 254db04b2ee01782

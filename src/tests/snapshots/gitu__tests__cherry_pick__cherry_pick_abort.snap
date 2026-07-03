@@ -2,8 +2,7 @@
 source: src/tests/cherry_pick.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is ahead of 'origin/main' by 2 commit(s).                          |
+▌main                                                                           |
                                                                                 |
  Recent commits                                                                 |
  487ec57 main modify conflict-file                                              |
@@ -20,6 +19,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git cherry-pick --abort                                                       |
-styles_hash: 5869d9403f787304
+styles_hash: 6a8b38f690030ef3

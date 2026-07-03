@@ -2,8 +2,7 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
- Your branch is up to date with 'origin/main'.                                  |
+ main                                                                           |
                                                                                 |
  Untracked files                                                                |
 ▌a                                                                              |
@@ -22,4 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: d61e94830ad618a5
+                                                                                |
+styles_hash: da91cb6d4023eb17

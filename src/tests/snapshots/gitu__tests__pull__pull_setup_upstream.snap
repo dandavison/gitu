@@ -2,11 +2,11 @@
 source: src/tests/pull.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch new-branch                                                           |
-▌Your branch is up to date with 'main'.                                         |
+▌new-branch                                                                     |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main new-branch origin/main add initial-file                           |
+                                                                                |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  u     from main                                                                |
  e     from elsewhere                                                           |
  q/esc Quit/Close                                                               |
-styles_hash: 7bc7b0fa946fd8ec
+styles_hash: 62943a3ee0f9655d

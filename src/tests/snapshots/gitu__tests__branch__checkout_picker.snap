@@ -2,11 +2,11 @@
 source: src/tests/branch.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
- Your branch is up to date with 'origin/main'.                                  |
+ main                                                                           |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main v1.0.0 v2.0.0 origin/main add initial-file                        |
+                                                                                |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: d0729ae36786267b
+styles_hash: 609d452ef469d2d8

@@ -2,8 +2,7 @@
 source: src/tests/stash.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is up to date with 'origin/main'.                                  |
+▌main                                                                           |
                                                                                 |
  Stashes                                                                        |
  stash@0 On main: file-two                                                      |
@@ -20,6 +19,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 ? Drop stash (default 0): › █                                                   |
-styles_hash: 6610d51b9ce82971
+styles_hash: 68af8ca335cd4ab4

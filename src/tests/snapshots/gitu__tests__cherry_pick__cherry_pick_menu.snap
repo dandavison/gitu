@@ -2,11 +2,11 @@
 source: src/tests/cherry_pick.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is up to date with 'origin/main'.                                  |
+▌main                                                                           |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                                      |
+                                                                                |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  c     Continue                -n Don't commit (--no-commit)                    |
  A     Cherry-pick commit(s)   -s Add Signed-off-by lines (--signoff)           |
  q/esc Quit/Close                                                               |
-styles_hash: a7abbd2adaf32d30
+styles_hash: 3d95105f0842c367

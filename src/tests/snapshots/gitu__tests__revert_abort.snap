@@ -2,8 +2,7 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is ahead of 'origin/main' by 2 commit(s).                          |
+▌main                                                                           |
                                                                                 |
  Recent commits                                                                 |
  7294ba4 main modify new-file                                                   |
@@ -20,6 +19,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git revert --abort                                                            |
-styles_hash: 8d5b31c704dbb728
+styles_hash: db452f9023d7def7

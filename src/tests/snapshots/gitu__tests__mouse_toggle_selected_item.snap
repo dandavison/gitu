@@ -2,16 +2,10 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
- Your branch is ahead of 'origin/main' by 1 commit(s).                          |
+▌main                                                                           |
                                                                                 |
  Unstaged changes (1)                                                           |
-▌modified   testfile                                                            |
-▌@@ -1,2 +1,2 @@                                                                |
-▌-testing                                                                       |
-▌-testtest                                                                      |
-▌+test                                                                          |
-▌+moretest                                                                      |
+ modified   testfile…                                                           |
                                                                                 |
  Recent commits                                                                 |
  cd4d2d1 main add testfile                                                      |
@@ -22,4 +16,10 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: ad7a877442acc5a7
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: f804228263ab3b2e

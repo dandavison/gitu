@@ -42,7 +42,6 @@ pub(crate) enum ItemData {
         id: usize,
     },
     Header(SectionHeader),
-    BranchStatus(String, u32, u32),
     Error(String),
     BlameHeader {
         commit_hash: String,
@@ -81,7 +80,6 @@ impl ItemData {
                 | ItemData::Delta { .. }
                 | ItemData::Hunk { .. }
                 | ItemData::Header(_)
-                | ItemData::BranchStatus(_, _, _)
         )
     }
 

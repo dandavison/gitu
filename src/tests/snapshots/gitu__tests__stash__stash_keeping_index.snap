@@ -2,8 +2,7 @@
 source: src/tests/stash.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
-▌Your branch is up to date with 'origin/main'.                                  |
+▌main                                                                           |
                                                                                 |
  Staged changes (1)                                                             |
  added      file-one…                                                           |
@@ -19,7 +18,8 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git stash push --keep-index --include-untracked --message test                |
 Saved working directory and index state On main: test                           |
-styles_hash: 306a2e516da70fe5
+styles_hash: 5da448751f93f348

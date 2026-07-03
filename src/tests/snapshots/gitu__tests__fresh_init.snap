@@ -2,7 +2,7 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌main                                                                           |
                                                                                 |
  Recent commits                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: a4529b27ea78d70b
+styles_hash: 7dc4db4db6e5d2e1
