@@ -1,0 +1,25 @@
+---
+source: src/tests/commit.rs
+expression: ctx.redact_buffer()
+---
+ On branch main                                                                 |
+ Your branch is ahead of 'origin/main' by 2 commit(s).                          |
+                                                                                |
+ Recent commits                                                                 |
+ 56e4088 main add beta.txt                                                      |
+ d5b0e9e add alpha.txt                                                          |
+ b66a0bf origin/main add initial-file                                           |
+                                                                                |
+────────────────────────────────────────────────────────────────────────────────|
+ 3/3   Fixup › █                                                                |
+▌56e4088 main add beta.txt                                                      |
+ d5b0e9e add alpha.txt                                                          |
+ b66a0bf origin/main add initial-file                                           |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: c54fee33ad9db97f
