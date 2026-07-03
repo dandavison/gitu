@@ -94,12 +94,38 @@ fn colorize_hunk(
 /// line structure, so the content lines are the tail of its output; each must
 /// match the corresponding hunk line verbatim or we bail (returning `None`).
 fn colorize_hunk_from_output(
-    _diff: &Rc<Diff>,
-    _file_index: usize,
-    _hunk_index: usize,
-    _output: &str,
+    diff: &Rc<Diff>,
+    file_index: usize,
+    hunk_index: usize,
+    output: &str,
 ) -> Option<HunkHighlights> {
-    None
+    let hunk_content = diff.hunk_content(file_index, hunk_index);
+    let content_lines: Vec<Range<usize>> = line_range_iterator(hunk_content)
+        .map(|(range, _)| range)
+        .collect();
+
+    let parsed = crate::diff_colorizer::parse_ansi_lines(output);
+    // The colorizer preserves line structure, so content lines are its tail.
+    let colored = parsed.get(parsed.len().checked_sub(content_lines.len())?..)?;
+
+    let mut highlights = HunkHighlights {
+        spans: vec![],
+        line_index: vec![],
+    };
+
+    for (line_range, colored_line) in content_lines.iter().zip(colored) {
+        // The colorizer must reproduce each line verbatim; otherwise its byte
+        // ranges wouldn't be valid indices into our own hunk text.
+        if colored_line.text != hunk_content[line_range.clone()] {
+            return None;
+        }
+
+        let start = highlights.spans.len();
+        highlights.spans.extend(colored_line.runs.iter().cloned());
+        highlights.line_index.push(start..highlights.spans.len());
+    }
+
+    Some(highlights)
 }
 
 #[derive(Clone)]
@@ -494,6 +520,9 @@ mod colorize_tests {
             .get_line_highlights(0)
             .iter()
             .any(|(_, style)| style.fg.is_some());
-        assert!(has_color, "expected a colored run on the first content line");
+        assert!(
+            has_color,
+            "expected a colored run on the first content line"
+        );
     }
 }
