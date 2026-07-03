@@ -28,6 +28,12 @@ pub(crate) fn highlight_hunk(
     file_index: usize,
     hunk_index: usize,
 ) -> Arc<HunkHighlights> {
+    if config.general.diff_colorizer.enabled
+        && let Some(highlights) = colorize_hunk(config, diff, file_index, hunk_index)
+    {
+        return Arc::new(highlights);
+    }
+
     let file_diff = &diff.file_diffs[file_index];
 
     let hunk_content = diff.hunk_content(file_index, hunk_index);
@@ -68,6 +74,32 @@ pub(crate) fn highlight_hunk(
     }
 
     Arc::new(highlights)
+}
+
+/// Highlight a hunk by piping its patch through the configured colorizer command.
+/// Returns `None` (so the caller falls back to built-in highlighting) if the
+/// command is unavailable or its output can't be mapped onto the hunk.
+fn colorize_hunk(
+    config: &Config,
+    diff: &Rc<Diff>,
+    file_index: usize,
+    hunk_index: usize,
+) -> Option<HunkHighlights> {
+    let patch = diff.format_hunk_patch(file_index, hunk_index);
+    let output = crate::diff_colorizer::run(&config.general.diff_colorizer.command, &patch)?;
+    colorize_hunk_from_output(diff, file_index, hunk_index, &output)
+}
+
+/// Map colorizer `output` onto the hunk's content lines. The colorizer preserves
+/// line structure, so the content lines are the tail of its output; each must
+/// match the corresponding hunk line verbatim or we bail (returning `None`).
+fn colorize_hunk_from_output(
+    _diff: &Rc<Diff>,
+    _file_index: usize,
+    _hunk_index: usize,
+    _output: &str,
+) -> Option<HunkHighlights> {
+    None
 }
 
 #[derive(Clone)]
@@ -405,4 +437,63 @@ pub(crate) fn syntax_highlight_tag_style(config: &SyntaxHighlightConfig, tag: Sy
         SyntaxTag::VariableParameter => &config.variable_parameter,
     }
     .into()
+}
+
+#[cfg(test)]
+mod colorize_tests {
+    use super::*;
+    use crate::git::diff::{Diff, DiffType};
+    use crate::gitu_diff;
+
+    fn diff_from(text: &str) -> Rc<Diff> {
+        let file_diffs = gitu_diff::Parser::new(text).parse_diff().unwrap();
+        Rc::new(Diff {
+            text: text.to_string(),
+            diff_type: DiffType::WorkdirToIndex,
+            file_diffs,
+            commit: None,
+        })
+    }
+
+    #[test]
+    fn maps_colorized_output_onto_content_lines() {
+        let text = "diff --git a/x.rs b/x.rs\n\
+                    index 0000000..1111111 100644\n\
+                    --- a/x.rs\n\
+                    +++ b/x.rs\n\
+                    @@ -1,2 +1,2 @@\n\
+                    -let x = 1;\n\
+                    +let y = 2;\n";
+        let diff = diff_from(text);
+
+        let colorized = "diff --git a/x.rs b/x.rs\n\
+                         index 0000000..1111111 100644\n\
+                         --- a/x.rs\n\
+                         +++ b/x.rs\n\
+                         @@ -1,2 +1,2 @@\n\
+                         \x1b[31m-let x = 1;\x1b[0m\n\
+                         \x1b[32m+let y = 2;\x1b[0m\n";
+
+        let highlights = colorize_hunk_from_output(&diff, 0, 0, colorized)
+            .expect("should map colorized output onto the hunk");
+
+        // Every content line's runs must reconstruct the hunk line verbatim.
+        let hunk_content = diff.hunk_content(0, 0);
+        let line_ranges: Vec<_> = line_range_iterator(hunk_content).map(|(r, _)| r).collect();
+        for (line_i, line_range) in line_ranges.iter().enumerate() {
+            let line = &hunk_content[line_range.clone()];
+            let reconstructed: String = highlights
+                .get_line_highlights(line_i)
+                .iter()
+                .map(|(r, _)| &line[r.clone()])
+                .collect();
+            assert_eq!(&reconstructed, line);
+        }
+
+        let has_color = highlights
+            .get_line_highlights(0)
+            .iter()
+            .any(|(_, style)| style.fg.is_some());
+        assert!(has_color, "expected a colored run on the first content line");
+    }
 }

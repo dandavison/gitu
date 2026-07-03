@@ -59,6 +59,18 @@ pub struct GeneralConfig {
     pub recent_commits_limit: usize,
     pub mouse_support: bool,
     pub mouse_scroll_lines: usize,
+    #[serde(default)]
+    pub diff_colorizer: DiffColorizerConfig,
+}
+
+#[derive(Default, Debug, Deserialize)]
+pub struct DiffColorizerConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// Colorizer command as `[executable, ...args]`. It receives a unified diff
+    /// on stdin and must emit ANSI-colored output that preserves line structure.
+    #[serde(default)]
+    pub command: Vec<String>,
 }
 
 #[derive(Default, Debug, Deserialize)]

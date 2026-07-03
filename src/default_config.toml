@@ -14,6 +14,14 @@ recent_commits_limit = 10
 mouse_support = false
 mouse_scroll_lines = 3
 
+# Colorize diffs with an external command (e.g. delta) instead of Gitu's
+# built-in syntax/diff highlighting. The command receives a unified diff on
+# stdin and must emit ANSI-colored output that preserves line structure
+# (`--color-only`). Layout-changing features (side-by-side, line-numbers) will
+# corrupt the output, hence `--no-gitconfig` in the default.
+diff_colorizer.enabled = false
+diff_colorizer.command = ["delta", "--color-only", "--no-gitconfig", "--true-color", "always"]
+
 # When to prompt for discard confirmation. Options:
 # "line"  - always prompt even for individual lines (default),
 # "hunk"  - prompt for files and hunks,
