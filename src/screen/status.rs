@@ -239,19 +239,26 @@ fn create_log_section_items<'a>(
     repo: &Repository,
     limit: usize,
 ) -> impl Iterator<Item = Item> + 'a {
-    [
-        Item {
-            depth: 0,
-            unselectable: true,
-            ..Default::default()
-        },
-        Item {
-            id: hash(SectionID::RecentCommits),
-            depth: 0,
-            data: ItemData::Header(SectionHeader::RecentCommits),
-            ..Default::default()
-        },
-    ]
-    .into_iter()
-    .chain(items::log(repo, limit, None, None).unwrap())
+    let (header, log) = if limit == 0 {
+        (vec![], vec![])
+    } else {
+        (
+            vec![
+                Item {
+                    depth: 0,
+                    unselectable: true,
+                    ..Default::default()
+                },
+                Item {
+                    id: hash(SectionID::RecentCommits),
+                    depth: 0,
+                    data: ItemData::Header(SectionHeader::RecentCommits),
+                    ..Default::default()
+                },
+            ],
+            items::log(repo, limit, None, None).unwrap(),
+        )
+    };
+
+    header.into_iter().chain(log)
 }
