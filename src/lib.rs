@@ -21,6 +21,7 @@ mod syntax_parser;
 pub mod term;
 #[cfg(test)]
 mod tests;
+mod tide;
 mod ui;
 
 use bindings::Bindings;

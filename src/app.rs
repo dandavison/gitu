@@ -241,6 +241,12 @@ impl App {
                     return Ok(());
                 }
 
+                if let Some(view) = crate::tide::switch_view(&key) {
+                    crate::tide::emit(view);
+                    self.state.quit = true;
+                    return Ok(());
+                }
+
                 if self.state.picker.is_some() {
                     self.handle_picker_input(key);
                 } else if self.state.prompt.state.is_focused() {

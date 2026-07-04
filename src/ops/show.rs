@@ -124,6 +124,16 @@ fn editor(file: &Path, maybe_line: Option<u32>) -> Option<Action> {
     let file = file.to_str().unwrap().to_string();
 
     Some(Rc::new(move |app, term| {
+        if crate::tide::state_file().is_some() {
+            let directive = match maybe_line {
+                Some(line) => format!("edit\t{file}:{line}"),
+                None => format!("edit\t{file}"),
+            };
+            crate::tide::emit(&directive);
+            app.state.quit = true;
+            return Ok(());
+        }
+
         let configured_editor = EDITOR_VARS
             .into_iter()
             .find_map(|var| std::env::var(var).ok());
