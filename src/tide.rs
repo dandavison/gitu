@@ -14,7 +14,7 @@ pub(crate) fn emit(directive: &str) {
     }
 }
 
-/// The view a key requests when running under tide, if any. `Alt-d` (git) is
+/// The view a key requests when running under tide, if any. `Alt-l` (git) is
 /// omitted: it is the current view.
 pub(crate) fn switch_view(key: &KeyEvent) -> Option<&'static str> {
     if state_file().is_none()
@@ -24,9 +24,9 @@ pub(crate) fn switch_view(key: &KeyEvent) -> Option<&'static str> {
         return None;
     }
     match key.code {
-        KeyCode::Char('f') => Some("files"),
-        KeyCode::Char('j') => Some("search"),
-        KeyCode::Char('k') => Some("edit"),
+        KeyCode::Char('j') => Some("files"),
+        KeyCode::Char('k') => Some("search"),
+        KeyCode::Char(';') => Some("edit"),
         _ => None,
     }
 }
