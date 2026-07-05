@@ -104,7 +104,7 @@ fn colorize_hunk_from_output(
         .map(|(range, _)| range)
         .collect();
 
-    let parsed = crate::diff_colorizer::parse_ansi_lines(output);
+    let parsed = crate::diff_colorizer::parse_ansi_lines(output).lines;
     // The colorizer preserves line structure, so content lines are its tail.
     let colored = parsed.get(parsed.len().checked_sub(content_lines.len())?..)?;
 
