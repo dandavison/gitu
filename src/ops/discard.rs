@@ -42,15 +42,11 @@ impl OpTrait for Discard {
                 diff,
                 file_i,
                 hunk_i,
-                line_i,
+                line_indices,
                 ..
             } => {
-                let patch = diff.format_line_patch(
-                    *file_i,
-                    *hunk_i,
-                    *line_i..(line_i + 1),
-                    PatchMode::Reverse,
-                );
+                let patch =
+                    diff.format_lines_patch(*file_i, *hunk_i, line_indices, PatchMode::Reverse);
 
                 match diff.diff_type {
                     DiffType::WorkdirToIndex => reverse_worktree(patch),

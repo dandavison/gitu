@@ -44,13 +44,16 @@ pub(crate) struct LineMetadata {
 }
 
 /// A single line of colorizer output: its plain text (ANSI stripped, newline
-/// excluded), the contiguous `(byte-range, style)` runs that tile it, and its
-/// OSC-1717 identity if the renderer emitted one for it.
+/// excluded), the contiguous `(byte-range, style)` runs that tile it, and the
+/// OSC-1717 records emitted for it. A row usually has one record; a side-by-side
+/// row that fuses a change carries two (left = deletion, right = addition), and
+/// decoration rows carry none. The first record is the row-granular identity;
+/// all of them are the lines a row-granular action operates on.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct ParsedLine {
     pub text: String,
     pub runs: Vec<(Range<usize>, Style)>,
-    pub metadata: Option<LineMetadata>,
+    pub records: Vec<LineMetadata>,
 }
 
 /// The result of parsing a renderer's output.
@@ -162,9 +165,8 @@ struct Performer {
     runs: Vec<(Range<usize>, Style)>,
     /// Start offset and style of the run currently being accumulated.
     open: Option<(usize, Style)>,
-    /// The first OSC-1717 record seen on the current line (row-granular: the
-    /// first record wins, which in side-by-side is the left/old column).
-    metadata: Option<LineMetadata>,
+    /// The OSC-1717 records seen on the current line, in emission order.
+    records: Vec<LineMetadata>,
     /// Set when the current line carries only the version-only handshake record,
     /// so we drop that empty line rather than render it.
     handshake_line: bool,
@@ -180,7 +182,7 @@ impl Performer {
         let line = ParsedLine {
             text: mem::take(&mut self.text),
             runs: mem::take(&mut self.runs),
-            metadata: self.metadata.take(),
+            records: mem::take(&mut self.records),
         };
         if !handshake_only {
             self.lines.push(line);
@@ -188,7 +190,7 @@ impl Performer {
     }
 
     fn finish(mut self) -> ParsedOutput {
-        if !self.text.is_empty() || self.open.is_some() || self.metadata.is_some() {
+        if !self.text.is_empty() || self.open.is_some() || !self.records.is_empty() {
             self.end_line();
         }
         ParsedOutput {
@@ -245,10 +247,8 @@ impl Perform for Performer {
             // is last and may itself contain ';', so rejoin the tail — spec §4.1).
             [_, version, kind, new_line, old_line, file_head @ ..] if !file_head.is_empty() => {
                 self.protocol_version = self.protocol_version.or_else(|| parse_u32(version));
-                if self.metadata.is_none()
-                    && let Some(kind) = line_kind(kind)
-                {
-                    self.metadata = Some(LineMetadata {
+                if let Some(kind) = line_kind(kind) {
+                    self.records.push(LineMetadata {
                         kind,
                         new_line: parse_u32(new_line).unwrap_or(0),
                         old_line: parse_u32(old_line),
@@ -391,7 +391,7 @@ mod tests {
         // The empty handshake line is dropped; only real content remains.
         assert_eq!(out.lines.len(), 1);
         assert_eq!(out.lines[0].text, "content");
-        assert_eq!(out.lines[0].metadata, None);
+        assert_eq!(out.lines[0].records, vec![]);
     }
 
     #[test]
@@ -407,44 +407,46 @@ mod tests {
         assert_eq!(out.len(), 3);
         assert_eq!(out[0].text, "fn a() {}");
         assert_eq!(
-            out[0].metadata,
-            Some(LineMetadata {
+            out[0].records,
+            vec![LineMetadata {
                 kind: LineKind::Context,
                 new_line: 8,
                 old_line: None,
                 file: "src/foo.rs".into(),
-            })
+            }]
         );
         assert_eq!(
-            out[1].metadata,
-            Some(LineMetadata {
+            out[1].records,
+            vec![LineMetadata {
                 kind: LineKind::Deleted,
                 new_line: 10,
                 old_line: Some(11),
                 file: "src/foo.rs".into(),
-            })
+            }]
         );
-        assert_eq!(out[2].metadata.as_ref().unwrap().kind, LineKind::Added);
+        assert_eq!(out[2].records[0].kind, LineKind::Added);
     }
 
     #[test]
-    fn first_record_wins_for_side_by_side_row() {
-        // A side-by-side row carries two records (left=old/deleted, right=new/added);
-        // the row-granular identity is the first (left) one.
+    fn side_by_side_row_keeps_both_records_in_order() {
+        // A side-by-side row that fuses a change carries two records (left =
+        // deletion, right = addition); both are kept, first is the identity.
         let out = parse_ansi_lines(
             "\x1b]1717;1;d;10;10;f.rs\x1b\\ old \x1b]1717;1;a;10;;f.rs\x1b\\ new \n",
         )
         .lines;
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].text, " old  new ");
-        assert_eq!(out[0].metadata.as_ref().unwrap().kind, LineKind::Deleted);
-        assert_eq!(out[0].metadata.as_ref().unwrap().old_line, Some(10));
+        assert_eq!(out[0].records.len(), 2);
+        assert_eq!(out[0].records[0].kind, LineKind::Deleted);
+        assert_eq!(out[0].records[0].old_line, Some(10));
+        assert_eq!(out[0].records[1].kind, LineKind::Added);
     }
 
     #[test]
     fn file_field_may_contain_semicolons() {
         let out = parse_ansi_lines("\x1b]1717;1;a;1;;weird;name.txt\x1b\\x\n").lines;
-        assert_eq!(out[0].metadata.as_ref().unwrap().file, "weird;name.txt");
+        assert_eq!(out[0].records[0].file, "weird;name.txt");
     }
 
     fn diff_from(text: &str) -> crate::git::diff::Diff {
@@ -500,5 +502,34 @@ mod tests {
         );
         // Unknown file / missing line resolve to None.
         assert_eq!(resolve_line(&diff, &m(LineKind::Added, 999, None)), None);
+    }
+
+    #[test]
+    fn format_lines_patch_stages_a_fused_change_both_sides() {
+        // A side-by-side row fusing a modified line maps to the deletion (index 1)
+        // and its non-adjacent replacement (index 3). Staging that set must keep
+        // both, leaving the other deletion (index 2) as context.
+        let text = "diff --git a/src/foo.rs b/src/foo.rs\n\
+                    index 1a2b3c4..5d6e7f8 100644\n\
+                    --- a/src/foo.rs\n\
+                    +++ b/src/foo.rs\n\
+                    @@ -8,4 +8,3 @@ use std::io;\n\
+                    \x20fn a() {}\n\
+                    -    let old = 1;\n\
+                    -    let old2 = 2;\n\
+                    +    let new = 1;\n\
+                    \x20ctx();\n";
+        let diff = diff_from(text);
+
+        let patch = diff.format_lines_patch(0, 0, &[1, 3], crate::git::diff::PatchMode::Normal);
+
+        assert!(patch.contains("-    let old = 1;"), "keeps the deletion");
+        assert!(patch.contains("+    let new = 1;"), "keeps the replacement");
+        // The unselected deletion becomes context (leading space, no '-').
+        assert!(
+            patch.contains("     let old2 = 2;"),
+            "other deletion -> context"
+        );
+        assert!(!patch.contains("-    let old2 = 2;"));
     }
 }

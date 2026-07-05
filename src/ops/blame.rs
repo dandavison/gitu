@@ -37,6 +37,7 @@ impl OpTrait for Blame {
                 hunk_i,
                 line_i,
                 line_range,
+                ..
             } => {
                 let hunk_content = diff.hunk_content(*file_i, *hunk_i);
                 let line_content = &hunk_content[line_range.clone()];
