@@ -33,7 +33,7 @@ pub(crate) struct Screen {
     cursor: usize,
     scroll: usize,
     config: Arc<Config>,
-    refresh_items: Box<dyn Fn() -> Res<Vec<Item>>>,
+    refresh_items: Box<dyn Fn(Size) -> Res<Vec<Item>>>,
     items: Vec<Item>,
     line_index: Vec<usize>,
     collapsed: HashSet<u64>,
@@ -43,7 +43,7 @@ impl Screen {
     pub(crate) fn new(
         config: Arc<Config>,
         size: Size,
-        refresh_items: Box<dyn Fn() -> Res<Vec<Item>>>,
+        refresh_items: Box<dyn Fn(Size) -> Res<Vec<Item>>>,
     ) -> Res<Self> {
         let collapsed = config
             .general
@@ -207,7 +207,7 @@ impl Screen {
 
     pub(crate) fn update(&mut self) -> Res<()> {
         let nav_mode = self.selected_item_nav_mode();
-        self.items = (self.refresh_items)()?;
+        self.items = (self.refresh_items)(self.size)?;
         self.update_line_index();
         self.update_cursor(nav_mode);
         Ok(())
