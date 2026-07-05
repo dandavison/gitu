@@ -126,6 +126,7 @@ impl Item {
                 hunk_i,
                 line_range,
                 line_i,
+                ..
             } => {
                 let hunk_highlights =
                     highlight::highlight_hunk(self.id, &config, &Rc::clone(&diff), file_i, hunk_i);
@@ -249,12 +250,22 @@ fn create_rendered_diff_items(
 
     let mut rows_by_hunk: HashMap<(usize, usize), Vec<Item>> = HashMap::new();
     for line in &parsed.lines {
-        let Some(meta) = &line.metadata else {
+        // The first record is the row's identity; a fused side-by-side change row
+        // also carries its replacement, so stage every record in the same hunk.
+        let Some(first) = line.records.first() else {
             continue; // Decoration row (file/hunk header, divider): gitu draws its own.
         };
-        let Some((file_i, hunk_i, line_i)) = crate::diff_colorizer::resolve_line(diff, meta) else {
+        let Some((file_i, hunk_i, line_i)) = crate::diff_colorizer::resolve_line(diff, first)
+        else {
             continue;
         };
+        let line_indices = line
+            .records
+            .iter()
+            .filter_map(|meta| crate::diff_colorizer::resolve_line(diff, meta))
+            .filter(|(f, h, _)| (*f, *h) == (file_i, hunk_i))
+            .map(|(_, _, li)| li)
+            .collect();
         let hunk_hash = hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]);
         let line_range = highlight::line_range_iterator(diff.hunk_content(file_i, hunk_i))
             .nth(line_i)
@@ -266,13 +277,14 @@ fn create_rendered_diff_items(
             .push(Item {
                 id: hunk_hash,
                 depth: depth + 2,
-                unselectable: matches!(meta.kind, crate::diff_colorizer::LineKind::Context),
+                unselectable: matches!(first.kind, crate::diff_colorizer::LineKind::Context),
                 data: ItemData::HunkLine {
                     diff: Rc::clone(diff),
                     file_i,
                     hunk_i,
                     line_i,
                     line_range,
+                    line_indices,
                 },
                 rendered: Some(Rc::new(rendered_spans(line))),
                 ..Default::default()
@@ -398,6 +410,7 @@ fn format_diff_hunk_items(
                     hunk_i,
                     line_i: line_index,
                     line_range,
+                    line_indices: vec![line_index],
                 },
                 ..Default::default()
             }

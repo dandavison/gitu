@@ -32,16 +32,11 @@ impl OpTrait for Unstage {
                 diff,
                 file_i,
                 hunk_i,
-                line_i,
+                line_indices,
                 ..
             } => unstage_line(
-                diff.format_line_patch(
-                    *file_i,
-                    *hunk_i,
-                    *line_i..(*line_i + 1),
-                    PatchMode::Reverse,
-                )
-                .into_bytes(),
+                diff.format_lines_patch(*file_i, *hunk_i, line_indices, PatchMode::Reverse)
+                    .into_bytes(),
             ),
             _ => return None,
         };

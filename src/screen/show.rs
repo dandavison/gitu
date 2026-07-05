@@ -60,6 +60,7 @@ pub(crate) fn create(
                 hunk_i,
                 line_i,
                 line_range,
+                ..
             } = data
             {
                 if diff.file_diffs[*file_i].header.new_file.fmt(&diff.text) != file {
