@@ -117,12 +117,23 @@ pub(crate) fn resolve_line(diff: &Diff, meta: &LineMetadata) -> Option<(usize, u
 
 /// Run the colorizer `command`, feeding `input` on stdin and returning its
 /// stdout. `None` if the command can't be spawned or exits non-zero.
-pub(crate) fn run(command: &[String], input: &str) -> Option<String> {
+///
+/// `width` is the number of columns gitu will render the output into. A renderer
+/// that reflows (delta side-by-side/wrapping) can't detect this over a pipe and
+/// defaults too narrow, so we make it available two ways: a literal `{width}`
+/// token anywhere in the command is substituted (e.g. `delta --width {width}`),
+/// and `COLUMNS` is exported for renderers that read it.
+pub(crate) fn run(command: &[String], input: &str, width: usize) -> Option<String> {
     let (program, args) = command.split_first()?;
+    let args: Vec<String> = args
+        .iter()
+        .map(|arg| arg.replace("{width}", &width.to_string()))
+        .collect();
 
     let mut child = Command::new(program)
-        .args(args)
+        .args(&args)
         .env("OSC1717_METADATA", OSC1717_METADATA_ADVERTISED)
+        .env("COLUMNS", width.to_string())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

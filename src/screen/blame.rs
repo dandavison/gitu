@@ -23,7 +23,7 @@ pub(crate) fn create(
     let mut screen = Screen::new(
         Arc::clone(&config),
         size,
-        Box::new(move || {
+        Box::new(move |_size: Size| {
             let commit_display = commit.as_deref().unwrap_or("HEAD").to_string();
             let blame_lines = git::blame(repo.as_ref(), &file_path, commit.as_deref())?;
 

@@ -215,14 +215,21 @@ impl Item {
 /// (styled per-hunk by [`highlight`], including a `--color-only` colorizer).
 pub(crate) fn create_diff_items(
     config: &Config,
+    width: usize,
     diff: &Rc<Diff>,
     depth: usize,
     default_collapsed: bool,
     commit: Option<String>,
 ) -> Vec<Item> {
     if config.general.diff_colorizer.enabled
-        && let Some(items) =
-            create_rendered_diff_items(config, diff, depth, default_collapsed, commit.clone())
+        && let Some(items) = create_rendered_diff_items(
+            config,
+            width,
+            diff,
+            depth,
+            default_collapsed,
+            commit.clone(),
+        )
     {
         return items;
     }
@@ -237,6 +244,7 @@ pub(crate) fn create_diff_items(
 /// protocol.
 fn create_rendered_diff_items(
     config: &Config,
+    width: usize,
     diff: &Rc<Diff>,
     depth: usize,
     default_collapsed: bool,
@@ -244,7 +252,8 @@ fn create_rendered_diff_items(
 ) -> Option<Vec<Item>> {
     use std::collections::HashMap;
 
-    let output = crate::diff_colorizer::run(&config.general.diff_colorizer.command, &diff.text)?;
+    let output =
+        crate::diff_colorizer::run(&config.general.diff_colorizer.command, &diff.text, width)?;
     let parsed = crate::diff_colorizer::parse_ansi_lines(&output);
     parsed.protocol_version?; // Not an OSC-1717 renderer: fall back to built-in.
 

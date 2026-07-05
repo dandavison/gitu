@@ -22,7 +22,7 @@ pub(crate) fn create(
     let mut screen = Screen::new(
         Arc::clone(&config),
         size,
-        Box::new(move || {
+        Box::new(move |size: Size| {
             let commit = git::show_summary(repo.as_ref(), &reference)?;
             let show = git::show(repo.as_ref(), &reference)?;
             let details = commit.details.lines();
@@ -43,6 +43,7 @@ pub(crate) fn create(
             .chain([items::blank_line()])
             .chain(items::create_diff_items(
                 &config,
+                (size.width as usize).saturating_sub(2),
                 &Rc::new(show),
                 0,
                 false,
