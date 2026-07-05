@@ -29,10 +29,20 @@ pub(crate) struct Item {
     pub(crate) depth: usize,
     pub(crate) unselectable: bool,
     pub(crate) data: ItemData,
+    /// Pre-rendered styled spans (e.g. a diff row from an external renderer),
+    /// used verbatim by [`Self::to_line`] in place of computing from `data`.
+    pub(crate) rendered: Option<Rc<Vec<(String, Style)>>>,
 }
 
 impl Item {
     pub fn to_line(&'_ self, config: Arc<Config>) -> Line<'_> {
+        if let Some(rendered) = &self.rendered {
+            return Line::from_iter(
+                rendered
+                    .iter()
+                    .map(|(text, style)| Span::styled(text.clone(), *style)),
+            );
+        }
         match self.data.clone() {
             ItemData::Raw(content) => Line::raw(content),
             ItemData::AllUnstaged(count) => Line::from(vec![
@@ -213,7 +223,119 @@ impl Item {
     }
 }
 
+/// Build the items for a diff. When the configured colorizer speaks the OSC-1717
+/// protocol, the diff is rendered freely by it (e.g. delta, side-by-side) and its
+/// styled rows drive the content lines; otherwise the built-in items are used
+/// (styled per-hunk by [`highlight`], including a `--color-only` colorizer).
 pub(crate) fn create_diff_items(
+    config: &Config,
+    diff: &Rc<Diff>,
+    depth: usize,
+    default_collapsed: bool,
+    commit: Option<String>,
+) -> Vec<Item> {
+    if config.general.diff_colorizer.enabled
+        && let Some(items) =
+            create_rendered_diff_items(config, diff, depth, default_collapsed, commit.clone())
+    {
+        return items;
+    }
+    create_builtin_diff_items(diff, depth, default_collapsed, commit).collect()
+}
+
+/// Render the diff through the OSC-1717 colorizer and lay its rows out under
+/// gitu's own file/hunk structure (so collapse, navigation and file/hunk/line
+/// staging keep working). Each rendered content row is mapped back to its
+/// content-line coordinates via its metadata; decoration rows are dropped.
+/// Returns `None` (fall back to built-in) if the colorizer doesn't speak the
+/// protocol.
+fn create_rendered_diff_items(
+    config: &Config,
+    diff: &Rc<Diff>,
+    depth: usize,
+    default_collapsed: bool,
+    commit: Option<String>,
+) -> Option<Vec<Item>> {
+    use std::collections::HashMap;
+
+    let output = crate::diff_colorizer::run(&config.general.diff_colorizer.command, &diff.text)?;
+    let parsed = crate::diff_colorizer::parse_ansi_lines(&output);
+    parsed.protocol_version?; // Not an OSC-1717 renderer: fall back to built-in.
+
+    let mut rows_by_hunk: HashMap<(usize, usize), Vec<Item>> = HashMap::new();
+    for line in &parsed.lines {
+        let Some(meta) = &line.metadata else {
+            continue; // Decoration row (file/hunk header, divider): gitu draws its own.
+        };
+        let Some((file_i, hunk_i, line_i)) = crate::diff_colorizer::resolve_line(diff, meta) else {
+            continue;
+        };
+        let hunk_hash = hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]);
+        let line_range = highlight::line_range_iterator(diff.hunk_content(file_i, hunk_i))
+            .nth(line_i)
+            .map(|(range, _)| range)
+            .unwrap_or_default();
+        rows_by_hunk
+            .entry((file_i, hunk_i))
+            .or_default()
+            .push(Item {
+                id: hunk_hash,
+                depth: depth + 2,
+                unselectable: matches!(meta.kind, crate::diff_colorizer::LineKind::Context),
+                data: ItemData::HunkLine {
+                    diff: Rc::clone(diff),
+                    file_i,
+                    hunk_i,
+                    line_i,
+                    line_range,
+                },
+                rendered: Some(Rc::new(rendered_spans(line))),
+                ..Default::default()
+            });
+    }
+
+    let mut items = Vec::new();
+    for (file_i, file_diff) in diff.file_diffs.iter().enumerate() {
+        items.push(Item {
+            id: hash(diff.file_diff_header(file_i)),
+            default_collapsed,
+            depth,
+            data: ItemData::Delta {
+                diff: Rc::clone(diff),
+                file_i,
+                commit: commit.clone(),
+            },
+            ..Default::default()
+        });
+        for hunk_i in 0..file_diff.hunks.len() {
+            items.push(Item {
+                id: hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]),
+                depth: depth + 1,
+                data: ItemData::Hunk {
+                    diff: Rc::clone(diff),
+                    file_i,
+                    hunk_i,
+                },
+                ..Default::default()
+            });
+            if let Some(rows) = rows_by_hunk.remove(&(file_i, hunk_i)) {
+                items.extend(rows);
+            }
+        }
+    }
+    Some(items)
+}
+
+/// The colorizer's styled runs for a line, as owned `(text, style)` spans with
+/// tabs expanded (matching the built-in hunk-line rendering).
+fn rendered_spans(line: &crate::diff_colorizer::ParsedLine) -> Vec<(String, Style)> {
+    line.runs
+        .iter()
+        .map(|(range, style)| (line.text[range.clone()].replace('\t', "    "), *style))
+        .collect()
+}
+
+fn create_builtin_diff_items(
     diff: &Rc<Diff>,
     depth: usize,
     default_collapsed: bool,

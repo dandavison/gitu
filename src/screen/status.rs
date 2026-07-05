@@ -106,10 +106,12 @@ pub(crate) fn create(config: Arc<Config>, repo: Rc<Repository>, size: Size) -> R
             })
             .chain(untracked)
             .chain(create_status_section_items(
+                &config,
                 SectionID::UnstagedChanges,
                 &Rc::new(git::diff_unstaged(repo.as_ref())?),
             ))
             .chain(create_status_section_items(
+                &config,
                 SectionID::StagedChanges,
                 &Rc::new(git::diff_staged(repo.as_ref())?),
             ))
@@ -173,6 +175,7 @@ fn branch_status_items(status: &BranchStatus) -> Res<Vec<Item>> {
 }
 
 fn create_status_section_items<'a>(
+    config: &'a Config,
     section: SectionID,
     diff: &'a Rc<Diff>,
 ) -> impl Iterator<Item = Item> + 'a {
@@ -197,7 +200,7 @@ fn create_status_section_items<'a>(
         ]
     }
     .into_iter()
-    .chain(items::create_diff_items(diff, 1, true, None))
+    .chain(items::create_diff_items(config, diff, 1, true, None))
 }
 
 fn create_stash_list_section_items<'a>(

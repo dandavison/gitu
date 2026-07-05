@@ -16,9 +16,17 @@ mouse_scroll_lines = 3
 
 # Colorize diffs with an external command (e.g. delta) instead of Gitu's
 # built-in syntax/diff highlighting. The command receives a unified diff on
-# stdin and must emit ANSI-colored output that preserves line structure
-# (`--color-only`). Layout-changing features (side-by-side, line-numbers) will
-# corrupt the output, hence `--no-gitconfig` in the default.
+# stdin and emits ANSI-colored output.
+#
+# Gitu advertises the OSC-1717 diff-line-metadata protocol to the command (via
+# the OSC1717_METADATA env var). If the renderer speaks it, the diff may be
+# rendered freely — dropping +/- markers, side-by-side, gutters — and Gitu maps
+# each rendered row back to its patch line for staging. If it doesn't, the
+# command must preserve line structure (`--color-only`), which Gitu maps 1:1.
+#
+# The default is structure-preserving so it works either way; a renderer that
+# speaks OSC-1717 can be run freely, e.g.:
+#   diff_colorizer.command = ["delta", "--no-gitconfig", "--side-by-side"]
 diff_colorizer.enabled = false
 diff_colorizer.command = ["delta", "--color-only", "--no-gitconfig", "--true-color", "always"]
 
