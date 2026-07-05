@@ -12,6 +12,7 @@
 //!   We advertise the protocol via the `OSC1717_METADATA` env var and attach each
 //!   record to the line that follows it.
 
+use crate::git::diff::Diff;
 use anstyle_parse::{DefaultCharAccumulator, Params, Parser, Perform};
 use ratatui::style::{Color, Modifier, Style};
 use std::io::Write;
@@ -61,6 +62,56 @@ pub(crate) struct ParsedOutput {
     /// rendering integration to select metadata mode.
     #[allow(dead_code)]
     pub protocol_version: Option<u32>,
+}
+
+/// Resolve a rendered line's OSC-1717 identity to its position in the parsed
+/// diff: `(file_index, hunk_index, line_index)`, where `line_index` indexes the
+/// hunk's content lines (as [`crate::items`] does). This is the bridge that lets
+/// staging operate on a freely-restructured render — the parsed diff stays the
+/// source of truth; the metadata only says which content line a row is.
+///
+/// Additions and context match on the new-file line number; deletions match on
+/// the old-file line number (two consecutive deletions share a new-file number,
+/// so only the old-file number distinguishes them — spec §5.3).
+#[allow(dead_code)] // Consumed by the rendering/selection integration (Phase 3).
+pub(crate) fn resolve_line(diff: &Diff, meta: &LineMetadata) -> Option<(usize, usize, usize)> {
+    for (file_index, file_diff) in diff.file_diffs.iter().enumerate() {
+        let new_path = file_diff.header.new_file.fmt(&diff.text);
+        let old_path = file_diff.header.old_file.fmt(&diff.text);
+        if meta.file != new_path && meta.file != old_path {
+            continue;
+        }
+
+        for (hunk_index, hunk) in file_diff.hunks.iter().enumerate() {
+            let content = &diff.text[hunk.content.range.clone()];
+            let mut new_num = hunk.header.new_line_start;
+            let mut old_num = hunk.header.old_line_start;
+
+            for (line_index, line) in content.split_inclusive('\n').enumerate() {
+                let found = match (meta.kind, line.chars().next()) {
+                    (LineKind::Added, Some('+')) => new_num == meta.new_line,
+                    (LineKind::Deleted, Some('-')) => Some(old_num) == meta.old_line,
+                    (LineKind::Context, Some(' ')) => new_num == meta.new_line,
+                    _ => false,
+                };
+                if found {
+                    return Some((file_index, hunk_index, line_index));
+                }
+
+                match line.chars().next() {
+                    Some('+') => new_num += 1,
+                    Some('-') => old_num += 1,
+                    Some('\\') => {} // "\ No newline at end of file": not a real line.
+                    _ => {
+                        new_num += 1;
+                        old_num += 1;
+                    }
+                }
+            }
+        }
+        return None; // File matched but the line wasn't found; don't scan others.
+    }
+    None
 }
 
 /// Run the colorizer `command`, feeding `input` on stdin and returning its
@@ -396,5 +447,60 @@ mod tests {
     fn file_field_may_contain_semicolons() {
         let out = parse_ansi_lines("\x1b]1717;1;a;1;;weird;name.txt\x1b\\x\n").lines;
         assert_eq!(out[0].metadata.as_ref().unwrap().file, "weird;name.txt");
+    }
+
+    fn diff_from(text: &str) -> crate::git::diff::Diff {
+        crate::git::diff::Diff {
+            text: text.to_string(),
+            diff_type: crate::git::diff::DiffType::WorkdirToIndex,
+            file_diffs: crate::gitu_diff::Parser::new(text).parse_diff().unwrap(),
+            commit: None,
+        }
+    }
+
+    #[test]
+    fn resolve_line_maps_identity_to_content_line() {
+        let text = "diff --git a/src/foo.rs b/src/foo.rs\n\
+                    index 1a2b3c4..5d6e7f8 100644\n\
+                    --- a/src/foo.rs\n\
+                    +++ b/src/foo.rs\n\
+                    @@ -8,4 +8,4 @@ use std::io;\n\
+                    \x20fn a() {}\n\
+                    -    let old = 1;\n\
+                    -    let old2 = 2;\n\
+                    +    let new = 1;\n\
+                    \x20ctx();\n";
+        let diff = diff_from(text);
+        let m = |kind, new_line, old_line| LineMetadata {
+            kind,
+            new_line,
+            old_line,
+            file: "src/foo.rs".into(),
+        };
+
+        // Content lines, in order: 0=context fn a, 1=del old, 2=del old2, 3=add new, 4=context ctx.
+        assert_eq!(
+            resolve_line(&diff, &m(LineKind::Context, 8, None)),
+            Some((0, 0, 0))
+        );
+        // Consecutive deletions share new-line 9; only old-line tells them apart.
+        assert_eq!(
+            resolve_line(&diff, &m(LineKind::Deleted, 9, Some(9))),
+            Some((0, 0, 1))
+        );
+        assert_eq!(
+            resolve_line(&diff, &m(LineKind::Deleted, 9, Some(10))),
+            Some((0, 0, 2))
+        );
+        assert_eq!(
+            resolve_line(&diff, &m(LineKind::Added, 9, None)),
+            Some((0, 0, 3))
+        );
+        assert_eq!(
+            resolve_line(&diff, &m(LineKind::Context, 10, None)),
+            Some((0, 0, 4))
+        );
+        // Unknown file / missing line resolve to None.
+        assert_eq!(resolve_line(&diff, &m(LineKind::Added, 999, None)), None);
     }
 }
