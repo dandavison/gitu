@@ -25,12 +25,16 @@ use std::thread;
 /// advertised to the renderer via `OSC1717_METADATA` (a version set, `V`-prefixed).
 const OSC1717_METADATA_ADVERTISED: &str = "V1";
 
-/// Which side of the diff a rendered content line represents.
+/// What a rendered row is, per its OSC-1717 `type`. `Context`/`Added`/`Deleted`
+/// are content lines; `HunkHeader`/`FileHeader` are the renderer's own header rows
+/// (spec §12), which the host may display in place of drawing its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LineKind {
     Context,
     Added,
     Deleted,
+    HunkHeader,
+    FileHeader,
 }
 
 /// The patch-space identity of a rendered line, recovered from its OSC-1717
@@ -111,6 +115,26 @@ pub(crate) fn resolve_line(diff: &Diff, meta: &LineMetadata) -> Option<(usize, u
             }
         }
         return None; // File matched but the line wasn't found; don't scan others.
+    }
+    None
+}
+
+/// Resolve an `h` (hunk-header) record to `(file_index, hunk_index)` by matching
+/// its file and its `new_line` (the hunk's first new-file line) against the parsed
+/// diff's hunk headers. Lets the host render the renderer's hunk header as the
+/// anchor for that hunk (collapse, whole-hunk staging) instead of drawing `@@`.
+pub(crate) fn resolve_hunk(diff: &Diff, meta: &LineMetadata) -> Option<(usize, usize)> {
+    for (file_index, file_diff) in diff.file_diffs.iter().enumerate() {
+        if meta.file != file_diff.header.new_file.fmt(&diff.text)
+            && meta.file != file_diff.header.old_file.fmt(&diff.text)
+        {
+            continue;
+        }
+        let hunk_index = file_diff
+            .hunks
+            .iter()
+            .position(|hunk| hunk.header.new_line_start == meta.new_line)?;
+        return Some((file_index, hunk_index));
     }
     None
 }
@@ -285,6 +309,8 @@ fn line_kind(bytes: &[u8]) -> Option<LineKind> {
         b"c" => Some(LineKind::Context),
         b"a" => Some(LineKind::Added),
         b"d" => Some(LineKind::Deleted),
+        b"h" => Some(LineKind::HunkHeader),
+        b"f" => Some(LineKind::FileHeader),
         _ => None, // Unknown type: treat the row as non-actionable (spec §5.1).
     }
 }
@@ -513,6 +539,43 @@ mod tests {
         );
         // Unknown file / missing line resolve to None.
         assert_eq!(resolve_line(&diff, &m(LineKind::Added, 999, None)), None);
+    }
+
+    #[test]
+    fn parses_hunk_and_file_header_records() {
+        let out = parse_ansi_lines(
+            "\x1b]1717;1;f;;;src/foo.rs\x1b\\file header\n\
+             \x1b]1717;1;h;8;;src/foo.rs\x1b\\hunk header\n",
+        )
+        .lines;
+        assert_eq!(out[0].records[0].kind, LineKind::FileHeader);
+        assert_eq!(out[0].records[0].old_line, None);
+        assert_eq!(out[1].records[0].kind, LineKind::HunkHeader);
+        assert_eq!(out[1].records[0].new_line, 8);
+    }
+
+    #[test]
+    fn resolve_hunk_matches_on_new_line_start() {
+        let text = "diff --git a/f.rs b/f.rs\n\
+                    index 1..2 100644\n\
+                    --- a/f.rs\n\
+                    +++ b/f.rs\n\
+                    @@ -8,2 +8,2 @@\n\
+                    -a\n\
+                    +b\n\
+                    @@ -40,2 +40,2 @@\n\
+                    -c\n\
+                    +d\n";
+        let diff = diff_from(text);
+        let h = |new_line| LineMetadata {
+            kind: LineKind::HunkHeader,
+            new_line,
+            old_line: None,
+            file: "f.rs".into(),
+        };
+        assert_eq!(resolve_hunk(&diff, &h(8)), Some((0, 0)));
+        assert_eq!(resolve_hunk(&diff, &h(40)), Some((0, 1)));
+        assert_eq!(resolve_hunk(&diff, &h(999)), None);
     }
 
     #[test]

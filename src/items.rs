@@ -22,6 +22,9 @@ use std::sync::Arc;
 
 pub type ItemId = u64;
 
+/// A pre-rendered line as owned styled spans (e.g. one row of a renderer's output).
+pub(crate) type RenderedRow = Vec<(String, Style)>;
+
 #[derive(Default, Clone, Debug)]
 pub(crate) struct Item {
     pub(crate) id: ItemId,
@@ -31,7 +34,7 @@ pub(crate) struct Item {
     pub(crate) data: ItemData,
     /// Pre-rendered styled spans (e.g. a diff row from an external renderer),
     /// used verbatim by [`Self::to_line`] in place of computing from `data`.
-    pub(crate) rendered: Option<Rc<Vec<(String, Style)>>>,
+    pub(crate) rendered: Option<Rc<RenderedRow>>,
 }
 
 impl Item {
@@ -257,47 +260,71 @@ fn create_rendered_diff_items(
     let parsed = crate::diff_colorizer::parse_ansi_lines(&output);
     parsed.protocol_version?; // Not an OSC-1717 renderer: fall back to built-in.
 
-    let mut rows_by_hunk: HashMap<(usize, usize), Vec<Item>> = HashMap::new();
+    use crate::diff_colorizer::LineKind;
+
+    // Per hunk: the renderer's own hunk-header rows (`h`) to display in place of
+    // `@@`, and the content-line items. `f` (file-header) rows are dropped — gitu
+    // draws its own file header — as are the renderer's blank spacer rows.
+    let mut headers_by_hunk: HashMap<(usize, usize), Vec<RenderedRow>> = HashMap::new();
+    let mut content_by_hunk: HashMap<(usize, usize), Vec<Item>> = HashMap::new();
+
     for line in &parsed.lines {
-        // The first record is the row's identity; a fused side-by-side change row
-        // also carries its replacement, so stage every record in the same hunk.
         let Some(first) = line.records.first() else {
-            continue; // Decoration row (file/hunk header, divider): gitu draws its own.
+            continue; // Un-annotated decoration (dividers): dropped.
         };
-        let Some((file_i, hunk_i, line_i)) = crate::diff_colorizer::resolve_line(diff, first)
-        else {
-            continue;
-        };
-        let line_indices = line
-            .records
-            .iter()
-            .filter_map(|meta| crate::diff_colorizer::resolve_line(diff, meta))
-            .filter(|(f, h, _)| (*f, *h) == (file_i, hunk_i))
-            .map(|(_, _, li)| li)
-            .collect();
-        let hunk_hash = hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]);
-        let line_range = highlight::line_range_iterator(diff.hunk_content(file_i, hunk_i))
-            .nth(line_i)
-            .map(|(range, _)| range)
-            .unwrap_or_default();
-        rows_by_hunk
-            .entry((file_i, hunk_i))
-            .or_default()
-            .push(Item {
-                id: hunk_hash,
-                depth: depth + 2,
-                unselectable: matches!(first.kind, crate::diff_colorizer::LineKind::Context),
-                data: ItemData::HunkLine {
-                    diff: Rc::clone(diff),
-                    file_i,
-                    hunk_i,
-                    line_i,
-                    line_range,
-                    line_indices,
-                },
-                rendered: Some(Rc::new(rendered_spans(line))),
-                ..Default::default()
-            });
+        match first.kind {
+            LineKind::FileHeader => {}
+            LineKind::HunkHeader => {
+                if line.text.trim().is_empty() {
+                    continue;
+                }
+                if let Some(key) = crate::diff_colorizer::resolve_hunk(diff, first) {
+                    headers_by_hunk
+                        .entry(key)
+                        .or_default()
+                        .push(rendered_spans(line));
+                }
+            }
+            LineKind::Context | LineKind::Added | LineKind::Deleted => {
+                let Some((file_i, hunk_i, line_i)) =
+                    crate::diff_colorizer::resolve_line(diff, first)
+                else {
+                    continue;
+                };
+                // A fused side-by-side change row also carries its replacement, so
+                // stage every record in the same hunk.
+                let line_indices = line
+                    .records
+                    .iter()
+                    .filter_map(|meta| crate::diff_colorizer::resolve_line(diff, meta))
+                    .filter(|(f, h, _)| (*f, *h) == (file_i, hunk_i))
+                    .map(|(_, _, li)| li)
+                    .collect();
+                let hunk_hash = hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]);
+                let line_range = highlight::line_range_iterator(diff.hunk_content(file_i, hunk_i))
+                    .nth(line_i)
+                    .map(|(range, _)| range)
+                    .unwrap_or_default();
+                content_by_hunk
+                    .entry((file_i, hunk_i))
+                    .or_default()
+                    .push(Item {
+                        id: hunk_hash,
+                        depth: depth + 2,
+                        unselectable: matches!(first.kind, LineKind::Context),
+                        data: ItemData::HunkLine {
+                            diff: Rc::clone(diff),
+                            file_i,
+                            hunk_i,
+                            line_i,
+                            line_range,
+                            line_indices,
+                        },
+                        rendered: Some(Rc::new(rendered_spans(line))),
+                        ..Default::default()
+                    });
+            }
+        }
     }
 
     let mut items = Vec::new();
@@ -314,17 +341,37 @@ fn create_rendered_diff_items(
             ..Default::default()
         });
         for hunk_i in 0..file_diff.hunks.len() {
+            let hunk_hash = hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]);
+            let hunk = ItemData::Hunk {
+                diff: Rc::clone(diff),
+                file_i,
+                hunk_i,
+            };
+            // Render the renderer's own hunk header: its first row is the
+            // selectable/collapsible Hunk anchor; the rest nest under it (so a
+            // collapsed hunk shows just the anchor). Fall back to gitu's `@@` when
+            // the renderer emitted no header for this hunk.
+            let mut header_rows = headers_by_hunk
+                .remove(&(file_i, hunk_i))
+                .unwrap_or_default()
+                .into_iter();
             items.push(Item {
-                id: hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]),
+                id: hunk_hash,
                 depth: depth + 1,
-                data: ItemData::Hunk {
-                    diff: Rc::clone(diff),
-                    file_i,
-                    hunk_i,
-                },
+                data: hunk,
+                rendered: header_rows.next().map(Rc::new),
                 ..Default::default()
             });
-            if let Some(rows) = rows_by_hunk.remove(&(file_i, hunk_i)) {
+            for extra in header_rows {
+                items.push(Item {
+                    id: hunk_hash,
+                    depth: depth + 2,
+                    unselectable: true,
+                    rendered: Some(Rc::new(extra)),
+                    ..Default::default()
+                });
+            }
+            if let Some(rows) = content_by_hunk.remove(&(file_i, hunk_i)) {
                 items.extend(rows);
             }
         }
@@ -334,7 +381,7 @@ fn create_rendered_diff_items(
 
 /// The colorizer's styled runs for a line, as owned `(text, style)` spans with
 /// tabs expanded (matching the built-in hunk-line rendering).
-fn rendered_spans(line: &crate::diff_colorizer::ParsedLine) -> Vec<(String, Style)> {
+fn rendered_spans(line: &crate::diff_colorizer::ParsedLine) -> RenderedRow {
     line.runs
         .iter()
         .map(|(range, style)| (line.text[range.clone()].replace('\t', "    "), *style))
