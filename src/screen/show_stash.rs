@@ -57,7 +57,7 @@ pub(crate) fn create(
                         ..Default::default()
                     },
                 ]);
-                out.extend(items::create_diff_items(&diff, 1, false, None));
+                out.extend(items::create_diff_items(&config, &diff, 1, false, None));
             };
 
             if !staged.file_diffs.is_empty() {

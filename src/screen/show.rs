@@ -42,6 +42,7 @@ pub(crate) fn create(
             }))
             .chain([items::blank_line()])
             .chain(items::create_diff_items(
+                &config,
                 &Rc::new(show),
                 0,
                 false,

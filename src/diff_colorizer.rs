@@ -60,7 +60,6 @@ pub(crate) struct ParsedOutput {
     /// The OSC-1717 protocol version the renderer negotiated, if it spoke the
     /// protocol at all (from the handshake record, spec §4.4). Consumed by the
     /// rendering integration to select metadata mode.
-    #[allow(dead_code)]
     pub protocol_version: Option<u32>,
 }
 
@@ -73,7 +72,6 @@ pub(crate) struct ParsedOutput {
 /// Additions and context match on the new-file line number; deletions match on
 /// the old-file line number (two consecutive deletions share a new-file number,
 /// so only the old-file number distinguishes them — spec §5.3).
-#[allow(dead_code)] // Consumed by the rendering/selection integration (Phase 3).
 pub(crate) fn resolve_line(diff: &Diff, meta: &LineMetadata) -> Option<(usize, usize, usize)> {
     for (file_index, file_diff) in diff.file_diffs.iter().enumerate() {
         let new_path = file_diff.header.new_file.fmt(&diff.text);
