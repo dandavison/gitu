@@ -15,9 +15,22 @@ fn setup_scroll(mut ctx: TestContext) -> (TestContext, crate::app::App) {
         .unwrap();
     }
 
+    ctx.config().bindings.insert(
+        crate::menu::Menu::Root,
+        "pagedown",
+        crate::ops::Op::FullPageDown,
+    );
+
     let mut app = ctx.init_app();
     ctx.update(&mut app, keys("jjjj<tab>k<tab>k<tab>"));
     (ctx, app)
+}
+
+#[test]
+fn full_page_down() {
+    let (mut ctx, mut app) = setup_scroll(setup_clone!());
+    ctx.update(&mut app, keys("<pagedown>"));
+    insta::assert_snapshot!(ctx.redact_buffer());
 }
 
 #[test]

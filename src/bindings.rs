@@ -97,6 +97,13 @@ impl Bindings {
     }
 }
 
+#[cfg(test)]
+impl Bindings {
+    pub(crate) fn insert(&mut self, menu: Menu, keys: &str, op: Op) {
+        self.vec.push(Binding::parse(menu, keys, op).unwrap());
+    }
+}
+
 pub(crate) struct Binding {
     pub menu: Menu,
     pub raw: String,

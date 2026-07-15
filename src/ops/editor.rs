@@ -301,6 +301,34 @@ impl OpTrait for HalfPageDown {
     }
 }
 
+pub(crate) struct FullPageUp;
+impl OpTrait for FullPageUp {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app, _term| {
+            app.screen_mut().scroll_view_full_page_up();
+            Ok(())
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Scroll full page up".into()
+    }
+}
+
+pub(crate) struct FullPageDown;
+impl OpTrait for FullPageDown {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app, _term| {
+            app.screen_mut().scroll_view_full_page_down();
+            Ok(())
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Scroll full page down".into()
+    }
+}
+
 pub(crate) struct ScrollViewUp;
 impl OpTrait for ScrollViewUp {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {

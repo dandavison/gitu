@@ -413,4 +413,24 @@ mod tests {
         assert_eq!(config.style.hunk_header.bg, Some(Color::LightGreen));
         assert_eq!(config.style.hunk_header.fg, Some(Color::Blue));
     }
+
+    #[test]
+    fn full_page_op_binding_resolves() {
+        let config: FigmentConfig = Figment::new()
+            .merge(Toml::string(DEFAULT_CONFIG))
+            .merge(Toml::string(
+                r#"
+                [bindings]
+                root.full_page_down = ["pagedown"]
+                "#,
+            ))
+            .extract()
+            .unwrap();
+
+        // Must map to the real op, not the untagged `ToggleArg` fallback.
+        assert!(
+            config.bindings.menus[&crate::menu::Menu::Root]
+                .contains_key(&crate::ops::Op::FullPageDown)
+        );
+    }
 }
