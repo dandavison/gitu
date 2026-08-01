@@ -191,3 +191,14 @@ fn rebase_subcommand_opens_the_todo() {
 fn rebase_todo_shows_the_keys_on_request() {
     snapshot!(setup_todo(setup_clone!()), &format!("{OPEN_TODO}h"));
 }
+
+#[test]
+fn rebase_interactive_asks_which_commit() {
+    // Nothing under the cursor names a commit, so the log view asks for one.
+    snapshot!(setup_todo(setup_clone!()), "ri");
+}
+
+#[test]
+fn rebase_interactive_from_the_picked_commit() {
+    snapshot!(setup_todo(setup_clone!()), "rij<enter>");
+}
