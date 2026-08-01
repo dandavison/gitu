@@ -39,6 +39,16 @@ pub enum Commands {
     Show {
         reference: String,
     },
+    /// Interactively rebase onto <upstream>, editing the instruction list in Gitu.
+    Rebase {
+        upstream: String,
+    },
+    /// Edit a `git rebase -i` instruction list, for use as GIT_SEQUENCE_EDITOR:
+    ///     GIT_SEQUENCE_EDITOR='gitu sequence-editor' git rebase -i <upstream>
+    #[clap(verbatim_doc_comment)]
+    SequenceEditor {
+        file: PathBuf,
+    },
     Blame {
         file: String,
         #[clap(short, long)]

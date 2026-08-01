@@ -1,4 +1,6 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
+use std::ffi::OsStr;
 use std::io::Read;
 use std::io::Write;
 use std::ops::DerefMut;
@@ -35,6 +37,7 @@ use crate::ops::Op;
 use crate::picker::PickerData;
 use crate::picker::PickerState;
 use crate::prompt;
+use crate::rebase_todo::RebaseTodo;
 use crate::screen;
 use crate::screen::Screen;
 use crate::term::Term;
@@ -47,6 +50,9 @@ pub(crate) struct State {
     pub config: Arc<Config>,
     pub pending_keys: Vec<(KeyModifiers, KeyCode)>,
     pub quit: bool,
+    /// What gitu exits with. Non-zero when it is a `git rebase -i` sequence
+    /// editor and the list was abandoned, which tells git to call the rebase off.
+    pub exit_code: i32,
     pub screens: Vec<Screen>,
     pub pending_menu: Option<PendingMenu>,
     pending_cmd: Option<(Child, Arc<RwLock<CmdLogEntry>>)>,
@@ -94,11 +100,26 @@ impl App {
                     None,
                 )?]
             }
+            Some(cli::Commands::Rebase { ref upstream }) => {
+                let todo = RebaseTodo::capture(&repo, OsStr::new(upstream), &[])?;
+                vec![rebase_todo_screen(&config, &repo, size, todo)?]
+            }
+            Some(cli::Commands::SequenceEditor { ref file }) => {
+                let todo = RebaseTodo::read(&repo, file)?;
+                vec![rebase_todo_screen(&config, &repo, size, todo)?]
+            }
             None => vec![screen::status::create(
                 Arc::clone(&config),
                 Rc::clone(&repo),
                 size,
             )?],
+        };
+
+        // As a sequence editor, exiting without handing a list back calls the
+        // rebase off; starting it sets this to zero.
+        let exit_code = match args.command {
+            Some(cli::Commands::SequenceEditor { .. }) => 1,
+            _ => 0,
         };
 
         let pending_menu = root_menu(&config).map(PendingMenu::init);
@@ -114,6 +135,7 @@ impl App {
                 pending_keys: vec![],
                 enable_async_cmds,
                 quit: false,
+                exit_code,
                 screens,
                 pending_cmd: None,
                 pending_menu,
@@ -811,6 +833,20 @@ fn tee(maybe_input: Option<&mut impl Read>, outputs: &mut [&mut dyn Write]) -> s
     }
 
     Ok(())
+}
+
+fn rebase_todo_screen(
+    config: &Arc<Config>,
+    repo: &Rc<Repository>,
+    size: Size,
+    todo: RebaseTodo,
+) -> Res<Screen> {
+    screen::rebase_todo::create(
+        Arc::clone(config),
+        Rc::clone(repo),
+        size,
+        Rc::new(RefCell::new(todo)),
+    )
 }
 
 /// How far back [`App::pick_commit`] lists commits.

@@ -15,7 +15,7 @@ pub(crate) fn create(
     // The commits themselves don't change while the list is edited, so their
     // rendered rows are fetched once per width rather than on every reorder.
     let cache: RefCell<Option<(u16, CommitRows)>> = RefCell::new(None);
-    let revs = format!("{}..HEAD", todo.borrow().base.to_string_lossy());
+    let revs = todo.borrow().revs();
     let screen_config = Arc::clone(&config);
 
     let mut screen = Screen::new(

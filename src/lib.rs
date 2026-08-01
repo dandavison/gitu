@@ -82,7 +82,8 @@ pub const LOG_FILE_NAME: &str = "gitu.log";
 
 pub type Res<T> = Result<T, Error>;
 
-pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<()> {
+/// Run gitu, returning the status to exit with.
+pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
     let dir = find_git_dir()?;
     let repo = open_repo(&dir)?;
 
@@ -107,12 +108,12 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<()> {
     app.redraw_now(term)?;
 
     if args.print {
-        return Ok(());
+        return Ok(app.state.exit_code);
     }
 
     app.run(term, Duration::from_millis(100))?;
 
-    Ok(())
+    Ok(app.state.exit_code)
 }
 
 fn open_repo(dir: &Path) -> Res<Repository> {

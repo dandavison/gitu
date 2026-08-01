@@ -12,6 +12,7 @@ pub enum Error {
     Bindings { bad_key_bindings: Vec<String> },
     FileWatcher(notify::Error),
     ReadRebaseStatusFile(io::Error),
+    ReadRebaseTodo(io::Error),
     WriteRebaseTodo(io::Error),
     ReadBranchName(io::Error),
     BranchNameUtf8(Utf8Error),
@@ -69,6 +70,9 @@ impl Display for Error {
         match self {
             Error::StashList(e) => f.write_fmt(format_args!("Couldn't list stash: {e}")),
             Error::ReadLog(e) => f.write_fmt(format_args!("Couldn't read log: {e}")),
+            Error::ReadRebaseTodo(e) => {
+                f.write_fmt(format_args!("Couldn't read the rebase todo list: {e}"))
+            }
             Error::WriteRebaseTodo(e) => {
                 f.write_fmt(format_args!("Couldn't write the rebase todo list: {e}"))
             }

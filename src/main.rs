@@ -8,7 +8,7 @@ use gitu::{
 };
 use log::LevelFilter;
 use ratatui::Terminal;
-use std::{backtrace::Backtrace, fmt::Display, panic, sync::Arc};
+use std::{backtrace::Backtrace, fmt::Display, panic, process, sync::Arc};
 
 pub fn main() -> Res<()> {
     let args = Args::parse();
@@ -47,10 +47,13 @@ pub fn main() -> Res<()> {
     term.backend_mut()
         .reset_term(&config_ref)
         .map_err(Error::Term)?;
-    result
+
+    // A sequence editor that hands nothing back exits non-zero, so git calls
+    // the rebase off.
+    process::exit(result?);
 }
 
-fn setup_term_and_run(term: &mut Term, config: Arc<Config>, args: &Args) -> Res<()> {
+fn setup_term_and_run(term: &mut Term, config: Arc<Config>, args: &Args) -> Res<i32> {
     log::debug!("Starting app");
     gitu::run(config, args, term)
 }

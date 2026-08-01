@@ -730,13 +730,13 @@ pub(crate) fn rendered_commit_rows(
     config: &Config,
     repo: &Repository,
     width: usize,
-    revs: &str,
+    revs: &[String],
 ) -> HashMap<String, Vec<Rc<RenderedRow>>> {
-    if !config.general.log_renderer.enabled {
+    if !config.general.log_renderer.enabled || revs.is_empty() {
         return HashMap::new();
     }
 
-    rendered_commits(config, repo, width, &[revs.to_string()])
+    rendered_commits(config, repo, width, revs)
         .unwrap_or_default()
         .into_iter()
         .filter_map(|block| Some((block.oid?, block.rows)))

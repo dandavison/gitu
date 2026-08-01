@@ -1,18 +1,22 @@
 //! An editable `git rebase -i` instruction list.
 //!
-//! gitu doesn't compose the todo itself: it asks git for the one it would have
-//! opened in `$EDITOR` (so `--autosquash`, `--rebase-merges` and any
-//! `rebase.instructionFormat` are honoured), lets you reorder and re-mark the
-//! entries, and then runs the rebase for real with the edited list. Both halves
-//! use `GIT_SEQUENCE_EDITOR`: capturing copies the todo out and fails, which
-//! makes git abort without touching anything; applying copies our list in.
+//! gitu doesn't compose the todo itself. It comes from git, in one of two ways:
+//!
+//! - [`RebaseTodo::capture`]: gitu starts the rebase, so it asks git for the todo
+//!   it would have opened in `$EDITOR` (honouring `--autosquash`,
+//!   `--rebase-merges` and `rebase.instructionFormat`) and, once edited, runs the
+//!   rebase for real with the result. Both halves use `GIT_SEQUENCE_EDITOR`:
+//!   capturing copies the todo out and fails, which makes git abort without
+//!   touching anything; applying copies the edited list in.
+//! - [`RebaseTodo::read`]: git started the rebase and ran gitu *as* its sequence
+//!   editor, handing over the file to edit in place.
 
 use crate::{Res, error::Error};
 use git2::Repository;
 use std::{
     ffi::{OsStr, OsString},
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
@@ -71,15 +75,26 @@ pub(crate) enum TodoEntry {
 
 #[derive(Debug)]
 pub(crate) struct RebaseTodo {
-    /// The rev being rebased onto, as given to `git rebase -i`.
-    pub base: OsString,
-    /// The rebase menu's arguments, replayed when the list is applied.
-    pub args: Vec<OsString>,
     /// Newest first, as the log view lists commits. git's instruction list runs
     /// the other way, so it is reversed on the way in and out.
     pub entries: Vec<TodoEntry>,
-    todo_file: PathBuf,
-    workdir: PathBuf,
+    source: Source,
+}
+
+/// Where the list came from, and so what starting it does.
+#[derive(Debug)]
+enum Source {
+    /// gitu captured the list and runs the rebase itself.
+    Captured {
+        /// The rev being rebased onto, as given to `git rebase -i`.
+        base: OsString,
+        /// The rebase menu's arguments, replayed when the list is applied.
+        args: Vec<OsString>,
+        todo_file: PathBuf,
+        workdir: PathBuf,
+    },
+    /// git is mid-rebase and gave gitu its file to edit in place.
+    Editing(PathBuf),
 }
 
 impl RebaseTodo {
@@ -112,37 +127,87 @@ impl RebaseTodo {
         };
         let _ = fs::remove_file(&todo_file);
 
-        let mut entries = parse(repo, &text);
-        entries.reverse();
-
         Ok(Self {
-            base: base.to_os_string(),
-            args: args.to_vec(),
-            entries,
-            todo_file,
-            workdir,
+            entries: read_entries(repo, &text),
+            source: Source::Captured {
+                base: base.to_os_string(),
+                args: args.to_vec(),
+                todo_file,
+                workdir,
+            },
         })
     }
 
-    /// The command that runs the rebase with this list, replacing the todo git
+    /// Read the list git handed us as its sequence editor.
+    pub(crate) fn read(repo: &Repository, path: &Path) -> Res<Self> {
+        let text = fs::read_to_string(path).map_err(Error::ReadRebaseTodo)?;
+
+        Ok(Self {
+            entries: read_entries(repo, &text),
+            source: Source::Editing(path.to_path_buf()),
+        })
+    }
+
+    /// The revs naming this list's commits, for rendering them: exactly the
+    /// entries', in the order held, whatever the rebase is doing to them.
+    pub(crate) fn revs(&self) -> Vec<String> {
+        let commits = self.entries.iter().filter_map(|entry| match entry {
+            TodoEntry::Commit { oid, .. } => Some(oid.clone()),
+            TodoEntry::Other(_) => None,
+        });
+
+        let mut revs: Vec<String> = commits.collect();
+        if !revs.is_empty() {
+            revs.insert(0, "--no-walk=unsorted".to_string());
+        }
+        revs
+    }
+
+    /// Hand the edited list back to git. In [`Source::Captured`] that means a
+    /// command the caller runs; when editing git's own file there is nothing to
+    /// run — writing it is the whole job.
+    pub(crate) fn start(&self) -> Res<Option<Command>> {
+        match &self.source {
+            Source::Captured { todo_file, .. } => {
+                fs::write(todo_file, self.text()).map_err(Error::WriteRebaseTodo)?;
+                Ok(Some(self.apply_cmd(todo_file)))
+            }
+            Source::Editing(path) => {
+                fs::write(path, self.text()).map_err(Error::WriteRebaseTodo)?;
+                Ok(None)
+            }
+        }
+    }
+
+    /// The command that runs the rebase with this list in place of the todo git
     /// generates. The caller runs it interactively: `reword`/`squash` open an
     /// editor and `edit` stops the rebase.
-    pub(crate) fn apply_cmd(&self) -> Res<Command> {
-        fs::write(&self.todo_file, self.text()).map_err(Error::WriteRebaseTodo)?;
+    fn apply_cmd(&self, todo_file: &Path) -> Command {
+        let Source::Captured {
+            base,
+            args,
+            workdir,
+            ..
+        } = &self.source
+        else {
+            unreachable!("only a captured list is applied by running git")
+        };
 
         let mut cmd = Command::new("git");
         cmd.args(["rebase", "-i"])
-            .args(&self.args)
-            .arg(&self.base)
+            .args(args)
+            .arg(base)
             .env("GIT_SEQUENCE_EDITOR", APPLY_EDITOR)
-            .env(TODO_VAR, &self.todo_file)
-            .current_dir(&self.workdir);
-        Ok(cmd)
+            .env(TODO_VAR, todo_file)
+            .current_dir(workdir);
+        cmd
     }
 
     /// Remove the list we handed git, once the rebase has read it.
     pub(crate) fn discard_file(&self) {
-        let _ = fs::remove_file(&self.todo_file);
+        if let Source::Captured { todo_file, .. } = &self.source {
+            let _ = fs::remove_file(todo_file);
+        }
     }
 
     fn text(&self) -> String {
@@ -178,8 +243,15 @@ impl RebaseTodo {
     }
 }
 
-/// Read git's instruction list, resolving each entry's abbreviated oid so it can
-/// be matched against rendered log rows (and written back unambiguously).
+/// Read git's instruction list into display order, resolving each entry's
+/// abbreviated oid so it can be matched against rendered log rows (and written
+/// back unambiguously).
+fn read_entries(repo: &Repository, text: &str) -> Vec<TodoEntry> {
+    let mut entries = parse(repo, text);
+    entries.reverse();
+    entries
+}
+
 fn parse(repo: &Repository, text: &str) -> Vec<TodoEntry> {
     text.lines()
         .map(str::trim)
@@ -206,8 +278,7 @@ mod tests {
 
     fn todo(oids: &[&str]) -> RebaseTodo {
         RebaseTodo {
-            base: OsString::new(),
-            args: vec![],
+            source: Source::Editing(PathBuf::new()),
             entries: oids
                 .iter()
                 .map(|oid| TodoEntry::Commit {
@@ -215,8 +286,6 @@ mod tests {
                     oid: oid.to_string(),
                 })
                 .collect(),
-            todo_file: PathBuf::new(),
-            workdir: PathBuf::new(),
         }
     }
 

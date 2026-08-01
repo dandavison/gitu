@@ -68,10 +68,15 @@ impl TestContext {
     }
 
     pub fn init_app_at_path(&mut self, path: PathBuf) -> App {
+        self.init_app_with_args(path, Args::default())
+    }
+
+    /// Start gitu as one of its subcommands would (`gitu sequence-editor …`).
+    pub fn init_app_with_args(&mut self, path: PathBuf, args: Args) -> App {
         let mut app = App::create(
             Rc::new(Repository::open(path).unwrap()),
             self.size,
-            &Args::default(),
+            &args,
             Arc::clone(&self.config),
             false,
         )

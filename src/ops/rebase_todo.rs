@@ -68,7 +68,14 @@ impl OpTrait for Start {
         let todo = Rc::clone(todo);
 
         Some(Rc::new(move |app: &mut App, term: &mut Term| {
-            let cmd = todo.borrow().apply_cmd()?;
+            let Some(cmd) = todo.borrow().start()? else {
+                // Editing git's own list: it is written, and git takes it from
+                // here as soon as we exit.
+                app.state.exit_code = 0;
+                app.state.quit = true;
+                return Ok(());
+            };
+
             app.state.screens.pop();
             let result = app.run_cmd_interactive(term, cmd);
             todo.borrow().discard_file();
