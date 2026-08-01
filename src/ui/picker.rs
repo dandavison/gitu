@@ -66,13 +66,7 @@ pub(crate) fn layout_picker<'a>(
                 layout_span(layout, (" ".into(), Style::new()));
             }
 
-            // Render the pre-styled line (e.g. a log-view commit row) if present,
-            // otherwise the display text with fuzzy match highlighting.
-            if let Some(line) = &item.line {
-                for span in line.spans.iter() {
-                    layout_span(layout, (span.content.clone(), span.style.patch(style)));
-                }
-            } else if let Some(match_indices) = state.match_indices(original_idx) {
+            if let Some(match_indices) = state.match_indices(original_idx) {
                 render_highlighted_text(layout, &item.display, &match_indices, style, config);
             } else {
                 layout_span(layout, (item.display.as_ref().into(), style));

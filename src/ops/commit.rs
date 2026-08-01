@@ -2,22 +2,15 @@ use super::{Action, OpTrait};
 use crate::{
     Res,
     app::{App, State},
-    config::Config,
     item_data::ItemData,
-    items::{self, Item},
     menu::arg::Arg,
-    picker::{PickerData, PickerItem, PickerState},
     term::Term,
 };
-use ratatui::text::{Line, Span};
 use std::{
     ffi::{OsStr, OsString},
     process::Command,
     rc::Rc,
-    sync::Arc,
 };
-
-const COMMIT_PICKER_LIMIT: usize = 256;
 
 pub(crate) fn init_args() -> Vec<Arg> {
     vec![
@@ -91,10 +84,11 @@ pub(crate) struct CommitFixup;
 impl OpTrait for CommitFixup {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {
         Some(Rc::new(|app: &mut App, term: &mut Term| {
-            let Some(rev) = pick_fixup_commit(app, term, "Fixup")? else {
+            // The menu (and its args) close with the picker, so read them first.
+            let args = app.state.pending_menu.as_ref().unwrap().args();
+            let Some(rev) = pick_fixup_commit(app, term)? else {
                 return Ok(());
             };
-            let args = app.state.pending_menu.as_ref().unwrap().args();
             app.run_cmd_interactive(term, commit_fixup_cmd(&args, &rev))
         }))
     }
@@ -116,10 +110,10 @@ pub(crate) struct CommitInstantFixup;
 impl OpTrait for CommitInstantFixup {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {
         Some(Rc::new(|app: &mut App, term: &mut Term| {
-            let Some(rev) = pick_fixup_commit(app, term, "Instant fixup")? else {
+            let args = app.state.pending_menu.as_ref().unwrap().args();
+            let Some(rev) = pick_fixup_commit(app, term)? else {
                 return Ok(());
             };
-            let args = app.state.pending_menu.as_ref().unwrap().args();
             app.run_cmd(term, &[], commit_fixup_cmd(&args, &rev))?;
             app.run_cmd(term, &[], rebase_autosquash_cmd(&rev))
         }))
@@ -130,67 +124,9 @@ impl OpTrait for CommitInstantFixup {
     }
 }
 
-/// Show a log-view-styled commit picker and return the chosen commit's oid.
-fn pick_fixup_commit(
-    app: &mut App,
-    term: &mut Term,
-    prompt: &'static str,
-) -> Res<Option<OsString>> {
-    let config = Arc::clone(&app.state.config);
-    let log = items::log(&app.state.repo, COMMIT_PICKER_LIMIT, None, None)?;
-    let picker_items = commit_picker_items(&log, &config);
-
-    let cursor = selected_commit_oid(app).and_then(|oid| {
-        picker_items
-            .iter()
-            .position(|item| item.data == PickerData::Item(oid.clone()))
-    });
-
-    let mut picker = PickerState::new(prompt, picker_items, false);
-    if let Some(cursor) = cursor {
-        picker.set_cursor(cursor);
-    }
-
-    Ok(app
-        .pick(term, picker)?
-        .map(|data| OsString::from(data.display())))
-}
-
-fn commit_picker_items(log: &[Item], config: &Arc<Config>) -> Vec<PickerItem> {
-    log.iter()
-        .filter_map(|item| match &item.data {
-            ItemData::Commit {
-                oid,
-                short_id,
-                summary,
-                ..
-            } => {
-                let display = format!("{short_id} {summary}");
-                let line = into_owned_line(item.to_line(Arc::clone(config)));
-                Some(PickerItem::with_line(
-                    display,
-                    PickerData::Item(oid.clone()),
-                    line,
-                ))
-            }
-            _ => None,
-        })
-        .collect()
-}
-
-fn into_owned_line(line: Line) -> Line<'static> {
-    line.spans
-        .into_iter()
-        .map(|span| Span::styled(span.content.into_owned(), span.style))
-        .collect::<Vec<_>>()
-        .into()
-}
-
-fn selected_commit_oid(app: &App) -> Option<String> {
-    match &app.screen().get_selected_item().data {
-        ItemData::Commit { oid, .. } => Some(oid.clone()),
-        _ => None,
-    }
+/// Choose the commit to fix up in the log view.
+fn pick_fixup_commit(app: &mut App, term: &mut Term) -> Res<Option<OsString>> {
+    Ok(app.pick_commit(term)?.map(OsString::from))
 }
 
 fn rebase_autosquash_cmd(rev: &OsStr) -> Command {

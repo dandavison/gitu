@@ -1,6 +1,5 @@
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
-use ratatui::text::Line;
 use std::borrow::Cow;
 use tui_prompts::State as _;
 use tui_prompts::TextState;
@@ -32,8 +31,6 @@ pub struct PickerItem {
     pub display: Cow<'static, str>,
     /// Associated data
     pub data: PickerData,
-    /// Pre-styled line rendered instead of `display` (e.g. a log-view commit row)
-    pub line: Option<Line<'static>>,
 }
 
 impl PickerItem {
@@ -41,20 +38,6 @@ impl PickerItem {
         Self {
             display: display.into(),
             data,
-            line: None,
-        }
-    }
-
-    /// An item matched against `display` but rendered as the given styled line.
-    pub fn with_line(
-        display: impl Into<Cow<'static, str>>,
-        data: PickerData,
-        line: Line<'static>,
-    ) -> Self {
-        Self {
-            display: display.into(),
-            data,
-            line: Some(line),
         }
     }
 }
@@ -300,13 +283,6 @@ impl PickerState {
             } else {
                 self.cursor - 1
             };
-        }
-    }
-
-    /// Move the cursor to a specific filtered index, if in range.
-    pub fn set_cursor(&mut self, cursor: usize) {
-        if cursor < self.filtered_indices.len() {
-            self.cursor = cursor;
         }
     }
 

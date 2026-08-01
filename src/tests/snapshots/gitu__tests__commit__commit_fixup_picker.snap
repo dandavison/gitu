@@ -2,16 +2,6 @@
 source: src/tests/commit.rs
 expression: ctx.redact_buffer()
 ---
- main                                                                           |
-                                                                                |
- Recent commits                                                                 |
- 56e4088 main add beta.txt                                                      |
- d5b0e9e add alpha.txt                                                          |
- b66a0bf origin/main add initial-file                                           |
-                                                                                |
-                                                                                |
-────────────────────────────────────────────────────────────────────────────────|
- 3/3   Fixup › █                                                                |
 ▌56e4088 main add beta.txt                                                      |
  d5b0e9e add alpha.txt                                                          |
  b66a0bf origin/main add initial-file                                           |
@@ -19,7 +9,17 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-                                                                                |
-                                                                                |
-                                                                                |
-styles_hash: a412af18978e498
+────────────────────────────────────────────────────────────────────────────────|
+ Select commit                          56e4088 main add beta.txt               |
+ k/up           Up                      enter Select                            |
+ j/down         Down                    tab   Fold                              |
+ alt+k/alt+up   Prev section                                                    |
+ alt+j/alt+down Next section                                                    |
+ g+g            Top                                                             |
+ G              Bottom                                                          |
+ ctrl+u         Scroll half page up                                             |
+ ctrl+d         Scroll half page down                                           |
+ ctrl+y         Scroll view up                                                  |
+ ctrl+e         Scroll view down                                                |
+ q/esc          Quit/Close                                                      |
+styles_hash: e50100da91a27695

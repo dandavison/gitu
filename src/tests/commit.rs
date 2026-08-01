@@ -52,9 +52,9 @@ fn commit_instant_fixup_picks_commit() {
     commit(&ctx.dir, "beta.txt", "b\n");
     fs::write(ctx.dir.join("alpha.txt"), "a2\n").unwrap();
     run(&ctx.dir, &["git", "add", "."]);
-    // With a staged file (not a commit) selected, pick the "add alpha.txt" commit
-    // from the log picker and instant-fixup onto it.
-    ctx.update(&mut state, keys("cFalpha<enter>"));
+    // With a staged file (not a commit) selected, move down to the "add
+    // alpha.txt" commit in the picker and instant-fixup onto it.
+    ctx.update(&mut state, keys("cFj<enter>"));
 
     insta::assert_snapshot!(ctx.redact_buffer());
 }

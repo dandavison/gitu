@@ -54,6 +54,8 @@ pub(crate) struct State {
     pub current_cmd_log: CmdLog,
     pub prompt: prompt::Prompt,
     pub picker: Option<PickerState>,
+    /// The commit `select_commit` named, read by [`App::pick_commit`].
+    pub picked_commit: Option<String>,
     pub clipboard: Option<Clipboard>,
     needs_redraw: bool,
     file_watcher: Option<FileWatcher>,
@@ -118,6 +120,7 @@ impl App {
                 current_cmd_log: CmdLog::new(),
                 prompt: prompt::Prompt::new(),
                 picker: None,
+                picked_commit: None,
                 clipboard,
                 file_watcher: None,
                 needs_redraw: true,
@@ -681,6 +684,53 @@ impl App {
         result
     }
 
+    /// Choose a commit by moving around a log view: the screen is pushed with
+    /// its own keymap, and the loop runs until `select_commit` names one or the
+    /// screen is closed.
+    pub fn pick_commit(&mut self, term: &mut Term) -> Res<Option<String>> {
+        let size = self.screen().size;
+        let selected = match &self.screen().get_selected_item().data {
+            crate::item_data::ItemData::Commit { oid, .. } => Some(oid.clone()),
+            _ => None,
+        };
+        self.state.screens.push(screen::log::create(
+            Arc::clone(&self.state.config),
+            Rc::clone(&self.state.repo),
+            size,
+            COMMIT_PICK_LIMIT,
+            None,
+            None,
+        )?);
+        self.screen_mut().menu = Some(Menu::CommitPicker);
+        self.close_menu();
+
+        // Start on the commit that was already selected, if there was one.
+        if let Some(selected) = selected {
+            self.screen_mut().select_matching(|data| {
+                matches!(data, crate::item_data::ItemData::Commit { oid, .. } if *oid == selected)
+            });
+        }
+
+        let depth = self.state.screens.len();
+        self.redraw_now(term)?;
+
+        loop {
+            let event = term.backend_mut().read_event()?;
+            self.handle_event(term, event)?;
+
+            if let Some(oid) = self.state.picked_commit.take() {
+                self.state.screens.truncate(depth - 1);
+                self.close_menu();
+                return Ok(Some(oid));
+            }
+            if self.state.screens.len() < depth {
+                return Ok(None); // The screen was closed: nothing picked.
+            }
+
+            self.redraw_now(term)?;
+        }
+    }
+
     fn handle_picker(&mut self, term: &mut Term) -> Res<Option<PickerData>> {
         self.redraw_now(term)?;
 
@@ -762,6 +812,9 @@ fn tee(maybe_input: Option<&mut impl Read>, outputs: &mut [&mut dyn Write]) -> s
 
     Ok(())
 }
+
+/// How far back [`App::pick_commit`] lists commits.
+const COMMIT_PICK_LIMIT: usize = 256;
 
 pub(crate) fn root_menu(config: &Config) -> Option<Menu> {
     if config.general.always_show_help.enabled {
