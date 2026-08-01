@@ -13,6 +13,7 @@ use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::text::Span;
 use regex::Regex;
+use std::cmp::Ordering;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -255,8 +256,12 @@ fn create_rendered_diff_items(
 ) -> Option<Vec<Item>> {
     use std::collections::HashMap;
 
-    let output =
-        crate::diff_colorizer::run(&config.general.diff_colorizer.command, &diff.text, width)?;
+    let output = crate::diff_colorizer::run(
+        &config.general.diff_colorizer.command,
+        Some(&diff.text),
+        width,
+        None,
+    )?;
     let parsed = crate::diff_colorizer::parse_ansi_lines(&output);
     parsed.protocol_version?; // Not an OSC-1717 renderer: fall back to built-in.
 
@@ -273,7 +278,7 @@ fn create_rendered_diff_items(
             continue; // Un-annotated decoration (dividers): dropped.
         };
         match first.kind {
-            LineKind::FileHeader => {}
+            LineKind::FileHeader | LineKind::Commit => {}
             LineKind::HunkHeader => {
                 if line.text.trim().is_empty() {
                     continue;
@@ -522,33 +527,7 @@ pub(crate) fn log(
         return Ok(vec![]);
     }
 
-    let references: Vec<_> = repo
-        .references()
-        .map_err(Error::ReadLog)?
-        .filter_map(Result::ok)
-        .filter_map(
-            |reference| match (reference.peel_to_commit(), reference.shorthand()) {
-                (Ok(target), Some(name)) => {
-                    if name.ends_with("/HEAD") || name.starts_with("prefetch/remotes/") {
-                        return None;
-                    }
-
-                    let name = name.to_owned();
-
-                    let ref_kind = if reference.is_remote() {
-                        Ref::Remote(name)
-                    } else if reference.is_tag() {
-                        Ref::Tag(name)
-                    } else {
-                        Ref::Head(name)
-                    };
-
-                    Some((target, ref_kind))
-                }
-                _ => None,
-            },
-        )
-        .collect();
+    let references = commit_refs(repo)?;
 
     let items: Vec<Item> = revwalk
         .map(|oid_result| -> Res<Option<Item>> {
@@ -605,6 +584,177 @@ pub(crate) fn log(
         }])
     } else {
         Ok(items)
+    }
+}
+
+/// The refs pointing at commits, as the log view annotates them with.
+fn commit_refs(repo: &Repository) -> Res<Vec<(git2::Commit<'_>, Ref)>> {
+    Ok(repo
+        .references()
+        .map_err(Error::ReadLog)?
+        .filter_map(Result::ok)
+        .filter_map(
+            |reference| match (reference.peel_to_commit(), reference.shorthand()) {
+                (Ok(target), Some(name)) => {
+                    if name.ends_with("/HEAD") || name.starts_with("prefetch/remotes/") {
+                        return None;
+                    }
+
+                    let name = name.to_owned();
+
+                    let ref_kind = if reference.is_remote() {
+                        Ref::Remote(name)
+                    } else if reference.is_tag() {
+                        Ref::Tag(name)
+                    } else {
+                        Ref::Head(name)
+                    };
+
+                    Some((target, ref_kind))
+                }
+                _ => None,
+            },
+        )
+        .collect())
+}
+
+/// Build the log view from the output of the configured log command
+/// (`general.log_renderer`), which prints the commits however it likes — several
+/// rows each, `--stat`, `--graph`. gitu substitutes the command's `{commit}`
+/// token with git format directives that emit an OSC-1717 commit record, so each
+/// commit's rows are known: the first non-blank one becomes the selectable
+/// `Commit` item and the rest nest under it, keeping a commit one unit for
+/// navigation, folding and the ops that act on a commit.
+///
+/// Returns `None` (fall back to the built-in log) if the command fails or its
+/// output carries no commit records.
+pub(crate) fn rendered_log(
+    config: &Config,
+    repo: &Repository,
+    width: usize,
+    limit: usize,
+    rev: Option<Oid>,
+    msg_regex: Option<&Regex>,
+) -> Option<Vec<Item>> {
+    let command = log_command(config, limit, rev, msg_regex);
+    let dir = repo.workdir().unwrap_or_else(|| repo.path());
+    let output = crate::diff_colorizer::run(&command, None, width, Some(dir))?;
+    let parsed = crate::diff_colorizer::parse_ansi_lines(&output);
+    let blocks = crate::diff_colorizer::commit_blocks(&parsed.lines);
+
+    if blocks.iter().all(|block| block.commit.is_none()) {
+        log::warn!(
+            "log command emitted no commit records; is the '{{commit}}' token in its format?"
+        );
+        return None;
+    }
+
+    let references = commit_refs(repo).ok()?;
+    Some(
+        blocks
+            .iter()
+            .flat_map(|block| commit_block_items(repo, &references, block))
+            .collect(),
+    )
+}
+
+/// The configured command with its `{commit}` token substituted, plus the log
+/// screen's own arguments (limit, message filter, rev).
+fn log_command(
+    config: &Config,
+    limit: usize,
+    rev: Option<Oid>,
+    msg_regex: Option<&Regex>,
+) -> Vec<String> {
+    let mut command: Vec<String> = config
+        .general
+        .log_renderer
+        .command
+        .iter()
+        .map(|arg| arg.replace("{commit}", crate::diff_colorizer::COMMIT_RECORD_FORMAT))
+        .collect();
+
+    // "No limit" is `u32::MAX`, which git rejects as not an integer; leaving the
+    // option off is what an unrepresentable limit means anyway.
+    if let Ok(limit) = i32::try_from(limit) {
+        command.push(format!("-n{limit}"));
+    }
+    if let Some(regex) = msg_regex {
+        command.push("--extended-regexp".into());
+        command.push(format!("--grep={regex}"));
+    }
+    command.push(rev.map_or_else(|| "HEAD".to_string(), |oid| oid.to_string()));
+    command
+}
+
+/// One commit's rendered rows as items: blank rows leading the block stay
+/// separators, the first non-blank row is the commit itself, and the remaining
+/// rows nest under it (so folding the commit hides them).
+fn commit_block_items(
+    repo: &Repository,
+    references: &[(git2::Commit, Ref)],
+    block: &crate::diff_colorizer::CommitBlock,
+) -> Vec<Item> {
+    let commit = block
+        .commit
+        .and_then(|oid| Oid::from_str(oid).ok())
+        .and_then(|oid| repo.find_commit(oid).ok());
+
+    let Some(commit) = commit else {
+        return block.rows.iter().map(|row| row_item(0, 1, row)).collect();
+    };
+    let id = hash(commit.id());
+
+    let Some(anchor) = block
+        .rows
+        .iter()
+        .position(|row| !row.text.trim().is_empty())
+    else {
+        return block.rows.iter().map(|row| row_item(id, 1, row)).collect();
+    };
+
+    block
+        .rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| match i.cmp(&anchor) {
+            Ordering::Less => row_item(id, 1, row),
+            Ordering::Greater => row_item(id, 2, row),
+            Ordering::Equal => Item {
+                data: commit_data(&commit, references),
+                unselectable: false,
+                ..row_item(id, 1, row)
+            },
+        })
+        .collect()
+}
+
+fn row_item(id: ItemId, depth: usize, row: &crate::diff_colorizer::ParsedLine) -> Item {
+    Item {
+        id,
+        depth,
+        unselectable: true,
+        rendered: Some(Rc::new(rendered_spans(row))),
+        ..Default::default()
+    }
+}
+
+fn commit_data(commit: &git2::Commit, references: &[(git2::Commit, Ref)]) -> ItemData {
+    let short_id = commit
+        .as_object()
+        .short_id()
+        .map(|id| String::from_utf8_lossy(&id).to_string())
+        .unwrap_or_default();
+
+    ItemData::Commit {
+        oid: commit.id().to_string(),
+        short_id,
+        associated_references: references
+            .iter()
+            .filter(|(target, _)| target.id() == commit.id())
+            .map(|(_, reference)| reference.clone())
+            .collect(),
+        summary: commit.summary().unwrap_or("").to_string(),
     }
 }
 

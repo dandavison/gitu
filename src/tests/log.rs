@@ -91,3 +91,133 @@ fn log_empty_branch() {
     ctx.update(&mut app, keys("ll"));
     insta::assert_snapshot!(ctx.redact_buffer());
 }
+
+/// Render the log with a command whose format prints each commit over several
+/// rows, marked with the `{commit}` token so gitu can tell the rows apart. Dates
+/// are absolute so the output doesn't drift with the wall clock.
+fn with_log_renderer(mut ctx: TestContext, args: &[&str], format: &str) -> TestContext {
+    let config = ctx.config();
+    config.general.log_renderer.enabled = true;
+    config.general.log_renderer.command = [&["git", "log", "--color=always", "--date=short"], args]
+        .concat()
+        .iter()
+        .map(|arg| arg.to_string())
+        .chain([format!("--format={format}")])
+        .collect();
+    ctx
+}
+
+const MULTI_ROW_FORMAT: &str = "{commit}%n\u{25b8} %h %an %ad%C(auto)%d%C(reset)%n    %s";
+
+#[test]
+fn rendered_log() {
+    snapshot!(
+        with_log_renderer(setup(setup_clone!()), &[], MULTI_ROW_FORMAT),
+        "ll"
+    );
+}
+
+#[test]
+fn rendered_log_move_down_steps_a_whole_commit() {
+    snapshot!(
+        with_log_renderer(setup(setup_clone!()), &[], MULTI_ROW_FORMAT),
+        "lljj"
+    );
+}
+
+#[test]
+fn rendered_log_move_next_section_steps_a_whole_commit() {
+    snapshot!(
+        with_log_renderer(setup(setup_clone!()), &[], MULTI_ROW_FORMAT),
+        "ll<alt+j><alt+j>"
+    );
+}
+
+#[test]
+fn rendered_log_move_prev_section_steps_a_whole_commit() {
+    snapshot!(
+        with_log_renderer(setup(setup_clone!()), &[], MULTI_ROW_FORMAT),
+        "lljj<alt+k>"
+    );
+}
+
+#[test]
+fn rendered_log_fold_hides_the_commit_rows() {
+    snapshot!(
+        with_log_renderer(setup(setup_clone!()), &[], MULTI_ROW_FORMAT),
+        "ll<tab>"
+    );
+}
+
+#[test]
+fn rendered_log_show_acts_on_the_selected_commit() {
+    snapshot!(
+        with_log_renderer(setup(setup_clone!()), &[], MULTI_ROW_FORMAT),
+        "llj<enter>"
+    );
+}
+
+#[test]
+fn rendered_log_copy_hash_of_the_selected_commit() {
+    snapshot!(
+        with_log_renderer(setup(setup_clone!()), &[], MULTI_ROW_FORMAT),
+        "lljy"
+    );
+}
+
+#[test]
+fn rendered_log_with_stat() {
+    // Extra rows a commit prints after its message stay part of that commit.
+    snapshot!(
+        with_log_renderer(
+            setup(setup_clone!()),
+            &["--stat"],
+            "{commit}%n\u{25b8} %h %s"
+        ),
+        "llj"
+    );
+}
+
+#[test]
+fn rendered_log_limit() {
+    snapshot!(
+        with_log_renderer(setup(setup_clone!()), &[], MULTI_ROW_FORMAT),
+        "l-n-n2<enter>l"
+    );
+}
+
+#[test]
+fn rendered_log_grep() {
+    snapshot!(
+        with_log_renderer(setup(setup_clone!()), &[], MULTI_ROW_FORMAT),
+        "l-Fsecond<enter>l"
+    );
+}
+
+#[test]
+fn rendered_log_other_rev() {
+    snapshot!(
+        with_log_renderer(setup(setup_clone!()), &[], MULTI_ROW_FORMAT),
+        "lomain~1<enter>"
+    );
+}
+
+#[test]
+fn rendered_log_without_commit_marker_falls_back() {
+    snapshot!(with_log_renderer(setup(setup_clone!()), &[], "%h %s"), "ll");
+}
+
+#[test]
+fn rendered_log_empty_branch_falls_back() {
+    // The log command exits non-zero on an unborn branch; gitu falls back rather
+    // than showing nothing.
+    let mut ctx = setup_clone!();
+    run(&ctx.dir, &["rm", "-rf", ".git"]);
+    run(&ctx.dir, &["rm", "initial-file"]);
+    run(&ctx.dir, &["git", "init", "--initial-branch=main"]);
+    let mut ctx = with_log_renderer(ctx, &[], MULTI_ROW_FORMAT);
+
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("ll"));
+    insta::assert_snapshot!(ctx.redact_buffer());
+}

@@ -61,6 +61,8 @@ pub struct GeneralConfig {
     pub mouse_scroll_lines: usize,
     #[serde(default)]
     pub diff_colorizer: DiffColorizerConfig,
+    #[serde(default)]
+    pub log_renderer: LogRendererConfig,
 }
 
 #[derive(Default, Debug, Deserialize)]
@@ -69,6 +71,18 @@ pub struct DiffColorizerConfig {
     pub enabled: bool,
     /// Colorizer command as `[executable, ...args]`. It receives a unified diff
     /// on stdin and must emit ANSI-colored output that preserves line structure.
+    #[serde(default)]
+    pub command: Vec<String>,
+}
+
+#[derive(Default, Debug, Deserialize)]
+pub struct LogRendererConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// Log command as `[executable, ...args]`, run in the repository. Its
+    /// ANSI-colored output becomes the log view; a `{commit}` token must appear
+    /// in the format so each commit's rows can be identified (see
+    /// [`crate::diff_colorizer::COMMIT_RECORD_FORMAT`]).
     #[serde(default)]
     pub command: Vec<String>,
 }

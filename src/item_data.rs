@@ -83,6 +83,10 @@ impl ItemData {
                 | ItemData::Delta { .. }
                 | ItemData::Hunk { .. }
                 | ItemData::Header(_)
+                // A commit is a section so that sibling navigation (alt+up /
+                // alt+down) steps commit-to-commit and folding hides the extra
+                // rows a rendered log gives it.
+                | ItemData::Commit { .. }
         )
     }
 

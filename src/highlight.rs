@@ -88,7 +88,12 @@ fn colorize_hunk(
     let patch = diff.format_hunk_patch(file_index, hunk_index);
     // The `--color-only` path preserves structure and does not reflow, so width
     // is irrelevant here (0 = no `{width}`/COLUMNS effect for a structural command).
-    let output = crate::diff_colorizer::run(&config.general.diff_colorizer.command, &patch, 0)?;
+    let output = crate::diff_colorizer::run(
+        &config.general.diff_colorizer.command,
+        Some(&patch),
+        0,
+        None,
+    )?;
     colorize_hunk_from_output(diff, file_index, hunk_index, &output)
 }
 

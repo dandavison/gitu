@@ -34,6 +34,27 @@ mouse_scroll_lines = 3
 diff_colorizer.enabled = false
 diff_colorizer.command = ["delta", "--color-only", "--no-gitconfig", "--true-color", "always"]
 
+# Render the log view with a command of your own instead of Gitu's built-in
+# one-line-per-commit list. The command is run in the repository and its
+# ANSI-colored output becomes the log view; Gitu appends the log menu's
+# arguments (`-n`, `--grep`) and the rev being logged.
+#
+# A commit may take as many rows as the format prints (blank separators, a stat,
+# a graph): Gitu keeps them one unit — one commit per cursor stop, folded and
+# operated on together — by identifying them from a marker the format emits.
+# The `{commit}` token, which must appear in the format, is substituted with git
+# format directives emitting that marker (an OSC-1717 commit record); if it is
+# missing, Gitu falls back to the built-in log.
+#
+# A `{width}` token is substituted as for `diff_colorizer`, so the output can be
+# piped through a renderer that reflows, e.g.:
+#   log_renderer.command = ["sh", "-c", "git log --stat --color=always --format='{commit}%h %s' \"$@\" | delta --width {width}", "gitu"]
+log_renderer.enabled = false
+log_renderer.command = [
+  "git", "log", "--color=always", "--date=relative",
+  "--format={commit}%n%n▸ %h %C(blue)%an %C(blue)%ar%C(auto)%d%C(reset)%n%n    %C(green)%s%C(auto)",
+]
+
 # When to prompt for discard confirmation. Options:
 # "line"  - always prompt even for individual lines (default),
 # "hunk"  - prompt for files and hunks,

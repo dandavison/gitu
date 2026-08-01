@@ -1,5 +1,9 @@
 use super::Screen;
-use crate::{Res, config::Config, items::log};
+use crate::{
+    Res,
+    config::Config,
+    items::{self, log},
+};
 use git2::{Oid, Repository};
 use ratatui::layout::Size;
 use regex::Regex;
@@ -16,6 +20,21 @@ pub(crate) fn create(
     Screen::new(
         Arc::clone(&config),
         size,
-        Box::new(move |_size: Size| log(&repo, limit, rev, msg_regex.clone())),
+        Box::new(move |size: Size| {
+            if config.general.log_renderer.enabled
+                && let Some(items) = items::rendered_log(
+                    &config,
+                    &repo,
+                    (size.width as usize).saturating_sub(2),
+                    limit,
+                    rev,
+                    msg_regex.as_ref(),
+                )
+            {
+                return Ok(items);
+            }
+
+            log(&repo, limit, rev, msg_regex.clone())
+        }),
     )
 }
