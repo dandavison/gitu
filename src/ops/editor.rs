@@ -155,6 +155,26 @@ impl OpTrait for ToggleSection {
     }
 }
 
+/// Show or hide the list of what a screen's own keymap does.
+pub(crate) struct ToggleMenu;
+impl OpTrait for ToggleMenu {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app: &mut App, _term: &mut Term| {
+            let screen = app.screen_mut();
+            screen.show_menu = !screen.show_menu;
+            Ok(())
+        }))
+    }
+
+    fn display(&self, state: &State) -> String {
+        if state.screens.last().unwrap().show_menu {
+            "Hide keys".into()
+        } else {
+            "Show keys".into()
+        }
+    }
+}
+
 /// Name the commit under the cursor as the one [`App::pick_commit`] was after.
 pub(crate) struct SelectCommit;
 impl OpTrait for SelectCommit {

@@ -2,6 +2,10 @@
 source: src/tests/commit.rs
 expression: ctx.redact_buffer()
 ---
+ 1cee609 main add file-10                                                       |
+ 60c9fa8 add file-9                                                             |
+ 14327a8 add file-8                                                             |
+ ae37012 add file-7                                                             |
  585709b add file-6                                                             |
  ed20882 add file-5                                                             |
  5eef443 add file-4                                                             |
@@ -9,17 +13,13 @@ expression: ctx.redact_buffer()
 ▌f67e3f0 add file-2                                                             |
  ce87247 add file-1                                                             |
  b66a0bf origin/main add initial-file                                           |
-────────────────────────────────────────────────────────────────────────────────|
- Select commit                          f67e3f0 add file-2                      |
- k/up           Up                      enter Select                            |
- j/down         Down                    tab   Fold                              |
- alt+k/alt+up   Prev section                                                    |
- alt+j/alt+down Next section                                                    |
- g+g            Top                                                             |
- G              Bottom                                                          |
- ctrl+u         Scroll half page up                                             |
- ctrl+d         Scroll half page down                                           |
- ctrl+y         Scroll view up                                                  |
- ctrl+e         Scroll view down                                                |
- q/esc          Quit/Close                                                      |
-styles_hash: fca4ee3663bfdca7
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: 841e3eac620ec85c

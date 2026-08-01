@@ -401,7 +401,11 @@ impl App {
     }
 
     pub fn close_menu(&mut self) {
-        self.state.pending_menu = self.base_menu().map(PendingMenu::init)
+        let hide = self.screen().menu.is_some() && !self.screen().show_menu;
+        self.state.pending_menu = self.base_menu().map(|menu| PendingMenu {
+            is_hidden: hide,
+            ..PendingMenu::init(menu)
+        });
     }
 
     /// The menu to fall back to once a pending one closes: a screen with its own

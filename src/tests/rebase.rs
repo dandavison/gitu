@@ -186,3 +186,8 @@ fn rebase_subcommand_opens_the_todo() {
     ctx.update(&mut app, keys(""));
     insta::assert_snapshot!(ctx.redact_buffer());
 }
+
+#[test]
+fn rebase_todo_shows_the_keys_on_request() {
+    snapshot!(setup_todo(setup_clone!()), &format!("{OPEN_TODO}h"));
+}

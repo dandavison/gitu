@@ -34,6 +34,9 @@ pub(crate) struct Screen {
     /// The keymap this screen imposes while it is on top, if it isn't the
     /// ordinary one (the interactive rebase todo has its own single-key actions).
     pub(crate) menu: Option<crate::menu::Menu>,
+    /// Whether that keymap is listed on screen. It stays up as long as the
+    /// screen does, so it starts out of the way.
+    pub(crate) show_menu: bool,
     cursor: usize,
     scroll: usize,
     config: Arc<Config>,
@@ -60,6 +63,7 @@ impl Screen {
         let mut screen = Self {
             cursor: 0,
             menu: None,
+            show_menu: false,
             scroll: 0,
             size,
             config,
