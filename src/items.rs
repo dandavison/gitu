@@ -769,14 +769,16 @@ fn commit_block_items(
 }
 
 /// Lay a block of rendered rows out under a selectable anchor row (the first
-/// non-blank one, built by `anchor`): rows before it are separators at the same
-/// depth, rows after it nest one deeper so folding the anchor hides them.
+/// one that isn't blank or a divider, built by `anchor`): rows before it are
+/// separators at the same depth, so a rule the renderer drew above the commit
+/// keeps separating commits rather than becoming one's cursor line. Rows after
+/// it nest one deeper, so folding the anchor hides them.
 fn block_items(
     id: ItemId,
     rows: &[Rc<RenderedRow>],
     anchor: impl Fn(&Rc<RenderedRow>) -> Item,
 ) -> Vec<Item> {
-    let Some(anchor_i) = rows.iter().position(|row| !is_blank(row)) else {
+    let Some(anchor_i) = rows.iter().position(|row| !is_decoration(row)) else {
         return rows.iter().map(|row| row_item(id, 1, row)).collect();
     };
 
@@ -790,9 +792,15 @@ fn block_items(
         .collect()
 }
 
-fn is_blank(row: &RenderedRow) -> bool {
-    row.iter().all(|(text, _)| text.trim().is_empty())
+/// Whether a row has nothing to put a cursor on: blank, or a rule the renderer
+/// drew between commits (delta's `ol`/`ul`/`box` commit decorations).
+fn is_decoration(row: &RenderedRow) -> bool {
+    row.iter()
+        .flat_map(|(text, _)| text.chars())
+        .all(|c| c.is_whitespace() || BOX_DRAWING.contains(&c))
 }
+
+const BOX_DRAWING: std::ops::RangeInclusive<char> = '\u{2500}'..='\u{257f}';
 
 fn row_item(id: ItemId, depth: usize, row: &Rc<RenderedRow>) -> Item {
     Item {

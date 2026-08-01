@@ -222,3 +222,15 @@ fn rendered_log_empty_branch_falls_back() {
     ctx.update(&mut app, keys("ll"));
     insta::assert_snapshot!(ctx.redact_buffer());
 }
+
+/// A renderer that draws a rule above each commit, as delta does with
+/// `commit-decoration-style = ol`.
+const DECORATED_FORMAT: &str = "{commit}%n\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}%n\u{25b8} %h %s";
+
+#[test]
+fn rendered_log_divider_is_not_the_cursor_line() {
+    snapshot!(
+        with_log_renderer(setup(setup_clone!()), &[], DECORATED_FORMAT),
+        "llj"
+    );
+}
