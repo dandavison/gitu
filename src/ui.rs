@@ -22,29 +22,26 @@ pub(crate) type UiTree<'a> = LayoutTree<(Cow<'a, str>, Style)>;
 
 pub(crate) fn ui(frame: &mut Frame, state: &mut State) {
     let size = frame.area().as_size();
+    // The screen gets what the panels below it leave, and must know it: it
+    // scrolls to keep its cursor within the rows it is actually given.
+    let screen_size = Size::new(
+        size.width,
+        size.height.saturating_sub(panels_height(state, size)),
+    );
     let mut layout = UiTree::new();
 
     layout.vertical(None, OPTS, |layout| {
         layout.vertical(None, OPTS.grow(), |layout| {
             let hide_cursor = state.picker.is_some();
-            screen::layout_screen(layout, size, state.screens.last().unwrap(), hide_cursor);
+            screen::layout_screen(
+                layout,
+                screen_size,
+                state.screens.last().unwrap(),
+                hide_cursor,
+            );
         });
 
-        layout.vertical(None, OPTS, |layout| {
-            menu::layout_menu(layout, state, size.width as usize);
-            layout_command_log(layout, state, size.width as usize);
-            layout_prompt(layout, state, size.width as usize);
-            layout_picker(layout, state, size.width as usize);
-            if !state.pending_keys.is_empty() {
-                let keys = &state
-                    .pending_keys
-                    .iter()
-                    .map(|(_, k)| k.to_string())
-                    .collect::<String>();
-
-                layout_span(layout, (("    ".to_string() + keys).into(), Style::new()));
-            }
-        });
+        layout.vertical(None, OPTS, |layout| layout_panels(layout, state, size));
     });
 
     layout.compute([frame.area().width, frame.area().height]);
@@ -58,7 +55,37 @@ pub(crate) fn ui(frame: &mut Frame, state: &mut State) {
 
     layout.clear();
 
-    state.screens.last_mut().unwrap().size = frame.area().as_size();
+    state.screens.last_mut().unwrap().size = screen_size;
+}
+
+/// The menu, command log, prompt and picker, which sit below the screen.
+fn layout_panels<'a>(layout: &mut UiTree<'a>, state: &'a State, size: Size) {
+    menu::layout_menu(layout, state, size.width as usize);
+    layout_command_log(layout, state, size.width as usize);
+    layout_prompt(layout, state, size.width as usize);
+    layout_picker(layout, state, size.width as usize);
+    if !state.pending_keys.is_empty() {
+        let keys = &state
+            .pending_keys
+            .iter()
+            .map(|(_, k)| k.to_string())
+            .collect::<String>();
+
+        layout_span(layout, (("    ".to_string() + keys).into(), Style::new()));
+    }
+}
+
+/// How many rows the panels take, by laying them out on their own.
+fn panels_height(state: &State, size: Size) -> u16 {
+    let mut layout = UiTree::new();
+    layout.vertical(None, OPTS, |layout| layout_panels(layout, state, size));
+    layout.compute([size.width, size.height]);
+
+    layout
+        .iter()
+        .map(|item| item.pos[1] + item.size[1])
+        .max()
+        .unwrap_or(0)
 }
 
 struct SpanRef<'a>(&'a Cow<'a, str>, Style);

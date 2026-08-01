@@ -2,12 +2,12 @@
 source: src/tests/rebase.rs
 expression: ctx.redact_buffer()
 ---
-                                                                                |
- pick   ▸ 132f122 Author Name 2024-02-16 (HEAD -> main)                         |
      add third-file                                                             |
                                                                                 |
 ▌squash ▸ bc73029 Author Name 2024-02-16                                        |
 ▌    add second-file                                                            |
+                                                                                |
+ pick   ▸ f5149db Author Name 2024-02-16                                        |
 ────────────────────────────────────────────────────────────────────────────────|
  Rebase todo                    squash ▸ bc73029 Author Name 2024-02-16         |
  k/up   Up                      alt+k    Move up                                |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                 d        drop                                   |
                                 enter    Start rebase                           |
                                 tab      Fold                                   |
-styles_hash: fe6b8c9353acaad7
+styles_hash: 841c1b1fe447045e

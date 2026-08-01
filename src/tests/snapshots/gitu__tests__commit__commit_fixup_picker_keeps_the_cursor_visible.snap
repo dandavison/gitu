@@ -1,0 +1,25 @@
+---
+source: src/tests/commit.rs
+expression: ctx.redact_buffer()
+---
+ 585709b add file-6                                                             |
+ ed20882 add file-5                                                             |
+ 5eef443 add file-4                                                             |
+ 1cc7f07 add file-3                                                             |
+▌f67e3f0 add file-2                                                             |
+ ce87247 add file-1                                                             |
+ b66a0bf origin/main add initial-file                                           |
+────────────────────────────────────────────────────────────────────────────────|
+ Select commit                          f67e3f0 add file-2                      |
+ k/up           Up                      enter Select                            |
+ j/down         Down                    tab   Fold                              |
+ alt+k/alt+up   Prev section                                                    |
+ alt+j/alt+down Next section                                                    |
+ g+g            Top                                                             |
+ G              Bottom                                                          |
+ ctrl+u         Scroll half page up                                             |
+ ctrl+d         Scroll half page down                                           |
+ ctrl+y         Scroll view up                                                  |
+ ctrl+e         Scroll view down                                                |
+ q/esc          Quit/Close                                                      |
+styles_hash: fca4ee3663bfdca7
