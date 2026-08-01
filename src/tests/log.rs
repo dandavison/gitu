@@ -234,3 +234,24 @@ fn rendered_log_divider_is_not_the_cursor_line() {
         "llj"
     );
 }
+
+#[test]
+fn rendered_log_keeps_the_first_commit_when_the_renderer_greets_on_its_line() {
+    // A renderer emits its OSC-1717 handshake as its first output, which shares
+    // a line with the marker a format puts at the very start (delta does this).
+    // The newest commit must still be a commit: selectable, cursor on it.
+    let mut ctx = setup(setup_clone!());
+    ctx.config().general.log_renderer.enabled = true;
+    ctx.config().general.log_renderer.command = [
+        "sh",
+        "-c",
+        r#"printf '\033]1717;1\033\\'; git log --format="{commit}%n───%n▸ %h %s" "$@""#,
+        "gitu",
+    ]
+    .map(String::from)
+    .to_vec();
+
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("ll"));
+    insta::assert_snapshot!(ctx.redact_buffer());
+}

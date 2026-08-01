@@ -269,8 +269,8 @@ struct Performer {
     open: Option<(usize, Style)>,
     /// The OSC-1717 records seen on the current line, in emission order.
     records: Vec<LineMetadata>,
-    /// Set when the current line carries only the version-only handshake record,
-    /// so we drop that empty line rather than render it.
+    /// Set when the current line carries the version-only handshake record. Its
+    /// line is dropped, unless the renderer put content or another record on it.
     handshake_line: bool,
     protocol_version: Option<u32>,
 }
@@ -280,7 +280,8 @@ impl Performer {
         if let Some((start, style)) = self.open.take() {
             self.runs.push((start..self.text.len(), style));
         }
-        let handshake_only = mem::take(&mut self.handshake_line) && self.text.is_empty();
+        let handshake_only =
+            mem::take(&mut self.handshake_line) && self.text.is_empty() && self.records.is_empty();
         let line = ParsedLine {
             text: mem::take(&mut self.text),
             runs: mem::take(&mut self.runs),
@@ -557,6 +558,19 @@ mod tests {
     /// What `COMMIT_RECORD_FORMAT` expands to once git has run it.
     fn commit_record(oid: &str) -> String {
         format!("\x1b]1717;1;C;;;{oid}\x1b\\")
+    }
+
+    #[test]
+    fn keeps_a_handshake_line_that_also_carries_a_record() {
+        // delta emits the handshake as its first output, so a marker the log
+        // format put at the very start shares that line; the commit it
+        // identifies must survive.
+        let out = parse_ansi_lines(&format!(
+            "\x1b]1717;1\x1b\\{}\n──\n▸ abc1234 summary\n",
+            commit_record("abc1234def")
+        ));
+        assert_eq!(out.protocol_version, Some(1));
+        assert_eq!(commit_blocks(&out.lines)[0].commit, Some("abc1234def"));
     }
 
     #[test]
