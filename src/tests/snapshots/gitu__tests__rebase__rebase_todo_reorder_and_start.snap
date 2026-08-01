@@ -2,9 +2,9 @@
 source: src/tests/rebase.rs
 expression: ctx.redact_buffer()
 ---
-▌55e7c47 main add third-file                                                    |
- 04972e1 add first-file                                                         |
- 15f1667 add second-file                                                        |
+▌72b1b67 main add second-file                                                   |
+ 645b5e4 add third-file                                                         |
+ f5149db add first-file                                                         |
  b66a0bf origin/main add initial-file                                           |
                                                                                 |
                                                                                 |

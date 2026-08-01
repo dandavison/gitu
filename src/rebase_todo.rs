@@ -75,6 +75,8 @@ pub(crate) struct RebaseTodo {
     pub base: OsString,
     /// The rebase menu's arguments, replayed when the list is applied.
     pub args: Vec<OsString>,
+    /// Newest first, as the log view lists commits. git's instruction list runs
+    /// the other way, so it is reversed on the way in and out.
     pub entries: Vec<TodoEntry>,
     todo_file: PathBuf,
     workdir: PathBuf,
@@ -110,10 +112,13 @@ impl RebaseTodo {
         };
         let _ = fs::remove_file(&todo_file);
 
+        let mut entries = parse(repo, &text);
+        entries.reverse();
+
         Ok(Self {
             base: base.to_os_string(),
             args: args.to_vec(),
-            entries: parse(repo, &text),
+            entries,
             todo_file,
             workdir,
         })
@@ -143,6 +148,7 @@ impl RebaseTodo {
     fn text(&self) -> String {
         self.entries
             .iter()
+            .rev()
             .map(|entry| match entry {
                 TodoEntry::Commit { action, oid } => format!("{} {oid}\n", action.keyword()),
                 TodoEntry::Other(line) => format!("{line}\n"),
@@ -242,12 +248,14 @@ mod tests {
     }
 
     #[test]
-    fn text_is_one_instruction_per_entry() {
+    fn text_is_one_instruction_per_entry_oldest_first() {
+        // The entries are held newest first, as the log view shows them; git's
+        // list runs the other way.
         let mut todo = todo(&["aaa", "bbb"]);
         todo.set_action(1, TodoAction::Fixup);
         todo.entries.push(TodoEntry::Other("exec make test".into()));
 
-        assert_eq!(todo.text(), "pick aaa\nfixup bbb\nexec make test\n");
+        assert_eq!(todo.text(), "exec make test\nfixup bbb\npick aaa\n");
     }
 
     #[test]

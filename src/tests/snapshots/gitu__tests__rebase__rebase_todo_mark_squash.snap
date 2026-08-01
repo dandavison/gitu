@@ -2,9 +2,9 @@
 source: src/tests/rebase.rs
 expression: ctx.redact_buffer()
 ---
- pick   f5149db add first-file                                                  |
-▌squash bc73029 add second-file                                                 |
  pick   132f122 add third-file                                                  |
+▌squash bc73029 add second-file                                                 |
+ pick   f5149db add first-file                                                  |
                                                                                 |
                                                                                 |
                                                                                 |
