@@ -1,6 +1,8 @@
-use std::{ops::Range, path::PathBuf, rc::Rc};
+use std::{cell::RefCell, ops::Range, path::PathBuf, rc::Rc};
 
-use crate::{Res, error::Error, git::diff::Diff, highlight::BlameHighlights};
+use crate::{
+    Res, error::Error, git::diff::Diff, highlight::BlameHighlights, rebase_todo::RebaseTodo,
+};
 
 #[derive(Clone, Debug)]
 pub(crate) enum ItemData {
@@ -44,6 +46,12 @@ pub(crate) enum ItemData {
         stash_ref: String,
         id: usize,
     },
+    /// One entry of an interactive rebase's instruction list, as its position in
+    /// the shared list being edited.
+    RebaseTodo {
+        todo: Rc<RefCell<RebaseTodo>>,
+        index: usize,
+    },
     Header(SectionHeader),
     Error(String),
     BlameHeader {
@@ -83,10 +91,11 @@ impl ItemData {
                 | ItemData::Delta { .. }
                 | ItemData::Hunk { .. }
                 | ItemData::Header(_)
-                // A commit is a section so that sibling navigation (alt+up /
-                // alt+down) steps commit-to-commit and folding hides the extra
+                // A commit (or rebase todo entry) is a section so that sibling
+                // navigation steps commit-to-commit and folding hides the extra
                 // rows a rendered log gives it.
                 | ItemData::Commit { .. }
+                | ItemData::RebaseTodo { .. }
         )
     }
 

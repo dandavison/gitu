@@ -95,7 +95,7 @@ fn log_empty_branch() {
 /// Render the log with a command whose format prints each commit over several
 /// rows, marked with the `{commit}` token so gitu can tell the rows apart. Dates
 /// are absolute so the output doesn't drift with the wall clock.
-fn with_log_renderer(mut ctx: TestContext, args: &[&str], format: &str) -> TestContext {
+pub(super) fn with_log_renderer(mut ctx: TestContext, args: &[&str], format: &str) -> TestContext {
     let config = ctx.config();
     config.general.log_renderer.enabled = true;
     config.general.log_renderer.command = [&["git", "log", "--color=always", "--date=short"], args]
@@ -107,7 +107,8 @@ fn with_log_renderer(mut ctx: TestContext, args: &[&str], format: &str) -> TestC
     ctx
 }
 
-const MULTI_ROW_FORMAT: &str = "{commit}%n\u{25b8} %h %an %ad%C(auto)%d%C(reset)%n    %s";
+pub(super) const MULTI_ROW_FORMAT: &str =
+    "{commit}%n\u{25b8} %h %an %ad%C(auto)%d%C(reset)%n    %s";
 
 #[test]
 fn rendered_log() {
@@ -211,7 +212,7 @@ fn rendered_log_without_commit_marker_falls_back() {
 fn rendered_log_empty_branch_falls_back() {
     // The log command exits non-zero on an unborn branch; gitu falls back rather
     // than showing nothing.
-    let mut ctx = setup_clone!();
+    let ctx = setup_clone!();
     run(&ctx.dir, &["rm", "-rf", ".git"]);
     run(&ctx.dir, &["rm", "initial-file"]);
     run(&ctx.dir, &["git", "init", "--initial-branch=main"]);

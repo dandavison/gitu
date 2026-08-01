@@ -12,6 +12,7 @@ pub enum Error {
     Bindings { bad_key_bindings: Vec<String> },
     FileWatcher(notify::Error),
     ReadRebaseStatusFile(io::Error),
+    WriteRebaseTodo(io::Error),
     ReadBranchName(io::Error),
     BranchNameUtf8(Utf8Error),
     GitDiff(io::Error),
@@ -68,6 +69,9 @@ impl Display for Error {
         match self {
             Error::StashList(e) => f.write_fmt(format_args!("Couldn't list stash: {e}")),
             Error::ReadLog(e) => f.write_fmt(format_args!("Couldn't read log: {e}")),
+            Error::WriteRebaseTodo(e) => {
+                f.write_fmt(format_args!("Couldn't write the rebase todo list: {e}"))
+            }
             Error::OpenRepo(e) => match e.code() {
                 git2::ErrorCode::NotFound => f.write_str("No .git found in the current directory"),
                 _ => f.write_fmt(format_args!("Couldn't open repo: {e:?}")),

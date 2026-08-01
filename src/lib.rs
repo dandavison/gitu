@@ -16,6 +16,7 @@ mod menu;
 mod ops;
 pub mod picker;
 mod prompt;
+mod rebase_todo;
 mod screen;
 mod syntax_parser;
 pub mod term;

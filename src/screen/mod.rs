@@ -14,6 +14,7 @@ use std::sync::Arc;
 
 pub(crate) mod blame;
 pub(crate) mod log;
+pub(crate) mod rebase_todo;
 pub(crate) mod show;
 pub(crate) mod show_refs;
 pub(crate) mod show_stash;
@@ -30,6 +31,9 @@ pub(crate) enum NavMode {
 
 pub(crate) struct Screen {
     pub(crate) size: Size,
+    /// The keymap this screen imposes while it is on top, if it isn't the
+    /// ordinary one (the interactive rebase todo has its own single-key actions).
+    pub(crate) menu: Option<crate::menu::Menu>,
     cursor: usize,
     scroll: usize,
     config: Arc<Config>,
@@ -55,6 +59,7 @@ impl Screen {
 
         let mut screen = Self {
             cursor: 0,
+            menu: None,
             scroll: 0,
             size,
             config,

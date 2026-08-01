@@ -1,6 +1,6 @@
 use super::{Action, OpTrait};
 use crate::{
-    app::{App, PromptParams, State, root_menu},
+    app::{App, PromptParams, State},
     item_data::ItemData,
     menu::PendingMenu,
     screen::NavMode,
@@ -18,7 +18,7 @@ impl OpTrait for Quit {
                 .as_ref()
                 .map(|pending_menu| pending_menu.menu);
 
-            if menu == root_menu(&app.state.config) {
+            if menu == app.base_menu() {
                 if app.state.screens.len() == 1 {
                     if app.state.config.general.confirm_quit.enabled {
                         app.confirm(term, "Really quit? (y or n)")?;

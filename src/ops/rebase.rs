@@ -6,12 +6,16 @@ use crate::{
     item_data::{ItemData, Ref},
     menu::arg::Arg,
     picker::{PickerParams, PickerState},
+    rebase_todo::RebaseTodo,
+    screen,
     term::Term,
 };
 use std::{
+    cell::RefCell,
     ffi::{OsStr, OsString},
     process::Command,
     rc::Rc,
+    sync::Arc,
 };
 
 pub(crate) fn init_args() -> Vec<Arg> {
@@ -124,9 +128,9 @@ impl OpTrait for RebaseInteractive {
                 ..
             } => {
                 let rev = OsString::from(oid);
-                Rc::new(move |app: &mut App, term: &mut Term| {
+                Rc::new(move |app: &mut App, _term: &mut Term| {
                     let args = app.state.pending_menu.as_ref().unwrap().args();
-                    app.run_cmd_interactive(term, rebase_interactive_cmd(&args, &rev))
+                    open_todo_screen(app, &parent(&rev), &args)
                 })
             }
             _ => return None,
@@ -143,12 +147,23 @@ impl OpTrait for RebaseInteractive {
     }
 }
 
-fn rebase_interactive_cmd(args: &[OsString], rev: &OsStr) -> Command {
-    let mut cmd = Command::new("git");
-    cmd.args(["rebase", "-i"]);
-    cmd.args(args);
-    cmd.arg(parent(rev));
-    cmd
+/// Edit the instruction list in gitu rather than in `$EDITOR`: git is asked for
+/// the todo it would have opened, and the screen applies it when started.
+fn open_todo_screen(app: &mut App, base: &OsStr, args: &[OsString]) -> Res<()> {
+    let todo = RebaseTodo::capture(&app.state.repo, base, args)?;
+    if todo.entries.is_empty() {
+        app.display_error("Nothing to rebase");
+        return Ok(());
+    }
+
+    let size = app.screen().size;
+    app.state.screens.push(screen::rebase_todo::create(
+        Arc::clone(&app.state.config),
+        Rc::clone(&app.state.repo),
+        size,
+        Rc::new(RefCell::new(todo)),
+    )?);
+    Ok(())
 }
 
 fn parent(reference: &OsStr) -> OsString {
