@@ -378,20 +378,40 @@ impl Screen {
     }
 
     pub(crate) fn select_matching<F: Fn(&ItemData) -> bool>(&mut self, predicate: F) -> bool {
-        if let Some(line_i) = (0..self.line_index.len()).find(|&line_i| {
-            !self.at_line(line_i).unselectable && predicate(&self.at_line(line_i).data)
-        }) {
-            self.cursor = line_i;
-            let half_screen = self.size.height as usize / 2;
-            if self.cursor >= half_screen {
-                self.scroll = self.cursor - half_screen;
-            }
-            self.scroll_fit_end();
-            self.scroll_fit_start();
-            true
-        } else {
-            false
+        let Some(line_i) = self.find_matching(predicate) else {
+            return false;
+        };
+
+        self.cursor = line_i;
+        let half_screen = self.size.height as usize / 2;
+        if self.cursor >= half_screen {
+            self.scroll = self.cursor - half_screen;
         }
+        self.scroll_fit_end();
+        self.scroll_fit_start();
+        true
+    }
+
+    /// As [`Self::select_matching`], but the rows stay where they are on screen:
+    /// the view scrolls only as far as it takes to bring the cursor into it.
+    pub(crate) fn select_matching_in_view<F: Fn(&ItemData) -> bool>(
+        &mut self,
+        predicate: F,
+    ) -> bool {
+        let Some(line_i) = self.find_matching(predicate) else {
+            return false;
+        };
+
+        self.cursor = line_i;
+        self.scroll_fit_end();
+        self.scroll_fit_start();
+        true
+    }
+
+    fn find_matching<F: Fn(&ItemData) -> bool>(&self, predicate: F) -> Option<usize> {
+        (0..self.line_index.len()).find(|&line_i| {
+            !self.at_line(line_i).unselectable && predicate(&self.at_line(line_i).data)
+        })
     }
 
     pub(crate) fn select_last_matching<F: Fn(&ItemData) -> bool>(&mut self, predicate: F) -> bool {

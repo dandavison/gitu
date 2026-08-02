@@ -6,13 +6,11 @@ expression: ctx.redact_buffer()
  pick   ▸ 132f122 Author Name 2024-02-16 (HEAD -> main)                         |
      add third-file                                                             |
                                                                                 |
-▌squash ▸ bc73029 Author Name 2024-02-16                                        |
-▌    add second-file                                                            |
+ squash ▸ bc73029 Author Name 2024-02-16                                        |
+     add second-file                                                            |
                                                                                 |
- pick   ▸ f5149db Author Name 2024-02-16                                        |
-     add first-file                                                             |
-                                                                                |
-                                                                                |
+▌pick   ▸ f5149db Author Name 2024-02-16                                        |
+▌    add first-file                                                             |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +20,6 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: db1f4b1dd0c0cbf
+                                                                                |
+                                                                                |
+styles_hash: d306c0bb5f10819d

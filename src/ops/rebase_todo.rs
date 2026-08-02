@@ -44,7 +44,11 @@ impl OpTrait for SetAction {
         Some(Rc::new(move |app: &mut App, _term: &mut Term| {
             todo.borrow_mut().set_action(index, action);
             app.screen_mut().update()?;
-            select_entry(app, index);
+            // Marking works down the list, so the cursor moves on to the next
+            // entry, staying put on the last one.
+            if !select_entry(app, index + 1) {
+                select_entry(app, index);
+            }
             Ok(())
         }))
     }
@@ -92,9 +96,10 @@ impl OpTrait for Start {
     }
 }
 
-/// Put the cursor back on an entry after the list has been rebuilt.
-fn select_entry(app: &mut App, index: usize) {
-    app.screen_mut().select_matching(
+/// Put the cursor on an entry after the list has been rebuilt, leaving the rows
+/// where they are on screen.
+fn select_entry(app: &mut App, index: usize) -> bool {
+    app.screen_mut().select_matching_in_view(
         |data| matches!(data, ItemData::RebaseTodo { index: at, .. } if *at == index),
-    );
+    )
 }

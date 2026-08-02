@@ -3,8 +3,8 @@ source: src/tests/rebase.rs
 expression: ctx.redact_buffer()
 ---
  pick   132f122 add third-file                                                  |
-▌squash bc73029 add second-file                                                 |
- pick   f5149db add first-file                                                  |
+ squash bc73029 add second-file                                                 |
+▌pick   f5149db add first-file                                                  |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 230c67e4634ed095
+styles_hash: 85070052c7a99104
