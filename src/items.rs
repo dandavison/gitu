@@ -865,9 +865,11 @@ fn action_prefixed(
         return row.as_ref().clone();
     };
 
+    // `pick` is what a rebase does with a commit anyway, so only the departures
+    // from that are named — in a column, so the commits still line up.
     let styles = &config.style.rebase_todo;
     let style = Style::from(match action {
-        TodoAction::Pick => &styles.pick,
+        TodoAction::Pick => return blank_prefixed(row),
         TodoAction::Reword => &styles.reword,
         TodoAction::Edit => &styles.edit,
         TodoAction::Squash => &styles.squash,
@@ -876,6 +878,12 @@ fn action_prefixed(
     });
 
     iter::once((format!("{:<7}", action.keyword()), style))
+        .chain(row.iter().cloned())
+        .collect()
+}
+
+fn blank_prefixed(row: &Rc<RenderedRow>) -> RenderedRow {
+    iter::once((" ".repeat(7), Style::new()))
         .chain(row.iter().cloned())
         .collect()
 }

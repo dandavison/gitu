@@ -2,14 +2,14 @@
 source: src/tests/rebase.rs
 expression: ctx.redact_buffer()
 ---
-▌pick   132f122 add third-file                                                  |
- pick   bc73029 add second-file                                                 |
- pick   f5149db add first-file                                                  |
+▌       132f122 add third-file                                                  |
+        bc73029 add second-file                                                 |
+        f5149db add first-file                                                  |
                                                                                 |
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- Rebase todo                    pick   132f122 add third-file                   |
+ Rebase todo                           132f122 add third-file                   |
  h/?    Hide keys               alt+k    Move up                                |
  k/up   Up                      alt+up   Move up                                |
  j/down Down                    alt+j    Move down                              |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  q/esc  Quit/Close              d        drop                                   |
                                 enter    Start rebase                           |
                                 tab      Fold                                   |
-styles_hash: a07758573cedddf1
+styles_hash: e114b067853acd4f

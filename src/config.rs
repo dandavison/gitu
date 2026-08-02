@@ -149,8 +149,6 @@ pub struct StyleConfig {
 #[derive(Default, Debug, Deserialize)]
 pub struct RebaseTodoStyleConfig {
     #[serde(default)]
-    pub pick: StyleConfigEntry,
-    #[serde(default)]
     pub reword: StyleConfigEntry,
     #[serde(default)]
     pub edit: StyleConfigEntry,

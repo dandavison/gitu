@@ -138,8 +138,8 @@ selection_area = {}
 
 hash = { fg = "yellow" }
 
-# What the interactive rebase will do with each commit.
-rebase_todo.pick = { fg = "green", mods = "BOLD" }
+# What the interactive rebase will do with each commit, where that isn't just
+# picking it.
 rebase_todo.reword = { fg = "blue", mods = "BOLD" }
 rebase_todo.edit = { fg = "magenta", mods = "BOLD" }
 rebase_todo.squash = { fg = "cyan", mods = "BOLD" }
