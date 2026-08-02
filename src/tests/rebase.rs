@@ -212,7 +212,9 @@ fn sequence_editor_writes_the_edited_list() {
 }
 
 #[test]
-fn sequence_editor_leaving_calls_the_rebase_off() {
+fn sequence_editor_leaving_hands_git_back_its_list() {
+    // One `q`, and git carries on with the list it wrote: nothing gitu did is
+    // handed back, and git isn't told anything went wrong.
     let mut ctx = setup_todo(setup_clone!());
     let todo = write_todo(&ctx, "HEAD~3..HEAD");
     let before = fs::read_to_string(&todo).unwrap();
@@ -222,7 +224,21 @@ fn sequence_editor_leaving_calls_the_rebase_off() {
 
     assert_eq!(fs::read_to_string(&todo).unwrap(), before, "list untouched");
     assert!(app.state.quit);
-    assert_eq!(app.state.exit_code, 1, "non-zero tells git to abort");
+    assert_eq!(app.state.exit_code, 0, "git has nothing to complain about");
+}
+
+#[test]
+fn sequence_editor_abort_calls_the_rebase_off() {
+    let mut ctx = setup_todo(setup_clone!());
+    let todo = write_todo(&ctx, "HEAD~3..HEAD");
+    let before = fs::read_to_string(&todo).unwrap();
+
+    let mut app = ctx.init_app_with_args(ctx.dir.clone(), sequence_editor_args(&todo));
+    ctx.update(&mut app, keys("Q"));
+
+    assert_eq!(fs::read_to_string(&todo).unwrap(), before, "list untouched");
+    assert!(app.state.quit);
+    assert_eq!(app.state.exit_code, 1, "non-zero tells git to stop");
 }
 
 #[test]

@@ -75,7 +75,6 @@ impl OpTrait for Start {
             let Some(cmd) = todo.borrow().start()? else {
                 // Editing git's own list: it is written, and git takes it from
                 // here as soon as we exit.
-                app.state.exit_code = 0;
                 app.state.quit = true;
                 return Ok(());
             };
@@ -93,6 +92,35 @@ impl OpTrait for Start {
 
     fn display(&self, _state: &State) -> String {
         "Start rebase".into()
+    }
+}
+
+/// Call off a rebase git has already started. git only takes "no" from a
+/// sequence editor that fails, so this exits non-zero and git says as much;
+/// leaving instead lets git carry on with the list it wrote.
+pub(crate) struct Abort;
+impl OpTrait for Abort {
+    fn get_action(&self, target: &ItemData) -> Option<Action> {
+        let ItemData::RebaseTodo { todo, .. } = target else {
+            return None;
+        };
+        if !todo.borrow().is_editing() {
+            return None;
+        }
+
+        Some(Rc::new(move |app: &mut App, _term: &mut Term| {
+            app.state.exit_code = 1;
+            app.state.quit = true;
+            Ok(())
+        }))
+    }
+
+    fn is_target_op(&self) -> bool {
+        true
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Call off the rebase".into()
     }
 }
 

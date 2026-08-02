@@ -300,6 +300,9 @@ rebase_todo.rebase_todo_drop = ["d"]
 rebase_todo.rebase_todo_move_up = ["alt+k", "alt+up"]
 rebase_todo.rebase_todo_move_down = ["alt+j", "alt+down"]
 rebase_todo.rebase_todo_start = ["enter"]
+# Only when git is waiting on gitu as its sequence editor: leaving (`quit`)
+# lets git carry on with the list it wrote, this stops the rebase instead.
+rebase_todo.rebase_todo_abort = ["Q"]
 rebase_todo.move_up = ["k", "up"]
 rebase_todo.move_down = ["j", "down"]
 rebase_todo.move_top = ["g+g"]

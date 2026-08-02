@@ -203,6 +203,11 @@ impl RebaseTodo {
         cmd
     }
 
+    /// Whether git is mid-rebase, waiting on the file it gave us to edit.
+    pub(crate) fn is_editing(&self) -> bool {
+        matches!(self.source, Source::Editing(_))
+    }
+
     /// Remove the list we handed git, once the rebase has read it.
     pub(crate) fn discard_file(&self) {
         if let Source::Captured { todo_file, .. } = &self.source {

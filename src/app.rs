@@ -50,8 +50,8 @@ pub(crate) struct State {
     pub config: Arc<Config>,
     pub pending_keys: Vec<(KeyModifiers, KeyCode)>,
     pub quit: bool,
-    /// What gitu exits with. Non-zero when it is a `git rebase -i` sequence
-    /// editor and the list was abandoned, which tells git to call the rebase off.
+    /// What gitu exits with. Non-zero only to tell git, which is waiting on
+    /// gitu as its sequence editor, to call the rebase off.
     pub exit_code: i32,
     pub screens: Vec<Screen>,
     pub pending_menu: Option<PendingMenu>,
@@ -115,15 +115,6 @@ impl App {
             )?],
         };
 
-        // As a sequence editor, exiting without handing a list back calls the
-        // rebase off; starting it sets this to zero.
-        let exit_code = match args.command {
-            Some(cli::Commands::SequenceEditor { .. }) => 1,
-            _ => 0,
-        };
-
-        let pending_menu = root_menu(&config).map(PendingMenu::init);
-
         let clipboard = Clipboard::new()
             .inspect_err(|e| log::warn!("Couldn't initialize clipboard: {e}"))
             .ok();
@@ -135,10 +126,10 @@ impl App {
                 pending_keys: vec![],
                 enable_async_cmds,
                 quit: false,
-                exit_code,
+                exit_code: 0,
                 screens,
                 pending_cmd: None,
-                pending_menu,
+                pending_menu: None,
                 current_cmd_log: CmdLog::new(),
                 prompt: prompt::Prompt::new(),
                 picker: None,
@@ -150,6 +141,9 @@ impl App {
             },
         };
 
+        // The menu a screen imposes is in force from the first key on, not from
+        // the first key that closes a menu.
+        app.close_menu();
         app.state.file_watcher = app.init_file_watcher()?;
         Ok(app)
     }
