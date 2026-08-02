@@ -265,3 +265,9 @@ fn rebase_interactive_asks_which_commit() {
 fn rebase_interactive_from_the_picked_commit() {
     snapshot!(setup_todo(setup_clone!()), "rij<enter>");
 }
+
+#[test]
+fn rebase_interactive_quit_runs_nothing() {
+    // Picked a commit, marked one to drop, then left: the log is as it was.
+    snapshot!(setup_todo(setup_clone!()), "rij<enter>jdqll");
+}
