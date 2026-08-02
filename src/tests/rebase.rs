@@ -66,6 +66,69 @@ fn rebase_todo_mark_squash() {
 }
 
 #[test]
+fn rebase_todo_mark_moves_on_to_the_next_entry() {
+    let mut ctx = setup_todo(setup_clone!());
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys(OPEN_TODO));
+    assert!(cursor_row(&ctx).contains("add third-file"));
+
+    // Marking works down the list, so the cursor follows onto the next entry.
+    ctx.update(&mut app, keys("s"));
+    assert!(
+        cursor_row(&ctx).contains("add second-file"),
+        "{}",
+        ctx.redact_buffer()
+    );
+}
+
+#[test]
+fn rebase_todo_mark_stays_on_the_last_entry() {
+    let mut ctx = setup_todo(setup_clone!());
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys(&format!("{OPEN_TODO}jjs")));
+
+    assert!(
+        cursor_row(&ctx).starts_with("▌squash"),
+        "{}",
+        ctx.redact_buffer()
+    );
+    assert!(
+        cursor_row(&ctx).contains("add first-file"),
+        "{}",
+        ctx.redact_buffer()
+    );
+}
+
+#[test]
+fn rebase_todo_mark_leaves_the_view_where_it_is() {
+    let mut ctx = setup_clone!();
+    for i in 0..30 {
+        commit(&ctx.dir, &format!("file-{i}"), "");
+    }
+    let todo = write_todo(&ctx, "HEAD~30..HEAD");
+
+    let mut app = ctx.init_app_with_args(ctx.dir.clone(), sequence_editor_args(&todo));
+    ctx.update(&mut app, keys("jjjjjjjjjjjjjjj"));
+    let top = top_row(&ctx);
+
+    ctx.update(&mut app, keys("s"));
+    assert_eq!(top_row(&ctx), top, "the list stayed put");
+}
+
+/// The row the cursor sits on, as drawn.
+fn cursor_row(ctx: &TestContext) -> String {
+    ctx.redact_buffer()
+        .lines()
+        .find(|row| row.starts_with('▌'))
+        .expect("a cursor row")
+        .to_string()
+}
+
+fn top_row(ctx: &TestContext) -> String {
+    ctx.redact_buffer().lines().next().unwrap().to_string()
+}
+
+#[test]
 fn rebase_todo_quit_runs_nothing() {
     snapshot!(setup_todo(setup_clone!()), &format!("{OPEN_TODO}jdq"));
 }
