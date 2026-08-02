@@ -10,7 +10,6 @@ use crate::item_data::SectionHeader;
 use crate::rebase_todo::{RebaseTodo, TodoAction, TodoEntry};
 use git2::Oid;
 use git2::Repository;
-use ratatui::style::Modifier;
 use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::text::Span;
@@ -866,10 +865,15 @@ fn action_prefixed(
         return row.as_ref().clone();
     };
 
-    let mut style = Style::from(&config.style.rebase_todo_action);
-    if action == TodoAction::Drop {
-        style = style.add_modifier(Modifier::CROSSED_OUT);
-    }
+    let styles = &config.style.rebase_todo;
+    let style = Style::from(match action {
+        TodoAction::Pick => &styles.pick,
+        TodoAction::Reword => &styles.reword,
+        TodoAction::Edit => &styles.edit,
+        TodoAction::Squash => &styles.squash,
+        TodoAction::Fixup => &styles.fixup,
+        TodoAction::Drop => &styles.drop,
+    });
 
     iter::once((format!("{:<7}", action.keyword()), style))
         .chain(row.iter().cloned())

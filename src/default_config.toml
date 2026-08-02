@@ -137,7 +137,15 @@ selection_line = { mods = "BOLD" }
 selection_area = {}
 
 hash = { fg = "yellow" }
-rebase_todo_action = { fg = "cyan" }
+
+# What the interactive rebase will do with each commit.
+rebase_todo.pick = { fg = "green", mods = "BOLD" }
+rebase_todo.reword = { fg = "blue", mods = "BOLD" }
+rebase_todo.edit = { fg = "magenta", mods = "BOLD" }
+rebase_todo.squash = { fg = "cyan", mods = "BOLD" }
+rebase_todo.fixup = { fg = "yellow", mods = "BOLD" }
+rebase_todo.drop = { fg = "red", mods = "BOLD" }
+
 branch = { fg = "green" }
 remote = { fg = "red" }
 tag = { fg = "yellow" }

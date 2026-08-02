@@ -135,15 +135,31 @@ pub struct StyleConfig {
     pub selection_area: StyleConfigEntry,
 
     pub hash: StyleConfigEntry,
-    /// The `pick`/`squash`/… keyword in the interactive rebase todo view.
+    /// The instruction keywords in the interactive rebase todo view.
     #[serde(default)]
-    pub rebase_todo_action: StyleConfigEntry,
+    pub rebase_todo: RebaseTodoStyleConfig,
     pub branch: StyleConfigEntry,
     pub remote: StyleConfigEntry,
     pub tag: StyleConfigEntry,
 
     #[serde(default)]
     pub blame: BlameStyleConfig,
+}
+
+#[derive(Default, Debug, Deserialize)]
+pub struct RebaseTodoStyleConfig {
+    #[serde(default)]
+    pub pick: StyleConfigEntry,
+    #[serde(default)]
+    pub reword: StyleConfigEntry,
+    #[serde(default)]
+    pub edit: StyleConfigEntry,
+    #[serde(default)]
+    pub squash: StyleConfigEntry,
+    #[serde(default)]
+    pub fixup: StyleConfigEntry,
+    #[serde(default)]
+    pub drop: StyleConfigEntry,
 }
 
 #[derive(Default, Debug, Deserialize)]

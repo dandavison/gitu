@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  q/esc  Quit/Close              d        drop                                   |
                                 enter    Start rebase                           |
                                 tab      Fold                                   |
-styles_hash: 73976b36efa9776d
+styles_hash: a07758573cedddf1
