@@ -63,6 +63,53 @@ fn stage_deleted_file() {
     snapshot!(ctx, "jjs");
 }
 
+/// Extending the selection over several lines stages all of them, as one patch.
+#[test]
+fn stage_selected_lines() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
+
+    let mut app = ctx.init_app();
+    ctx.update(
+        &mut app,
+        keys("jj<tab><ctrl+j><ctrl+j><ctrl+j><ctrl+j><shift+down>s"),
+    );
+
+    assert_eq!(
+        run(&ctx.dir, &["git", "show", ":firstfile"]),
+        "testing\ntesttest\nweehooo\nblrergh\n"
+    );
+}
+
+/// The lines the selection covers are marked, so it is plain what `s` will take.
+#[test]
+fn selected_lines_are_marked() {
+    let ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
+    snapshot!(ctx, "jj<tab><ctrl+j><ctrl+j><ctrl+j><ctrl+j><shift+down>");
+}
+
+/// Moving away without shift drops the selection, leaving just the cursor line.
+#[test]
+fn moving_on_drops_the_selection() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
+
+    let mut app = ctx.init_app();
+    ctx.update(
+        &mut app,
+        keys("jj<tab><ctrl+j><ctrl+j><ctrl+j><shift+down><ctrl+j>s"),
+    );
+
+    assert_eq!(
+        run(&ctx.dir, &["git", "show", ":firstfile"]),
+        "testing\ntesttest\nblrergh\n"
+    );
+}
+
 #[test]
 #[cfg(not(target_os = "windows"))]
 fn stage_deleted_executable_file() {
@@ -74,3 +121,4 @@ fn stage_deleted_executable_file() {
     run(&ctx.dir, &["rm", "script.sh"]);
     snapshot!(ctx, "jjs");
 }
+
