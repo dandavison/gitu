@@ -110,6 +110,54 @@ fn moving_on_drops_the_selection() {
     );
 }
 
+/// Taking the removed line and the added one together stages a changed line
+/// whole, which is what staging one line usually means.
+#[test]
+fn stage_a_changed_line() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", &numbered_lines());
+    fs::write(ctx.dir.join("firstfile"), changed_lines()).unwrap();
+
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("jj<tab><ctrl+j><ctrl+j><shift+down>s"));
+
+    assert_eq!(
+        run(&ctx.dir, &["git", "show", ":firstfile"]),
+        numbered_lines().replace("line 2\n", "changed 2\n")
+    );
+}
+
+/// A patch reaches no further than a hunk, so neither does the selection: it
+/// leaves the change further down the file alone however far it is reached out.
+#[test]
+fn selection_stops_at_the_end_of_the_hunk() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", &numbered_lines());
+    fs::write(ctx.dir.join("firstfile"), changed_lines()).unwrap();
+
+    let mut app = ctx.init_app();
+    ctx.update(
+        &mut app,
+        keys("jj<tab><ctrl+j><ctrl+j><shift+down><shift+down><shift+down><shift+down>s"),
+    );
+
+    assert_eq!(
+        run(&ctx.dir, &["git", "show", ":firstfile"]),
+        numbered_lines().replace("line 2\n", "changed 2\n")
+    );
+}
+
+/// Twenty lines, so that changing the second and the eighteenth gives two hunks.
+fn numbered_lines() -> String {
+    (1..=20).map(|i| format!("line {i}\n")).collect()
+}
+
+fn changed_lines() -> String {
+    numbered_lines()
+        .replace("line 2\n", "changed 2\n")
+        .replace("line 18\n", "changed 18\n")
+}
+
 #[test]
 #[cfg(not(target_os = "windows"))]
 fn stage_deleted_executable_file() {
@@ -121,4 +169,3 @@ fn stage_deleted_executable_file() {
     run(&ctx.dir, &["rm", "script.sh"]);
     snapshot!(ctx, "jjs");
 }
-

@@ -2,8 +2,6 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
-▌main                                                                           |
-                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
  Help                                     Submenu           main                |
  Y                Show Refs               b   Branch        tab Fold            |
@@ -11,15 +9,17 @@ expression: ctx.redact_buffer()
  j/down           Down                    f   Fetch                             |
  ctrl+k/ctrl+up   Up line                 h/? Help                              |
  ctrl+j/ctrl+down Down line               l   Log                               |
- alt+k/alt+up     Prev section            m   Merge                             |
- alt+j/alt+down   Next section            M   Remote                            |
- alt+h/alt+left   Parent section          F   Pull                              |
- g+g              Top                     P   Push                              |
- G                Bottom                  r   Rebase                            |
- ctrl+u           Scroll half page up     X   Reset                             |
- ctrl+d           Scroll half page down   V   Revert                            |
- ctrl+y           Scroll view up          A   Cherry-pick                       |
- ctrl+e           Scroll view down        z   Stash                             |
+ shift+up         Select up               m   Merge                             |
+ shift+down       Select down             M   Remote                            |
+ alt+k/alt+up     Prev section            F   Pull                              |
+ alt+j/alt+down   Next section            P   Push                              |
+ alt+h/alt+left   Parent section          r   Rebase                            |
+ g+g              Top                     X   Reset                             |
+ G                Bottom                  V   Revert                            |
+ ctrl+u           Scroll half page up     A   Cherry-pick                       |
+ ctrl+d           Scroll half page down   z   Stash                             |
+ ctrl+y           Scroll view up                                                |
+ ctrl+e           Scroll view down                                              |
  g+r              Refresh                                                       |
  q/esc            Quit/Close                                                    |
-styles_hash: 62aa59e1b4bce330
+styles_hash: 18671dc90aa2b13b

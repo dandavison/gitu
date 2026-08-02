@@ -255,6 +255,27 @@ impl OpTrait for MoveUpLine {
     }
 }
 
+/// Reach the selection out over another line, towards the end of the hunk or
+/// back towards its start.
+pub(crate) struct ExtendSelection(pub bool);
+impl OpTrait for ExtendSelection {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        let forwards = self.0;
+        Some(Rc::new(move |app: &mut App, _term: &mut Term| {
+            app.screen_mut().extend_selection(forwards);
+            Ok(())
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        if self.0 {
+            "Select down".into()
+        } else {
+            "Select up".into()
+        }
+    }
+}
+
 pub(crate) struct MoveToScreenLine(pub usize);
 impl OpTrait for MoveToScreenLine {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {

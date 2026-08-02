@@ -161,6 +161,11 @@ root.move_up = ["k", "up"]
 root.move_down = ["j", "down"]
 root.move_up_line = ["ctrl+k", "ctrl+up"]
 root.move_down_line = ["ctrl+j", "ctrl+down"]
+# Reach the selection over a run of diff lines, to stage / unstage / discard /
+# reverse them together. It stays within one hunk, which is as far as a single
+# patch reaches. Any other movement drops the selection.
+root.extend_selection_up = ["shift+up"]
+root.extend_selection_down = ["shift+down"]
 root.move_prev_section = ["alt+k", "alt+up"]
 root.move_next_section = ["alt+j", "alt+down"]
 root.move_parent_section = ["alt+h", "alt+left"]

@@ -1,0 +1,25 @@
+---
+source: src/tests/stage.rs
+expression: ctx.redact_buffer()
+---
+ main                                                                           |
+                                                                                |
+ Unstaged changes (1)                                                           |
+ modified   firstfile                                                           |
+ @@ -1,2 +1,2 @@                                                                |
+ -testing                                                                       |
+ -testtest                                                                      |
+▌+weehooo                                                                       |
+▌+blrergh                                                                       |
+                                                                                |
+ Recent commits                                                                 |
+ 223428c main add firstfile                                                     |
+ b66a0bf origin/main add initial-file                                           |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: 7cfd117d15667ba0

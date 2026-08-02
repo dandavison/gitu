@@ -10,6 +10,8 @@ use crate::{Res, config::Config, items::hash};
 use super::Item;
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::ops::RangeInclusive;
+use std::rc::Rc;
 use std::sync::Arc;
 
 pub(crate) mod blame;
@@ -38,6 +40,9 @@ pub(crate) struct Screen {
     /// screen does, so it starts out of the way.
     pub(crate) show_menu: bool,
     cursor: usize,
+    /// Where a multi-line selection was started, if one is being made. The
+    /// selection runs from here to the cursor, inclusive.
+    anchor: Option<usize>,
     scroll: usize,
     config: Arc<Config>,
     refresh_items: Box<dyn Fn(Size) -> Res<Vec<Item>>>,
@@ -62,6 +67,7 @@ impl Screen {
 
         let mut screen = Self {
             cursor: 0,
+            anchor: None,
             menu: None,
             show_menu: false,
             scroll: 0,
@@ -109,6 +115,11 @@ impl Screen {
     }
 
     pub(crate) fn select_next(&mut self, nav_mode: NavMode) {
+        self.anchor = None;
+        self.move_next(nav_mode);
+    }
+
+    fn move_next(&mut self, nav_mode: NavMode) {
         self.cursor = self.find_next(nav_mode);
         self.scroll_fit_end();
         self.scroll_fit_start();
@@ -169,8 +180,82 @@ impl Screen {
     }
 
     pub(crate) fn select_previous(&mut self, nav_mode: NavMode) {
+        self.anchor = None;
+        self.move_previous(nav_mode);
+    }
+
+    fn move_previous(&mut self, nav_mode: NavMode) {
         self.cursor = self.find_previous(nav_mode);
         self.scroll_fit_start();
+    }
+
+    /// Grow (or shrink) the selection by one line, so that a run of lines can be
+    /// staged, discarded or reversed as one patch. It stays inside a single hunk,
+    /// which is as far as one patch reaches.
+    pub(crate) fn extend_selection(&mut self, forwards: bool) {
+        let anchor = self.anchor.unwrap_or(self.cursor);
+        let next = if forwards {
+            self.find_next(NavMode::IncludeSubLines)
+        } else {
+            self.find_previous(NavMode::IncludeSubLines)
+        };
+
+        if !same_hunk(&self.at_line(anchor).data, &self.at_line(next).data) {
+            return;
+        }
+
+        self.anchor = Some(anchor);
+        self.cursor = next;
+        self.scroll_fit_end();
+        self.scroll_fit_start();
+    }
+
+    /// The lines the selection spans; just the cursor's line when none is being
+    /// made.
+    fn selection(&self) -> RangeInclusive<usize> {
+        let anchor = self.anchor.unwrap_or(self.cursor);
+        anchor.min(self.cursor)..=anchor.max(self.cursor)
+    }
+
+    /// What an op acts on. A multi-line selection reads as the line under the
+    /// cursor widened to cover every line selected, so that ops staging a
+    /// `HunkLine` take them all in a single patch without knowing about
+    /// selections.
+    pub(crate) fn selected_target(&self) -> ItemData {
+        let ItemData::HunkLine {
+            diff,
+            file_i,
+            hunk_i,
+            line_i,
+            line_range,
+            ..
+        } = &self.get_selected_item().data
+        else {
+            return self.get_selected_item().data.clone();
+        };
+
+        // Context lines within the selection contribute nothing: a patch leaves
+        // them be whether or not they are named.
+        let mut line_indices = self
+            .selection()
+            .filter_map(|line| match &self.at_line(line).data {
+                ItemData::HunkLine { line_indices, .. } => Some(line_indices),
+                _ => None,
+            })
+            .flatten()
+            .copied()
+            .collect::<Vec<_>>();
+        line_indices.sort_unstable();
+        line_indices.dedup();
+
+        ItemData::HunkLine {
+            diff: Rc::clone(diff),
+            file_i: *file_i,
+            hunk_i: *hunk_i,
+            line_i: *line_i,
+            line_range: line_range.clone(),
+            line_indices,
+        }
     }
 
     fn find_previous(&mut self, nav_mode: NavMode) -> usize {
@@ -201,6 +286,7 @@ impl Screen {
     }
 
     pub(crate) fn toggle_section(&mut self) {
+        self.anchor = None;
         let selected = &self.items[self.line_index[self.cursor]];
 
         if selected.data.is_section() {
@@ -216,6 +302,9 @@ impl Screen {
 
     pub(crate) fn update(&mut self) -> Res<()> {
         let nav_mode = self.selected_item_nav_mode();
+        // The rebuilt items are a different diff; the lines that were selected
+        // are no longer the same lines.
+        self.anchor = None;
         self.items = (self.refresh_items)(self.size)?;
         self.update_line_index();
         self.update_cursor(nav_mode);
@@ -313,10 +402,10 @@ impl Screen {
 
     fn move_from_unselectable(&mut self, nav_mode: NavMode) {
         if !self.nav_filter(self.cursor, nav_mode) {
-            self.select_previous(nav_mode);
+            self.move_previous(nav_mode);
         }
         if !self.nav_filter(self.cursor, nav_mode) {
-            self.select_next(nav_mode);
+            self.move_next(nav_mode);
         }
     }
 
@@ -331,6 +420,7 @@ impl Screen {
         }
 
         let old_cursor = self.cursor;
+        self.anchor = None;
         self.cursor = new_cursor;
 
         let nav_mode = self.selected_item_nav_mode();
@@ -350,6 +440,7 @@ impl Screen {
             return;
         }
         if let Some(first) = self.find_first_selectable() {
+            self.anchor = None;
             self.cursor = first;
             self.scroll = 0;
         }
@@ -360,6 +451,7 @@ impl Screen {
             return;
         }
         if let Some(last) = self.find_last_selectable() {
+            self.anchor = None;
             self.cursor = last;
             self.scroll_fit_end();
         }
@@ -440,29 +532,52 @@ impl Screen {
     }
 
     fn line_views(&'_ self, area: Size) -> impl Iterator<Item = LineView<'_>> {
-        let scan_start = self.scroll.min(self.cursor);
+        let selection = self.selection();
+        let scan_start = self.scroll.min(*selection.start());
         let scan_end = (self.scroll + area.height as usize).min(self.line_index.len());
-        let scan_highlight_range = scan_start..(scan_end);
         let context_lines = self.scroll - scan_start;
 
-        self.line_index[scan_highlight_range]
-            .iter()
-            .scan(None, |highlight_depth, item_index| {
-                let item = &self.items[*item_index];
-                if self.line_index[self.cursor] == *item_index {
+        (scan_start..scan_end)
+            .scan(None, move |highlight_depth, line_i| {
+                let item_index = self.line_index[line_i];
+                let item = &self.items[item_index];
+                let selected = selection.contains(&line_i);
+                if selected {
                     *highlight_depth = Some(item.depth);
                 } else if highlight_depth.is_some_and(|s| s >= item.depth) {
                     *highlight_depth = None;
                 };
-                let display = item.to_line(Arc::clone(&self.config));
 
                 Some(LineView {
-                    item_index: *item_index,
-                    display,
+                    item_index,
+                    display: item.to_line(Arc::clone(&self.config)),
                     highlighted: highlight_depth.is_some(),
+                    selected,
                 })
             })
             .skip(context_lines)
+    }
+}
+
+/// Whether two rows are content lines of one hunk, and so can be selected
+/// together: a patch reaches no further than that.
+fn same_hunk(a: &ItemData, b: &ItemData) -> bool {
+    match (a, b) {
+        (
+            ItemData::HunkLine {
+                diff,
+                file_i,
+                hunk_i,
+                ..
+            },
+            ItemData::HunkLine {
+                diff: b_diff,
+                file_i: b_file_i,
+                hunk_i: b_hunk_i,
+                ..
+            },
+        ) => Rc::ptr_eq(diff, b_diff) && file_i == b_file_i && hunk_i == b_hunk_i,
+        _ => false,
     }
 }
 
@@ -470,6 +585,8 @@ struct LineView<'a> {
     item_index: usize,
     display: Line<'a>,
     highlighted: bool,
+    /// Drawn as the cursor line is: the selection may span several of these.
+    selected: bool,
 }
 
 const SPACES: &str = "                                                                ";
@@ -485,7 +602,7 @@ pub(crate) fn layout_screen<'a>(
     layout.vertical(None, OPTS, |layout| {
         for line in screen.line_views(size) {
             layout.horizontal(None, OPTS, |layout| {
-                let is_line_sel = screen.line_index[screen.cursor] == line.item_index;
+                let is_line_sel = line.selected;
                 let area_sel = area_selection_highlight(style, &line);
                 let line_sel = line_selection_highlight(style, &line, is_line_sel);
                 let bg = area_sel.patch(line_sel);

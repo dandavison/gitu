@@ -255,8 +255,11 @@ impl App {
                 }
 
                 // The character received in the KeyEvent changes as shift is pressed,
-                // e.g. '/' becomes '?' on a US keyboard. So just ignore SHIFT.
-                key.modifiers = key.modifiers.difference(KeyModifiers::SHIFT);
+                // e.g. '/' becomes '?' on a US keyboard, so the modifier is redundant
+                // there. On the other keys it is the only sign shift was held.
+                if matches!(key.code, KeyCode::Char(_)) {
+                    key.modifiers = key.modifiers.difference(KeyModifiers::SHIFT);
+                }
 
                 if self.state.picker.is_some() {
                     self.handle_picker_input(key);
@@ -369,11 +372,10 @@ impl App {
     }
 
     pub(crate) fn handle_op(&mut self, op: Op, term: &mut Term) -> Res<()> {
-        let screen_ref = self.screen();
-        let item_data = &screen_ref.get_selected_item().data;
+        let item_data = self.screen().selected_target();
         let implementation = op.clone().implementation();
 
-        if let Some(mut action) = implementation.get_action(item_data) {
+        if let Some(mut action) = implementation.get_action(&item_data) {
             let result = Rc::get_mut(&mut action).unwrap()(self, term);
             self.handle_result(result)?;
             if !self.state.inhibit_close_menu {
