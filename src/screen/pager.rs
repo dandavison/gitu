@@ -41,6 +41,10 @@ enum Source {
     /// A patch recognised as one git can be asked for again: staging a hunk
     /// from it changes what it shows, as it does on the status screen.
     Live(fn(&Repository) -> Res<Diff>),
+    /// Rows a renderer marked with the commit each belongs to. gitu did not run
+    /// the log command, but the records say where each commit begins, which is
+    /// all the log view ever needed.
+    Log(String),
     /// Anything else — a commit, two revs, another repo's patch, output that is
     /// no patch at all. There is nothing to ask again, so it stays as it came.
     Fixed { patch: String, diff: Rc<Diff> },
@@ -52,6 +56,10 @@ impl Source {
     /// against it. Recognising the patch is what makes it a live view, and it
     /// is also what decides which ops it admits (see [`DiffType`]).
     fn of(repo: &Repository, patch: String) -> Res<Self> {
+        if items::is_rendered_log(&patch) {
+            return Ok(Source::Log(patch));
+        }
+
         let text = crate::diff_colorizer::strip_ansi(&patch);
 
         for ask_git in [
@@ -79,6 +87,8 @@ impl Source {
     fn items(&self, config: &Config, repo: &Repository, params: &RenderParams) -> Res<Vec<Item>> {
         match self {
             Source::Live(ask_git) => Ok(diff_items(config, params, &Rc::new(ask_git(repo)?))),
+            Source::Log(rendered) => Ok(items::rendered_log_items(repo, rendered)
+                .expect("rows carried commit records when the source was chosen")),
             // Nothing parsed as a patch, so there is nothing to fold or stage:
             // show what arrived, as it arrived.
             Source::Fixed { patch, diff } if diff.file_diffs.is_empty() => {

@@ -763,13 +763,30 @@ pub(crate) fn rendered_log(
     args.push(rev.map_or_else(|| "HEAD".to_string(), |oid| oid.to_string()));
 
     let blocks = rendered_commits(config, repo, params, &args)?;
-    let references = commit_refs(repo).ok()?;
-    Some(
-        blocks
-            .iter()
-            .flat_map(|block| commit_block_items(repo, &references, block))
-            .collect(),
-    )
+    Some(log_items(repo, &blocks))
+}
+
+/// Log items from rendered rows that gitu did not run the command for: as git's
+/// pager it is handed the renderer's output, and the commit records in it say
+/// where each commit begins just as well.
+pub(crate) fn rendered_log_items(repo: &Repository, rendered: &str) -> Option<Vec<Item>> {
+    Some(log_items(repo, &commits_in(rendered)?))
+}
+
+/// Whether rendered rows say which commit each belongs to, which is what makes
+/// them a log rather than text.
+pub(crate) fn is_rendered_log(rendered: &str) -> bool {
+    commits_in(rendered).is_some()
+}
+
+/// Refs a commit carries only decorate it, so failing to list them costs the
+/// decorations rather than the log.
+fn log_items(repo: &Repository, blocks: &[RenderedCommit]) -> Vec<Item> {
+    let references = commit_refs(repo).unwrap_or_default();
+    blocks
+        .iter()
+        .flat_map(|block| commit_block_items(repo, &references, block))
+        .collect()
 }
 
 /// A run of rendered log rows belonging to one commit.
@@ -798,13 +815,22 @@ fn rendered_commits(
 
     let dir = repo.workdir().unwrap_or_else(|| repo.path());
     let output = crate::diff_colorizer::run(&command, None, params, Some(dir))?;
-    let parsed = crate::diff_colorizer::parse_ansi_lines(&output);
-    let blocks = crate::diff_colorizer::commit_blocks(&parsed.lines);
-
-    if blocks.iter().all(|block| block.commit.is_none()) {
+    commits_in(&output).or_else(|| {
         log::warn!(
             "log command emitted no commit records; is the '{{commit}}' token in its format?"
         );
+        None
+    })
+}
+
+/// Group rendered rows per commit, as the commit records in them say. `None`
+/// when there are no such records, which is how "these rows are not a log" is
+/// said.
+fn commits_in(rendered: &str) -> Option<Vec<RenderedCommit>> {
+    let parsed = crate::diff_colorizer::parse_ansi_lines(rendered);
+    let blocks = crate::diff_colorizer::commit_blocks(&parsed.lines);
+
+    if blocks.iter().all(|block| block.commit.is_none()) {
         return None;
     }
 
