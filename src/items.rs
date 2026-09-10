@@ -1072,6 +1072,31 @@ mod tests {
         );
     }
 
+    /// The handshake says a renderer speaks the protocol, not that it said
+    /// anything with it. One that greets and then annotates no row at all would
+    /// leave a diff of headers with no content, which is worse than the built-in
+    /// rendering it displaced — so the built-in rendering stands.
+    #[test]
+    fn a_render_carrying_no_content_records_falls_back_to_the_built_in_one() {
+        let diff = diff_from(DIFF);
+        let mut config = crate::config::init_test_config().unwrap();
+        config.general.diff_colorizer.enabled = true;
+        config.general.diff_colorizer.command = ["sh", "-c", r"printf '\033]1717;1\033\\\n'"]
+            .map(String::from)
+            .to_vec();
+
+        let items = create_diff_items(&config, &Default::default(), &diff, 0, false, None);
+
+        assert_eq!(
+            items
+                .iter()
+                .filter(|item| matches!(item.data, ItemData::HunkLine { .. }))
+                .count(),
+            2,
+            "both content lines of the diff are still there"
+        );
+    }
+
     /// However many rows a line wraps to, they are still one line: each is a
     /// continuation of the line, not of the row above it.
     #[test]
