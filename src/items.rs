@@ -10,6 +10,7 @@ use crate::item_data::SectionHeader;
 use crate::rebase_todo::{RebaseTodo, TodoAction, TodoEntry};
 use git2::Oid;
 use git2::Repository;
+use ratatui::layout::Size;
 use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::text::Span;
@@ -28,6 +29,26 @@ pub type ItemId = u64;
 
 /// A pre-rendered line as owned styled spans (e.g. one row of a renderer's output).
 pub(crate) type RenderedRow = Vec<(String, Style)>;
+
+/// Everything a screen's rows depend on besides the repository: the viewport
+/// they must fit, and the renderer features in force.
+#[derive(Default, Clone)]
+pub(crate) struct RenderParams {
+    pub size: Size,
+    /// Named renderer features overlaying the user's own configuration, chosen
+    /// in-session. Empty means their configuration alone.
+    pub features: Rc<[String]>,
+}
+
+impl RenderParams {
+    /// Columns to render a row into: the viewport width less the 1-char gutter,
+    /// and one more so a renderer that pads rows to full width (delta
+    /// side-by-side) doesn't reach the edge, where the overflow guard would clip
+    /// it.
+    pub(crate) fn width(&self) -> usize {
+        (self.size.width as usize).saturating_sub(2)
+    }
+}
 
 #[derive(Default, Clone, Debug)]
 pub(crate) struct Item {
@@ -232,7 +253,7 @@ impl Item {
 /// (styled per-hunk by [`highlight`], including a `--color-only` colorizer).
 pub(crate) fn create_diff_items(
     config: &Config,
-    width: usize,
+    params: &RenderParams,
     diff: &Rc<Diff>,
     depth: usize,
     default_collapsed: bool,
@@ -241,7 +262,7 @@ pub(crate) fn create_diff_items(
     if config.general.diff_colorizer.enabled
         && let Some(items) = create_rendered_diff_items(
             config,
-            width,
+            params,
             diff,
             depth,
             default_collapsed,
@@ -261,7 +282,7 @@ pub(crate) fn create_diff_items(
 /// protocol.
 fn create_rendered_diff_items(
     config: &Config,
-    width: usize,
+    params: &RenderParams,
     diff: &Rc<Diff>,
     depth: usize,
     default_collapsed: bool,
@@ -270,7 +291,7 @@ fn create_rendered_diff_items(
     let output = crate::diff_colorizer::run(
         &config.general.diff_colorizer.command,
         Some(&diff.text),
-        width,
+        params,
         None,
     )?;
     let parsed = crate::diff_colorizer::parse_ansi_lines(&output);
@@ -683,7 +704,7 @@ fn commit_refs(repo: &Repository) -> Res<Vec<(git2::Commit<'_>, Ref)>> {
 pub(crate) fn rendered_log(
     config: &Config,
     repo: &Repository,
-    width: usize,
+    params: &RenderParams,
     limit: usize,
     rev: Option<Oid>,
     msg_regex: Option<&Regex>,
@@ -700,7 +721,7 @@ pub(crate) fn rendered_log(
     }
     args.push(rev.map_or_else(|| "HEAD".to_string(), |oid| oid.to_string()));
 
-    let blocks = rendered_commits(config, repo, width, &args)?;
+    let blocks = rendered_commits(config, repo, params, &args)?;
     let references = commit_refs(repo).ok()?;
     Some(
         blocks
@@ -722,7 +743,7 @@ pub(crate) struct RenderedCommit {
 fn rendered_commits(
     config: &Config,
     repo: &Repository,
-    width: usize,
+    params: &RenderParams,
     args: &[String],
 ) -> Option<Vec<RenderedCommit>> {
     let command: Vec<String> = config
@@ -735,7 +756,7 @@ fn rendered_commits(
         .collect();
 
     let dir = repo.workdir().unwrap_or_else(|| repo.path());
-    let output = crate::diff_colorizer::run(&command, None, width, Some(dir))?;
+    let output = crate::diff_colorizer::run(&command, None, params, Some(dir))?;
     let parsed = crate::diff_colorizer::parse_ansi_lines(&output);
     let blocks = crate::diff_colorizer::commit_blocks(&parsed.lines);
 
@@ -767,14 +788,14 @@ fn rendered_commits(
 pub(crate) fn rendered_commit_rows(
     config: &Config,
     repo: &Repository,
-    width: usize,
+    params: &RenderParams,
     revs: &[String],
 ) -> HashMap<String, Vec<Rc<RenderedRow>>> {
     if !config.general.log_renderer.enabled || revs.is_empty() {
         return HashMap::new();
     }
 
-    rendered_commits(config, repo, width, revs)
+    rendered_commits(config, repo, params, revs)
         .unwrap_or_default()
         .into_iter()
         .filter_map(|block| Some((block.oid?, block.rows)))

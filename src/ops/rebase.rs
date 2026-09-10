@@ -168,11 +168,11 @@ fn open_todo_screen(app: &mut App, base: &OsStr, args: &[OsString]) -> Res<()> {
         return Ok(());
     }
 
-    let size = app.screen().size;
+    let params = app.render_params(app.screen().size);
     app.state.screens.push(screen::rebase_todo::create(
         Arc::clone(&app.state.config),
         Rc::clone(&app.state.repo),
-        size,
+        params,
         Rc::new(RefCell::new(todo)),
     )?);
     Ok(())

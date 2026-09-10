@@ -31,6 +31,7 @@ use crate::config::Config;
 use crate::error::Error;
 use crate::file_watcher::FileWatcher;
 use crate::item_data::Rev;
+use crate::items::RenderParams;
 use crate::menu::Menu;
 use crate::menu::PendingMenu;
 use crate::ops::Op;
@@ -62,6 +63,9 @@ pub(crate) struct State {
     pub picker: Option<PickerState>,
     /// The commit `select_commit` named, read by [`App::pick_commit`].
     pub picked_commit: Option<String>,
+    /// Renderer features chosen in-session, overlaying the user's own
+    /// configuration. Never written to disk: quitting returns them to it.
+    pub features: Rc<[String]>,
     pub clipboard: Option<Clipboard>,
     needs_redraw: bool,
     file_watcher: Option<FileWatcher>,
@@ -80,12 +84,16 @@ impl App {
         config: Arc<Config>,
         enable_async_cmds: bool,
     ) -> Res<Self> {
+        let params = RenderParams {
+            size,
+            features: Rc::from([]),
+        };
         let screens = match args.command {
             Some(cli::Commands::Show { ref reference }) => {
                 vec![screen::show::create(
                     Arc::clone(&config),
                     Rc::clone(&repo),
-                    size,
+                    params.clone(),
                     reference.clone(),
                     None,
                 )?]
@@ -94,7 +102,7 @@ impl App {
                 vec![screen::blame::create(
                     Arc::clone(&config),
                     Rc::clone(&repo),
-                    size,
+                    params.clone(),
                     file.clone(),
                     rev.clone(),
                     None,
@@ -102,16 +110,16 @@ impl App {
             }
             Some(cli::Commands::Rebase { ref upstream }) => {
                 let todo = RebaseTodo::capture(&repo, OsStr::new(upstream), &[])?;
-                vec![rebase_todo_screen(&config, &repo, size, todo)?]
+                vec![rebase_todo_screen(&config, &repo, params.clone(), todo)?]
             }
             Some(cli::Commands::SequenceEditor { ref file }) => {
                 let todo = RebaseTodo::read(&repo, file)?;
-                vec![rebase_todo_screen(&config, &repo, size, todo)?]
+                vec![rebase_todo_screen(&config, &repo, params.clone(), todo)?]
             }
             None => vec![screen::status::create(
                 Arc::clone(&config),
                 Rc::clone(&repo),
-                size,
+                params,
             )?],
         };
 
@@ -134,6 +142,7 @@ impl App {
                 prompt: prompt::Prompt::new(),
                 picker: None,
                 picked_commit: None,
+                features: Rc::from([]),
                 clipboard,
                 file_watcher: None,
                 needs_redraw: true,
@@ -213,7 +222,9 @@ impl App {
     }
 
     pub fn update_screens(&mut self) -> Res<()> {
+        let features = Rc::clone(&self.state.features);
         for screen in &mut self.state.screens {
+            screen.features = Rc::clone(&features);
             screen.update()?;
         }
 
@@ -393,6 +404,15 @@ impl App {
 
                 Ok(())
             }
+        }
+    }
+
+    /// What a screen opened now should render with: the viewport it will get,
+    /// and the features currently selected.
+    pub fn render_params(&self, size: Size) -> RenderParams {
+        RenderParams {
+            size,
+            features: Rc::clone(&self.state.features),
         }
     }
 
@@ -710,7 +730,7 @@ impl App {
     /// its own keymap, and the loop runs until `select_commit` names one or the
     /// screen is closed.
     pub fn pick_commit(&mut self, term: &mut Term) -> Res<Option<String>> {
-        let size = self.screen().size;
+        let params = self.render_params(self.screen().size);
         let selected = match &self.screen().get_selected_item().data {
             crate::item_data::ItemData::Commit { oid, .. } => Some(oid.clone()),
             _ => None,
@@ -718,7 +738,7 @@ impl App {
         self.state.screens.push(screen::log::create(
             Arc::clone(&self.state.config),
             Rc::clone(&self.state.repo),
-            size,
+            params,
             COMMIT_PICK_LIMIT,
             None,
             None,
@@ -838,13 +858,13 @@ fn tee(maybe_input: Option<&mut impl Read>, outputs: &mut [&mut dyn Write]) -> s
 fn rebase_todo_screen(
     config: &Arc<Config>,
     repo: &Rc<Repository>,
-    size: Size,
+    params: RenderParams,
     todo: RebaseTodo,
 ) -> Res<Screen> {
     screen::rebase_todo::create(
         Arc::clone(config),
         Rc::clone(repo),
-        size,
+        params,
         Rc::new(RefCell::new(todo)),
     )
 }

@@ -81,7 +81,7 @@ fn log_other(app: &mut App, _term: &mut Term, result: &str) -> Res<()> {
 
 fn goto_log_screen(app: &mut App, rev: Option<Oid>) {
     app.state.screens.drain(1..);
-    let size = app.state.screens.last().unwrap().size;
+    let params = app.render_params(app.state.screens.last().unwrap().size);
     let limit = *app
         .state
         .pending_menu
@@ -102,7 +102,7 @@ fn goto_log_screen(app: &mut App, rev: Option<Oid>) {
         screen::log::create(
             Arc::clone(&app.state.config),
             Rc::clone(&app.state.repo),
-            size,
+            params,
             limit as usize,
             rev,
             msg_regex,

@@ -5,7 +5,11 @@ use crate::{item_data::ItemData, ui};
 use ratatui::{layout::Size, style::Style, text::Line};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{Res, config::Config, items::hash};
+use crate::{
+    Res,
+    config::Config,
+    items::{RenderParams, hash},
+};
 
 use super::Item;
 use std::borrow::Cow;
@@ -45,7 +49,10 @@ pub(crate) struct Screen {
     anchor: Option<usize>,
     scroll: usize,
     config: Arc<Config>,
-    refresh_items: Box<dyn Fn(Size) -> Res<Vec<Item>>>,
+    /// The renderer features to rebuild with, as chosen in-session. Pushed down
+    /// from the app so a screen always renders with the current selection.
+    pub(crate) features: Rc<[String]>,
+    refresh_items: Box<dyn Fn(RenderParams) -> Res<Vec<Item>>>,
     items: Vec<Item>,
     line_index: Vec<usize>,
     collapsed: HashSet<u64>,
@@ -54,8 +61,8 @@ pub(crate) struct Screen {
 impl Screen {
     pub(crate) fn new(
         config: Arc<Config>,
-        size: Size,
-        refresh_items: Box<dyn Fn(Size) -> Res<Vec<Item>>>,
+        params: RenderParams,
+        refresh_items: Box<dyn Fn(RenderParams) -> Res<Vec<Item>>>,
     ) -> Res<Self> {
         let collapsed = config
             .general
@@ -71,8 +78,9 @@ impl Screen {
             menu: None,
             show_menu: false,
             scroll: 0,
-            size,
+            size: params.size,
             config,
+            features: params.features,
             refresh_items,
             items: vec![],
             line_index: vec![],
@@ -305,7 +313,10 @@ impl Screen {
         // The rebuilt items are a different diff; the lines that were selected
         // are no longer the same lines.
         self.anchor = None;
-        self.items = (self.refresh_items)(self.size)?;
+        self.items = (self.refresh_items)(RenderParams {
+            size: self.size,
+            features: Rc::clone(&self.features),
+        })?;
         self.update_line_index();
         self.update_cursor(nav_mode);
         Ok(())

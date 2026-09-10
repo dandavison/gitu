@@ -23,12 +23,12 @@ impl OpTrait for ShowRefs {
 
 fn goto_refs_screen(app: &mut App) {
     app.state.screens.drain(1..);
-    let size = app.state.screens.last().unwrap().size;
+    let params = app.render_params(app.state.screens.last().unwrap().size);
     app.state.screens.push(
         screen::show_refs::create(
             Arc::clone(&app.state.config),
             Rc::clone(&app.state.repo),
-            size,
+            params,
         )
         .expect("Couldn't create screen"),
     );

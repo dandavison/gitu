@@ -28,6 +28,11 @@ use std::thread;
 /// advertised to the renderer via `OSC1717_METADATA` (a version set, `V`-prefixed).
 const OSC1717_METADATA_ADVERTISED: &str = "V1";
 
+/// Where delta reads named features from. A leading `+` means "in addition to
+/// the features already in git config", so what the user configured stays the
+/// base and gitu's selection is only an overlay on top of it.
+const FEATURES_VAR: &str = "DELTA_FEATURES";
+
 /// The git `--format` directives that emit a commit record: gitu substitutes
 /// them for the `{commit}` token in the configured log command, so git itself
 /// states which commit each rendered row belongs to.
@@ -189,17 +194,21 @@ pub(crate) fn resolve_hunk(diff: &Diff, meta: &LineMetadata) -> Option<(usize, u
 /// log command takes none) and returning its stdout. `None` if the command can't
 /// be spawned or exits non-zero.
 ///
-/// `width` is the number of columns gitu will render the output into. A renderer
-/// that reflows (delta side-by-side/wrapping) can't detect this over a pipe and
+/// `params` supplies the width gitu will render the output into. A renderer that
+/// reflows (delta side-by-side/wrapping) can't detect this over a pipe and
 /// defaults too narrow, so we make it available two ways: a literal `{width}`
 /// token anywhere in the command is substituted (e.g. `delta --width {width}`),
 /// and `COLUMNS` is exported for renderers that read it.
+///
+/// `params.features` are named renderer features chosen in-session, passed as
+/// `DELTA_FEATURES` (see [`FEATURES_VAR`]).
 pub(crate) fn run(
     command: &[String],
     input: Option<&str>,
-    width: usize,
+    params: &crate::items::RenderParams,
     dir: Option<&Path>,
 ) -> Option<String> {
+    let width = params.width();
     let (program, args) = command.split_first()?;
     let args: Vec<String> = args
         .iter()
@@ -218,6 +227,10 @@ pub(crate) fn run(
         })
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
+
+    if let Some(features) = feature_overlay(&params.features) {
+        command.env(FEATURES_VAR, features);
+    }
 
     if let Some(dir) = dir {
         command.current_dir(dir);
@@ -246,6 +259,16 @@ pub(crate) fn run(
     }
 
     Some(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// The value to give [`FEATURES_VAR`] for `features`, or `None` to leave the
+/// variable unset so the user's configuration applies untouched. Feature names
+/// are space-separated and may not themselves contain whitespace.
+fn feature_overlay(features: &[String]) -> Option<String> {
+    if features.is_empty() {
+        return None;
+    }
+    Some(format!("+{}", features.join(" ")))
 }
 
 /// Parse ANSI-colored text into per-line styled runs, capturing any OSC-1717
@@ -452,7 +475,50 @@ fn parse_extended_color(rest: &[u16]) -> Option<(Color, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::items::RenderParams;
     use ratatui::style::Color;
+
+    /// A renderer standing in for delta, reporting the features it was handed.
+    fn echo_features() -> Vec<String> {
+        ["sh", "-c", "printf '%s' \"$DELTA_FEATURES\""]
+            .map(String::from)
+            .to_vec()
+    }
+
+    fn params_with(features: &[&str]) -> RenderParams {
+        RenderParams {
+            features: features.iter().copied().map(String::from).collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn selected_features_reach_the_renderer_as_an_overlay() {
+        // The leading '+' is what makes it an overlay: delta adds these to the
+        // features already in the user's git config rather than replacing them.
+        assert_eq!(
+            run(
+                &echo_features(),
+                None,
+                &params_with(&["side-by-side"]),
+                None
+            ),
+            Some("+side-by-side".to_string())
+        );
+        assert_eq!(
+            run(&echo_features(), None, &params_with(&["a", "b"]), None),
+            Some("+a b".to_string())
+        );
+    }
+
+    #[test]
+    fn selecting_no_features_leaves_the_variable_unset() {
+        // Not "+": the user's configuration must apply entirely untouched.
+        assert_eq!(
+            run(&echo_features(), None, &params_with(&[]), None),
+            Some(String::new())
+        );
+    }
 
     #[test]
     fn parses_lines_tiling_text_with_colors() {

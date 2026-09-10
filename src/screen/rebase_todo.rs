@@ -1,7 +1,7 @@
 use super::Screen;
+use crate::items::RenderParams;
 use crate::{Res, config::Config, items, items::RenderedRow, menu::Menu, rebase_todo::RebaseTodo};
 use git2::Repository;
-use ratatui::layout::Size;
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 type CommitRows = HashMap<String, Vec<Rc<RenderedRow>>>;
@@ -9,7 +9,7 @@ type CommitRows = HashMap<String, Vec<Rc<RenderedRow>>>;
 pub(crate) fn create(
     config: Arc<Config>,
     repo: Rc<Repository>,
-    size: Size,
+    params: RenderParams,
     todo: Rc<RefCell<RebaseTodo>>,
 ) -> Res<Screen> {
     // The commits themselves don't change while the list is edited, so their
@@ -20,13 +20,15 @@ pub(crate) fn create(
 
     let mut screen = Screen::new(
         config,
-        size,
-        Box::new(move |size: Size| {
+        params,
+        Box::new(move |params: RenderParams| {
             let mut cache = cache.borrow_mut();
-            if cache.as_ref().is_none_or(|(width, _)| *width != size.width) {
-                let width = (size.width as usize).saturating_sub(2);
-                let rows = items::rendered_commit_rows(&screen_config, &repo, width, &revs);
-                *cache = Some((size.width, rows));
+            if cache
+                .as_ref()
+                .is_none_or(|(width, _)| *width != params.size.width)
+            {
+                let rows = items::rendered_commit_rows(&screen_config, &repo, &params, &revs);
+                *cache = Some((params.size.width, rows));
             }
 
             let (_, rows) = cache.as_ref().expect("just populated");

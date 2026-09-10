@@ -1,3 +1,4 @@
+use crate::items::RenderParams;
 use std::{iter, rc::Rc, sync::Arc};
 
 use crate::{
@@ -8,21 +9,20 @@ use crate::{
     items::{self, Item, hash},
 };
 use git2::Repository;
-use ratatui::layout::Size;
 
 use super::Screen;
 
 pub(crate) fn create(
     config: Arc<Config>,
     repo: Rc<Repository>,
-    size: Size,
+    params: RenderParams,
     reference: String,
     target: Option<(String, u32)>,
 ) -> Res<Screen> {
     let mut screen = Screen::new(
         Arc::clone(&config),
-        size,
-        Box::new(move |size: Size| {
+        params,
+        Box::new(move |params: RenderParams| {
             let commit = git::show_summary(repo.as_ref(), &reference)?;
             let show = git::show(repo.as_ref(), &reference)?;
             let details = commit.details.lines();
@@ -43,7 +43,7 @@ pub(crate) fn create(
             .chain([items::blank_line()])
             .chain(items::create_diff_items(
                 &config,
-                (size.width as usize).saturating_sub(2),
+                &params,
                 &Rc::new(show),
                 0,
                 false,
