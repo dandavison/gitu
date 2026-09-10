@@ -3,6 +3,7 @@ use crate::{
     app::{App, PromptParams, State},
     item_data::ItemData,
     menu::PendingMenu,
+    picker::{PickerData, PickerItem, PickerState},
     screen::NavMode,
     term::Term,
 };
@@ -173,6 +174,68 @@ impl OpTrait for ToggleMenu {
             "Show keys".into()
         }
     }
+}
+
+/// Turn one of the configured renderer features on or off, re-rendering with
+/// it. The diff is what changes, not the position in it: a row's identity is
+/// its place in the patch, which no amount of re-rendering moves.
+pub(crate) struct RendererFeatures;
+impl OpTrait for RendererFeatures {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app: &mut App, term: &mut Term| {
+            let offered = app.state.config.general.diff_colorizer.features.clone();
+            if offered.is_empty() {
+                app.display_error("No renderer features are configured");
+                return Ok(());
+            }
+
+            let items = offered
+                .iter()
+                .map(|feature| {
+                    let mark = if app.state.features.contains(feature) {
+                        "● "
+                    } else {
+                        "  "
+                    };
+                    PickerItem::new(
+                        format!("{mark}{feature}"),
+                        PickerData::Item(feature.clone()),
+                    )
+                })
+                .collect();
+
+            let picked = app.pick(term, PickerState::new("Renderer feature", items, false))?;
+            let Some(picked) = picked else {
+                return Ok(());
+            };
+
+            app.state.features = toggled(&app.state.features, picked.display());
+            app.rerender_screens()
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Renderer features".into()
+    }
+}
+
+/// `features` with `feature` removed if present and appended if not. Order is
+/// otherwise kept, since delta resolves a conflict between two features in
+/// favour of the later one.
+fn toggled(features: &[String], feature: &str) -> Rc<[String]> {
+    if features.iter().any(|held| held == feature) {
+        return features
+            .iter()
+            .filter(|held| *held != feature)
+            .cloned()
+            .collect();
+    }
+
+    features
+        .iter()
+        .cloned()
+        .chain([feature.to_owned()])
+        .collect()
 }
 
 /// Name the commit under the cursor as the one [`App::pick_commit`] was after.

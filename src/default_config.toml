@@ -34,6 +34,18 @@ mouse_scroll_lines = 3
 diff_colorizer.enabled = false
 diff_colorizer.command = ["delta", "--color-only", "--no-gitconfig", "--true-color", "always"]
 
+# Renderer features that `renderer_features` offers, to turn on and off while
+# viewing a diff. They are passed to the renderer as DELTA_FEATURES=+<names>,
+# which delta adds to the features your own git config already sets: your
+# configuration stays the base and this is only an overlay on it, held for the
+# session and never written to disk.
+#
+# Any feature you have defined in git config as `[delta "name"]` can be named
+# here alongside delta's built-in ones. A feature is free to restructure the
+# diff however it likes: Gitu maps each rendered row back to its patch line from
+# the metadata the renderer emits, not from how the row looks.
+diff_colorizer.features = ["side-by-side", "line-numbers", "hyperlinks"]
+
 # Render the log view with a command of your own instead of Gitu's built-in
 # one-line-per-commit list. The command is run in the repository and its
 # ANSI-colored output becomes the log view; Gitu appends the log menu's
@@ -184,6 +196,8 @@ root.apply = ["a"]
 root.reverse = ["v"]
 root.copy_hash = ["y"]
 root.blame = ["B"]
+# Turn a renderer feature (side-by-side, line numbers, ...) on or off in place.
+root.renderer_features = ["|"]
 
 picker.next = ["down", "ctrl+n", "tab"]
 picker.previous = ["up", "ctrl+p", "backtab"]

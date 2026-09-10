@@ -222,10 +222,22 @@ impl App {
     }
 
     pub fn update_screens(&mut self) -> Res<()> {
+        self.rebuild_screens(Screen::update)
+    }
+
+    /// Rebuild every screen, leaving each cursor where it was in the diff rather
+    /// than on the line number it happened to occupy. For a re-render of the
+    /// same content (a renderer feature turned on or off), the rows move but the
+    /// place in the patch does not.
+    pub fn rerender_screens(&mut self) -> Res<()> {
+        self.rebuild_screens(Screen::update_keeping_position)
+    }
+
+    fn rebuild_screens(&mut self, rebuild: impl Fn(&mut Screen) -> Res<()>) -> Res<()> {
         let features = Rc::clone(&self.state.features);
         for screen in &mut self.state.screens {
             screen.features = Rc::clone(&features);
-            screen.update()?;
+            rebuild(screen)?;
         }
 
         self.stage_redraw();

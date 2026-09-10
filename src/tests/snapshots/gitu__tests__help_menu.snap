@@ -5,21 +5,21 @@ expression: ctx.redact_buffer()
 ────────────────────────────────────────────────────────────────────────────────|
  Help                                     Submenu           main                |
  Y                Show Refs               b   Branch        tab Fold            |
- k/up             Up                      c   Commit                            |
- j/down           Down                    f   Fetch                             |
- ctrl+k/ctrl+up   Up line                 h/? Help                              |
- ctrl+j/ctrl+down Down line               l   Log                               |
- shift+up         Select up               m   Merge                             |
- shift+down       Select down             M   Remote                            |
- alt+k/alt+up     Prev section            F   Pull                              |
- alt+j/alt+down   Next section            P   Push                              |
- alt+h/alt+left   Parent section          r   Rebase                            |
- g+g              Top                     X   Reset                             |
- G                Bottom                  V   Revert                            |
- ctrl+u           Scroll half page up     A   Cherry-pick                       |
- ctrl+d           Scroll half page down   z   Stash                             |
+ |                Renderer features       c   Commit                            |
+ k/up             Up                      f   Fetch                             |
+ j/down           Down                    h/? Help                              |
+ ctrl+k/ctrl+up   Up line                 l   Log                               |
+ ctrl+j/ctrl+down Down line               m   Merge                             |
+ shift+up         Select up               M   Remote                            |
+ shift+down       Select down             F   Pull                              |
+ alt+k/alt+up     Prev section            P   Push                              |
+ alt+j/alt+down   Next section            r   Rebase                            |
+ alt+h/alt+left   Parent section          X   Reset                             |
+ g+g              Top                     V   Revert                            |
+ G                Bottom                  A   Cherry-pick                       |
+ ctrl+u           Scroll half page up     z   Stash                             |
+ ctrl+d           Scroll half page down                                         |
  ctrl+y           Scroll view up                                                |
  ctrl+e           Scroll view down                                              |
  g+r              Refresh                                                       |
- q/esc            Quit/Close                                                    |
-styles_hash: 18671dc90aa2b13b
+styles_hash: 1423d0f93c16b8b0

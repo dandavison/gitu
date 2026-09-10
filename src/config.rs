@@ -73,6 +73,10 @@ pub struct DiffColorizerConfig {
     /// on stdin and must emit ANSI-colored output that preserves line structure.
     #[serde(default)]
     pub command: Vec<String>,
+    /// Named renderer features offered by `renderer_features`, to turn on and
+    /// off while viewing a diff.
+    #[serde(default)]
+    pub features: Vec<String>,
 }
 
 #[derive(Default, Debug, Deserialize)]

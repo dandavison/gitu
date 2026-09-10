@@ -322,6 +322,20 @@ impl Screen {
         Ok(())
     }
 
+    /// Rebuild, keeping the cursor on whatever it was on. [`Self::update`] keeps
+    /// its line number, which is the same place only while the rows are; a
+    /// re-render that lays the same diff out differently moves them. What does
+    /// not move is where a row sits in the patch, so that is what is restored.
+    pub(crate) fn update_keeping_position(&mut self) -> Res<()> {
+        let was_on = diff_position(&self.get_selected_item().data);
+        self.update()?;
+
+        if let Some(position) = was_on {
+            self.select_matching_in_view(|data| diff_position(data) == Some(position));
+        }
+        Ok(())
+    }
+
     fn update_cursor(&mut self, nav_mode: NavMode) {
         // Nothing is selectable (e.g. the log of a branch with no commits).
         // Reset the cursor to a valid sentinel rather than positioning it,
@@ -570,6 +584,23 @@ impl Screen {
     }
 }
 
+/// Where a row sits in the patch, for the rows that sit anywhere in one: a
+/// file, a hunk within it, and for a content row the line within that. Two rows
+/// of one wrapped line share a position, which is right — they are one line.
+fn diff_position(data: &ItemData) -> Option<(usize, Option<usize>, Option<usize>)> {
+    match data {
+        ItemData::Delta { file_i, .. } => Some((*file_i, None, None)),
+        ItemData::Hunk { file_i, hunk_i, .. } => Some((*file_i, Some(*hunk_i), None)),
+        ItemData::HunkLine {
+            file_i,
+            hunk_i,
+            line_i,
+            ..
+        } => Some((*file_i, Some(*hunk_i), Some(*line_i))),
+        _ => None,
+    }
+}
+
 /// Whether two rows are content lines of one hunk, and so can be selected
 /// together: a patch reaches no further than that.
 fn same_hunk(a: &ItemData, b: &ItemData) -> bool {
@@ -702,5 +733,136 @@ fn area_selection_highlight(style: &StyleConfig, line: &LineView) -> Style {
         Style::from(&style.selection_area)
     } else {
         Style::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config;
+    use crate::git::diff::{Diff, DiffType};
+    use crate::items::RenderedRow;
+
+    const DIFF: &str = "diff --git a/f.rs b/f.rs\n\
+                        index 1..2 100644\n\
+                        --- a/f.rs\n\
+                        +++ b/f.rs\n\
+                        @@ -1,3 +1,3 @@\n\
+                        \x20keep\n\
+                        -gone\n\
+                        +added\n";
+
+    /// A screen whose diff renders one row per content line, or two when the
+    /// `wide` feature is on — standing in for a renderer laying the same diff
+    /// out differently.
+    fn screen_of(rows_per_line: &'static str) -> Screen {
+        let diff = Rc::new(Diff {
+            text: DIFF.to_string(),
+            diff_type: DiffType::WorkdirToIndex,
+            file_diffs: crate::gitu_diff::Parser::new(DIFF).parse_diff().unwrap(),
+            commit: None,
+        });
+
+        Screen::new(
+            Arc::new(config::init_test_config().unwrap()),
+            RenderParams {
+                size: Size::new(80, 40),
+                features: Rc::from([]),
+            },
+            Box::new(move |params: RenderParams| {
+                let rows = if params.features.iter().any(|f| f == rows_per_line) {
+                    2
+                } else {
+                    1
+                };
+                Ok(diff_items(&diff, rows))
+            }),
+        )
+        .unwrap()
+    }
+
+    /// Items for the diff: a file, a hunk, then each content line drawn over
+    /// `rows` rows (the extra ones nesting, as wrapped rows do).
+    fn diff_items(diff: &Rc<Diff>, rows: usize) -> Vec<Item> {
+        let mut items = vec![
+            Item {
+                depth: 0,
+                data: ItemData::Delta {
+                    diff: Rc::clone(diff),
+                    file_i: 0,
+                    commit: None,
+                },
+                ..Default::default()
+            },
+            Item {
+                depth: 1,
+                data: ItemData::Hunk {
+                    diff: Rc::clone(diff),
+                    file_i: 0,
+                    hunk_i: 0,
+                },
+                ..Default::default()
+            },
+        ];
+
+        for line_i in 0..3 {
+            for row in 0..rows {
+                let rendered: RenderedRow =
+                    vec![(format!("line {line_i} row {row}"), Style::new())];
+                items.push(Item {
+                    depth: if row == 0 { 2 } else { 3 },
+                    unselectable: row > 0,
+                    data: if row == 0 {
+                        ItemData::HunkLine {
+                            diff: Rc::clone(diff),
+                            file_i: 0,
+                            hunk_i: 0,
+                            line_i,
+                            line_range: 0..0,
+                            line_indices: vec![line_i],
+                        }
+                    } else {
+                        ItemData::default()
+                    },
+                    rendered: Some(Rc::new(rendered)),
+                    ..Default::default()
+                });
+            }
+        }
+        items
+    }
+
+    fn selected_line(screen: &Screen) -> Option<usize> {
+        match screen.get_selected_item().data {
+            ItemData::HunkLine { line_i, .. } => Some(line_i),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn a_rerender_keeps_the_cursor_on_the_same_diff_line() {
+        let mut screen = screen_of("wide");
+        screen.select_matching(|data| matches!(data, ItemData::HunkLine { line_i: 2, .. }));
+        assert_eq!(selected_line(&screen), Some(2));
+
+        // Every row below the first now has a second row above where the cursor
+        // was, so keeping its line number would land somewhere else entirely.
+        screen.features = Rc::from(["wide".to_string()]);
+        screen.update_keeping_position().unwrap();
+
+        assert_eq!(selected_line(&screen), Some(2));
+    }
+
+    #[test]
+    fn a_plain_update_keeps_only_the_line_number() {
+        // The contrast: `update` is right for a changed diff, but it is the
+        // screen row that it holds on to, not the diff line.
+        let mut screen = screen_of("wide");
+        screen.select_matching(|data| matches!(data, ItemData::HunkLine { line_i: 2, .. }));
+
+        screen.features = Rc::from(["wide".to_string()]);
+        screen.update().unwrap();
+
+        assert_ne!(selected_line(&screen), Some(2));
     }
 }
