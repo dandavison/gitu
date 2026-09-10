@@ -71,15 +71,31 @@ impl TestContext {
         self.init_app_with_args(path, Args::default())
     }
 
+    /// Start gitu as git's pager would (`GIT_PAGER='gitu --pager' git diff`).
+    pub fn init_app_with_patch(&mut self, patch: String) -> App {
+        self.init_app_inner(
+            self.dir.to_path_buf(),
+            Args {
+                pager: true,
+                ..Default::default()
+            },
+            Some(patch),
+        )
+    }
+
     /// Start gitu as one of its subcommands would (`gitu sequence-editor …`).
     pub fn init_app_with_args(&mut self, path: PathBuf, args: Args) -> App {
+        self.init_app_inner(path, args, None)
+    }
+
+    fn init_app_inner(&mut self, path: PathBuf, args: Args, patch: Option<String>) -> App {
         let mut app = App::create(
             Rc::new(Repository::open(path).unwrap()),
             self.size,
             &args,
             Arc::clone(&self.config),
             false,
-            None,
+            patch,
         )
         .unwrap();
 
