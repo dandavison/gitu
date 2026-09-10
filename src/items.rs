@@ -773,12 +773,6 @@ pub(crate) fn rendered_log_items(repo: &Repository, rendered: &str) -> Option<Ve
     Some(log_items(repo, &commits_in(rendered)?))
 }
 
-/// Whether rendered rows say which commit each belongs to, which is what makes
-/// them a log rather than text.
-pub(crate) fn is_rendered_log(rendered: &str) -> bool {
-    commits_in(rendered).is_some()
-}
-
 /// Refs a commit carries only decorate it, so failing to list them costs the
 /// decorations rather than the log.
 fn log_items(repo: &Repository, blocks: &[RenderedCommit]) -> Vec<Item> {

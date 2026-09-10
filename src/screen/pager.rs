@@ -41,25 +41,21 @@ enum Source {
     /// A patch recognised as one git can be asked for again: staging a hunk
     /// from it changes what it shows, as it does on the status screen.
     Live(fn(&Repository) -> Res<Diff>),
-    /// Rows a renderer marked with the commit each belongs to. gitu did not run
-    /// the log command, but the records say where each commit begins, which is
-    /// all the log view ever needed.
-    Log(String),
-    /// Anything else — a commit, two revs, another repo's patch, output that is
-    /// no patch at all. There is nothing to ask again, so it stays as it came.
-    Fixed { patch: String, diff: Rc<Diff> },
+    /// A patch git cannot be asked for again — a commit, two revs, another
+    /// repo's. It stays as it came, and gitu structures it.
+    Patch { patch: String, diff: Rc<Diff> },
+    /// Output with no diff in it: a log, a blame, a grep, a man page. gitu has
+    /// no structure of its own to impose, so the renderer draws it and what it
+    /// says about the rows it drew decides what they are.
+    Unstructured(String),
 }
 
 impl Source {
-    /// git tells its pager nothing about the command that produced the patch,
+    /// git tells its pager nothing about the command that produced its output,
     /// so the two diffs git can be asked for again are asked for and compared
     /// against it. Recognising the patch is what makes it a live view, and it
     /// is also what decides which ops it admits (see [`DiffType`]).
     fn of(repo: &Repository, patch: String) -> Res<Self> {
-        if items::is_rendered_log(&patch) {
-            return Ok(Source::Log(patch));
-        }
-
         let text = crate::diff_colorizer::strip_ansi(&patch);
 
         for ask_git in [
@@ -71,11 +67,16 @@ impl Source {
             }
         }
 
-        Ok(Source::Fixed {
+        let file_diffs = gitu_diff::Parser::new(&text)
+            .parse_diff()
+            .unwrap_or_default();
+        if file_diffs.is_empty() {
+            return Ok(Source::Unstructured(patch));
+        }
+
+        Ok(Source::Patch {
             diff: Rc::new(Diff {
-                file_diffs: gitu_diff::Parser::new(&text)
-                    .parse_diff()
-                    .unwrap_or_default(),
+                file_diffs,
                 text,
                 diff_type: DiffType::TreeToTree,
                 commit: None,
@@ -87,20 +88,20 @@ impl Source {
     fn items(&self, config: &Config, repo: &Repository, params: &RenderParams) -> Res<Vec<Item>> {
         match self {
             Source::Live(ask_git) => Ok(diff_items(config, params, &Rc::new(ask_git(repo)?))),
-            Source::Log(rendered) => Ok(items::rendered_log_items(repo, rendered)
-                .expect("rows carried commit records when the source was chosen")),
-            // Nothing parsed as a patch, so there is nothing to fold or stage:
-            // show what arrived, as it arrived.
-            Source::Fixed { patch, diff } if diff.file_diffs.is_empty() => {
-                Ok(items::plain_rows(patch))
-            }
             // `git show` and `git log -p` open with the commit their diff is of.
             // It belongs to no file, so it is shown as it arrived, above the
             // diff that gitu does structure.
-            Source::Fixed { patch, diff } => {
+            Source::Patch { patch, diff } => {
                 let mut items = items::plain_rows_before_first_file_diff(patch);
                 items.extend(diff_items(config, params, diff));
                 Ok(items)
+            }
+            // A renderer that says which commit a row belongs to has turned the
+            // text into a log; one that says nothing has just drawn it.
+            Source::Unstructured(text) => {
+                let rendered = render(config, params, text);
+                Ok(items::rendered_log_items(repo, &rendered)
+                    .unwrap_or_else(|| items::plain_rows(&rendered)))
             }
         }
     }
@@ -108,6 +109,23 @@ impl Source {
 
 fn diff_items(config: &Config, params: &RenderParams, diff: &Rc<Diff>) -> Vec<Item> {
     items::create_diff_items(config, params, diff, 0, false, None)
+}
+
+/// `text` as the renderer draws it, or as it arrived when there is no renderer
+/// to draw it — which is also how output that already came through one keeps
+/// the records it came with.
+fn render(config: &Config, params: &RenderParams, text: &str) -> String {
+    if !config.general.diff_colorizer.enabled {
+        return text.to_owned();
+    }
+
+    crate::diff_colorizer::run(
+        &config.general.diff_colorizer.command,
+        Some(text),
+        params,
+        None,
+    )
+    .unwrap_or_else(|| text.to_owned())
 }
 
 #[cfg(test)]
