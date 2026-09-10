@@ -92,7 +92,12 @@ impl App {
         let screens = match args.command {
             // `--pager`: the patch is already in hand, whatever git ran to make it.
             _ if let Some(patch) = piped_patch => {
-                vec![screen::pager::create(Arc::clone(&config), params, patch)?]
+                vec![screen::pager::create(
+                    Arc::clone(&config),
+                    &repo,
+                    params,
+                    patch,
+                )?]
             }
             Some(cli::Commands::Show { ref reference }) => {
                 vec![screen::show::create(

@@ -11,14 +11,23 @@ use super::Screen;
 use crate::{
     Res,
     config::Config,
-    git::diff::{Diff, DiffType},
+    git::{
+        self,
+        diff::{Diff, DiffType},
+    },
     gitu_diff,
     items::{self, RenderParams},
 };
+use git2::Repository;
 use std::{rc::Rc, sync::Arc};
 
-pub(crate) fn create(config: Arc<Config>, params: RenderParams, patch: String) -> Res<Screen> {
-    let diff = Rc::new(parse(&patch));
+pub(crate) fn create(
+    config: Arc<Config>,
+    repo: &Repository,
+    params: RenderParams,
+    patch: String,
+) -> Res<Screen> {
+    let diff = Rc::new(parse(repo, &patch)?);
 
     Screen::new(
         Arc::clone(&config),
@@ -39,18 +48,28 @@ pub(crate) fn create(config: Arc<Config>, params: RenderParams, patch: String) -
 
 /// Parse piped output into a diff. Anything that isn't a `diff --git` patch
 /// yields no files, which is how "there is no structure here to offer" is said.
-fn parse(patch: &str) -> Diff {
+///
+/// Which ops the patch admits turns on where it came from, and git tells its
+/// pager nothing about that — so the working tree and index diffs are asked
+/// for and the patch is recognised as one of them, or as neither.
+fn parse(repo: &Repository, patch: &str) -> Res<Diff> {
     let text = crate::diff_colorizer::strip_ansi(patch);
-    let file_diffs = gitu_diff::Parser::new(&text)
-        .parse_diff()
-        .unwrap_or_default();
 
-    Diff {
+    for ask_git in [git::diff_unstaged, git::diff_staged] {
+        let diff = ask_git(repo)?;
+        if diff.text == text {
+            return Ok(diff);
+        }
+    }
+
+    Ok(Diff {
+        file_diffs: gitu_diff::Parser::new(&text)
+            .parse_diff()
+            .unwrap_or_default(),
         text,
         diff_type: DiffType::TreeToTree,
-        file_diffs,
         commit: None,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -58,6 +77,9 @@ mod tests {
     use super::*;
     use crate::config;
     use crate::item_data::ItemData;
+    use crate::repo_setup_clone;
+    use crate::tests::helpers::RepoTestContext;
+    use stdext::function_name;
 
     const PATCH: &str = "diff --git a/f.rs b/f.rs\n\
                          index 1..2 100644\n\
@@ -68,8 +90,8 @@ mod tests {
                          -gone\n\
                          +added\n";
 
-    fn items_of(patch: &str) -> Vec<ItemData> {
-        let diff = Rc::new(parse(patch));
+    fn items_of(repo: &Repository, patch: &str) -> Vec<ItemData> {
+        let diff = Rc::new(parse(repo, patch).unwrap());
         let config = config::init_test_config().unwrap();
         items::create_diff_items(&config, &Default::default(), &diff, 0, false, None)
             .into_iter()
@@ -79,7 +101,8 @@ mod tests {
 
     #[test]
     fn a_piped_patch_becomes_a_file_a_hunk_and_its_lines() {
-        let items = items_of(PATCH);
+        let ctx = repo_setup_clone!();
+        let items = items_of(&ctx.local_repo, PATCH);
 
         assert!(
             matches!(items.first(), Some(ItemData::Delta { .. })),
@@ -99,6 +122,7 @@ mod tests {
     /// through the escapes, so they have to come off first.
     #[test]
     fn a_coloured_patch_parses_the_same_as_a_plain_one() {
+        let ctx = repo_setup_clone!();
         let coloured = "\x1b[1mdiff --git a/f.rs b/f.rs\x1b[m\n\
              \x1b[1mindex 1..2 100644\x1b[m\n\
              \x1b[1m--- a/f.rs\x1b[m\n\
@@ -108,22 +132,28 @@ mod tests {
              \x1b[31m-gone\x1b[m\n\
              \x1b[32m+added\x1b[m\n";
 
-        assert_eq!(items_of(coloured).len(), items_of(PATCH).len());
+        assert_eq!(
+            items_of(&ctx.local_repo, coloured).len(),
+            items_of(&ctx.local_repo, PATCH).len()
+        );
     }
 
     /// Input that is not a git patch offers no structure rather than failing.
     #[test]
     fn output_that_is_not_a_patch_yields_no_files() {
-        assert!(items_of("this is not a diff\nnor is this\n").is_empty());
-        assert!(items_of("").is_empty());
+        let ctx = repo_setup_clone!();
+        assert!(items_of(&ctx.local_repo, "this is not a diff\nnor is this\n").is_empty());
+        assert!(items_of(&ctx.local_repo, "").is_empty());
     }
 
     /// ... and is shown as it arrived, rather than as an empty screen.
     #[test]
     fn output_that_is_not_a_patch_is_still_readable() {
+        let ctx = repo_setup_clone!();
         let grep = "m.rs:2:    let alpha = 1;\nm.rs:3:    let gamma = 42;\n";
         let screen = create(
             Arc::new(config::init_test_config().unwrap()),
+            &ctx.local_repo,
             RenderParams {
                 size: ratatui::layout::Size::new(80, 20),
                 features: Rc::from([]),

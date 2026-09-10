@@ -12,7 +12,7 @@
 use std::fs;
 
 #[macro_use]
-mod helpers;
+pub(crate) mod helpers;
 mod arg;
 mod blame;
 mod branch;
