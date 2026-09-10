@@ -64,3 +64,26 @@ fn exit_from_picker_exits_menu() {
 fn re_enter_picker_from_menu() {
     snapshot!(setup_clone!(), "bb<esc>bb");
 }
+
+#[test]
+fn renderer_features_offers_the_configured_ones() {
+    snapshot!(setup_clone!(), "|");
+}
+
+#[test]
+fn choosing_a_renderer_feature_marks_it() {
+    // Picking `side-by-side` turns it on; re-opening shows it marked, and
+    // picking it again turns it back off.
+    let ctx = setup_clone!();
+    let mut ctx = ctx;
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("|<enter>"));
+    assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
+
+    ctx.update(&mut app, keys("|<enter>"));
+    assert!(
+        app.state.features.is_empty(),
+        "picking it again turns it off"
+    );
+}
