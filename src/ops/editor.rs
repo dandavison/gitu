@@ -1,6 +1,7 @@
 use super::{Action, OpTrait};
 use crate::{
     app::{App, PromptParams, State},
+    error::Error,
     item_data::ItemData,
     menu::PendingMenu,
     picker::{PickerData, PickerItem, PickerState},
@@ -183,7 +184,10 @@ pub(crate) struct RendererFeatures;
 impl OpTrait for RendererFeatures {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {
         Some(Rc::new(|app: &mut App, term: &mut Term| {
-            let offered = app.state.config.general.diff_colorizer.features.clone();
+            let offered = crate::diff_colorizer::offered_features(
+                &app.state.config.general.diff_colorizer.features,
+                &app.state.repo.config().map_err(Error::ReadGitConfig)?,
+            )?;
             if offered.is_empty() {
                 app.display_error("No renderer features are configured");
                 return Ok(());

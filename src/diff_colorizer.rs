@@ -14,6 +14,8 @@
 //!   We advertise the protocol via the `OSC1717_METADATA` env var and attach each
 //!   record to the line that follows it.
 
+use crate::Res;
+use crate::error::Error;
 use crate::git::diff::Diff;
 use anstyle_parse::{DefaultCharAccumulator, Params, Parser, Perform};
 use ratatui::style::{Color, Modifier, Style};
@@ -269,6 +271,37 @@ fn feature_overlay(features: &[String]) -> Option<String> {
         return None;
     }
     Some(format!("+{}", features.join(" ")))
+}
+
+/// The renderer features to offer: those gitu is configured with, followed by
+/// every `[delta "name"]` section the user has defined, so a feature of their
+/// own is offered without their having to name it to gitu as well.
+pub(crate) fn offered_features(
+    configured: &[String],
+    git_config: &git2::Config,
+) -> Res<Vec<String>> {
+    let mut defined = Vec::new();
+    let mut entries = git_config.entries(None).map_err(Error::ReadGitConfig)?;
+    while let Some(entry) = entries.next() {
+        let entry = entry.map_err(Error::ReadGitConfig)?;
+        if let Some(name) = entry.name().and_then(feature_name)
+            && !configured.contains(&name)
+        {
+            defined.push(name);
+        }
+    }
+
+    defined.sort();
+    defined.dedup();
+    Ok(configured.iter().cloned().chain(defined).collect())
+}
+
+/// The feature a `delta.<name>.<key>` config entry belongs to. A subsection name
+/// may itself contain dots, so it is everything between the section and the key.
+fn feature_name(entry: &str) -> Option<String> {
+    let subsection_and_key = entry.strip_prefix("delta.")?;
+    let (name, _key) = subsection_and_key.rsplit_once('.')?;
+    Some(name.to_owned())
 }
 
 /// `text` with its escape sequences removed, as the plain text a parser needs.
@@ -528,6 +561,45 @@ mod tests {
         assert_eq!(
             run(&echo_features(), None, &params_with(&[]), None),
             Some(String::new())
+        );
+    }
+
+    fn git_config_of(text: &str) -> (temp_dir::TempDir, git2::Config) {
+        let dir = temp_dir::TempDir::new().unwrap();
+        let path = dir.path().join("config");
+        std::fs::write(&path, text).unwrap();
+        let config = git2::Config::open(&path).unwrap();
+        (dir, config)
+    }
+
+    /// A feature the user defined as `[delta "name"]` is offered without their
+    /// having to name it in gitu's config as well.
+    #[test]
+    fn features_defined_in_git_config_are_offered() {
+        let (_dir, git_config) = git_config_of(
+            "[delta]\n\
+             \tnavigate = true\n\
+             [delta \"my-theme\"]\n\
+             \tline-numbers = true\n\
+             \tsyntax-theme = Nord\n\
+             [delta \"boxed\"]\n\
+             \thunk-header-style = box\n",
+        );
+
+        assert_eq!(
+            offered_features(&["side-by-side".into()], &git_config).unwrap(),
+            ["side-by-side", "boxed", "my-theme"]
+        );
+    }
+
+    /// A feature named in both places is one feature, kept where gitu put it.
+    #[test]
+    fn a_feature_named_in_both_places_is_offered_once() {
+        let (_dir, git_config) = git_config_of("[delta \"side-by-side\"]\n\twidth = 100\n");
+
+        assert_eq!(
+            offered_features(&["side-by-side".into(), "line-numbers".into()], &git_config).unwrap(),
+            ["side-by-side", "line-numbers"]
         );
     }
 
