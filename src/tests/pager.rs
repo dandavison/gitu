@@ -101,6 +101,39 @@ fn a_commit_patch_stays_as_it_arrived() {
     assert!(buffer.contains("+testing"), "{buffer}");
 }
 
+/// A log rendered by something that states where each commit begins is a log,
+/// not a wall of text: its commits are targets, and the ops that act on a
+/// commit apply. git tells its pager nothing, so the renderer has to.
+#[test]
+fn a_piped_log_with_commit_records_is_navigable() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+    let oid = run(&ctx.dir, &["git", "rev-parse", "HEAD"])
+        .trim()
+        .to_string();
+
+    let app = ctx.init_app_with_patch(format!(
+        "\x1b]1717;1\x1b\\\x1b]1717;1;C;;;{oid}\x1b\\commit {oid}\n\
+         Author: Author Name <author@email.com>\n\
+         \n\
+         \x20   add firstfile\n"
+    ));
+
+    let item = app.state.screens.last().unwrap().get_selected_item();
+    assert!(
+        matches!(&item.data, crate::item_data::ItemData::Commit { oid: o, .. } if *o == oid),
+        "got {:?}",
+        item.data
+    );
+    assert!(Op::Show.implementation().get_action(&item.data).is_some());
+    assert!(
+        Op::CopyHash
+            .implementation()
+            .get_action(&item.data)
+            .is_some()
+    );
+}
+
 fn offers(app: &App, op: Op) -> bool {
     let item = app.state.screens.last().unwrap().get_selected_item();
     assert!(
