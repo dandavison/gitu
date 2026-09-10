@@ -134,6 +134,51 @@ fn a_piped_log_with_commit_records_is_navigable() {
     );
 }
 
+/// Output gitu can find no structure in is still the renderer's to draw. Shown
+/// as it arrived it would carry git's colours, and setting gitu as the pager
+/// would cost the rendering of everything that is not a diff.
+#[test]
+fn output_with_no_structure_is_still_rendered() {
+    let mut ctx = setup_clone!();
+    ctx.config().general.diff_colorizer.enabled = true;
+    ctx.config().general.diff_colorizer.command =
+        ["sed", "s/^/rendered /"].map(String::from).to_vec();
+
+    ctx.init_app_with_patch("plain output\n".to_string());
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("rendered plain output"), "{buffer}");
+}
+
+/// And rendering it is what makes a log a log: git hands its pager an unmarked
+/// wall of text, and the renderer is what says where each commit begins. So
+/// gitu needs no pipeline in front of it, only its own renderer.
+#[test]
+fn a_raw_log_becomes_a_log_view_when_the_renderer_marks_commits() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+    let oid = run(&ctx.dir, &["git", "rev-parse", "HEAD"])
+        .trim()
+        .to_string();
+
+    ctx.config().general.diff_colorizer.enabled = true;
+    ctx.config().general.diff_colorizer.command = [
+        "awk",
+        r#"/^commit /{printf "\033]1717;1;C;;;%s\033\\", $2} {print}"#,
+    ]
+    .map(String::from)
+    .to_vec();
+
+    let app = ctx.init_app_with_patch(run(&ctx.dir, &["git", "log"]));
+
+    let item = app.state.screens.last().unwrap().get_selected_item();
+    assert!(
+        matches!(&item.data, crate::item_data::ItemData::Commit { oid: o, .. } if *o == oid),
+        "got {:?}",
+        item.data
+    );
+}
+
 fn offers(app: &App, op: Op) -> bool {
     let item = app.state.screens.last().unwrap().get_selected_item();
     assert!(
