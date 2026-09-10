@@ -94,7 +94,7 @@ impl App {
             _ if let Some(patch) = piped_patch => {
                 vec![screen::pager::create(
                     Arc::clone(&config),
-                    &repo,
+                    Rc::clone(&repo),
                     params,
                     patch,
                 )?]
