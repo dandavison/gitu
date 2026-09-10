@@ -34,7 +34,11 @@ arboard = { version = "3.6.1", default-features = false, features = [
 ] }
 chrono = "0.4.42"
 clap = { version = "4.5.54", features = ["derive"] }
-crossterm = "0.28.1"
+# `use-dev-tty` reads keys through poll(2) on the terminal rather than through
+# mio. Gitu needs it to be usable as a pager: with a patch on stdin the keyboard
+# has to come from /dev/tty, and macOS kqueue refuses to register that device,
+# so mio's event source cannot be built at all.
+crossterm = { version = "0.28.1", features = ["use-dev-tty"] }
 etcetera = "0.11.0"
 figment = { version = "0.10.19", features = ["toml"] }
 git-version = "0.3.9"
