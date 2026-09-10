@@ -297,6 +297,18 @@ fn create_rendered_diff_items(
     let parsed = crate::diff_colorizer::parse_ansi_lines(&output);
     parsed.protocol_version?; // Not an OSC-1717 renderer: fall back to built-in.
 
+    // The handshake says the renderer speaks the protocol, not that it said
+    // anything with it: without content records there is nothing to lay out.
+    let has_hunks = diff.file_diffs.iter().any(|file| !file.hunks.is_empty());
+    let annotated_a_line = parsed
+        .lines
+        .iter()
+        .flat_map(|line| &line.records)
+        .any(|record| record.kind.is_content());
+    if has_hunks && !annotated_a_line {
+        return None;
+    }
+
     Some(rendered_diff_items(
         diff,
         &parsed.lines,

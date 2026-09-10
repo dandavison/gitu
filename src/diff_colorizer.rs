@@ -55,6 +55,17 @@ pub(crate) enum LineKind {
     Commit,
 }
 
+impl LineKind {
+    /// Whether the row is a line of the diff itself, rather than one of the
+    /// renderer's own header or decoration rows.
+    pub(crate) fn is_content(self) -> bool {
+        matches!(
+            self,
+            LineKind::Context | LineKind::Added | LineKind::Deleted
+        )
+    }
+}
+
 /// A run of rendered log rows belonging to one commit, as split by the `C`
 /// records: a record starts a new block and the rows that follow it, up to the
 /// next record, are that commit's.
