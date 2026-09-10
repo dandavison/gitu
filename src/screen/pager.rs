@@ -39,9 +39,14 @@ pub(crate) fn create(
                 return Ok(items::plain_rows(&patch));
             }
 
-            Ok(items::create_diff_items(
+            // `git show` and `git log -p` open with the commit their diff is
+            // of. It belongs to no file, so it is shown as it arrived, above
+            // the diff that gitu does structure.
+            let mut items = items::plain_rows_before_first_file_diff(&patch);
+            items.extend(items::create_diff_items(
                 &config, &params, &diff, 0, false, None,
-            ))
+            ));
+            Ok(items)
         }),
     )
 }
