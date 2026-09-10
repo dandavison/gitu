@@ -70,6 +70,21 @@ fn renderer_features_offers_the_configured_ones() {
     snapshot!(setup_clone!(), "|");
 }
 
+/// The features the user defined for themselves are theirs to choose from too,
+/// without their having to name them to gitu as well.
+#[test]
+fn renderer_features_offers_those_defined_in_git_config() {
+    let mut ctx = setup_clone!();
+    run(
+        &ctx.dir,
+        &["git", "config", "delta.my-theme.syntax-theme", "Nord"],
+    );
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("|my-theme<enter>"));
+    assert_eq!(&*app.state.features, ["my-theme".to_string()]);
+}
+
 #[test]
 fn choosing_a_renderer_feature_marks_it() {
     // Picking `side-by-side` turns it on; re-opening shows it marked, and
