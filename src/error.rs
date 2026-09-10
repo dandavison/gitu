@@ -13,6 +13,8 @@ pub enum Error {
     FileWatcher(notify::Error),
     ReadRebaseStatusFile(io::Error),
     ReadRebaseTodo(io::Error),
+    ReadPipedInput(io::Error),
+    PagerWithoutInput,
     WriteRebaseTodo(io::Error),
     ReadBranchName(io::Error),
     BranchNameUtf8(Utf8Error),
@@ -70,6 +72,12 @@ impl Display for Error {
         match self {
             Error::StashList(e) => f.write_fmt(format_args!("Couldn't list stash: {e}")),
             Error::ReadLog(e) => f.write_fmt(format_args!("Couldn't read log: {e}")),
+            Error::ReadPipedInput(e) => {
+                f.write_fmt(format_args!("Couldn't read the piped input: {e}"))
+            }
+            Error::PagerWithoutInput => {
+                f.write_str("--pager expects a patch on stdin, e.g. `git show | gitu --pager`")
+            }
             Error::ReadRebaseTodo(e) => {
                 f.write_fmt(format_args!("Couldn't read the rebase todo list: {e}"))
             }

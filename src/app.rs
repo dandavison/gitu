@@ -83,12 +83,17 @@ impl App {
         args: &cli::Args,
         config: Arc<Config>,
         enable_async_cmds: bool,
+        piped_patch: Option<String>,
     ) -> Res<Self> {
         let params = RenderParams {
             size,
             features: Rc::from([]),
         };
         let screens = match args.command {
+            // `--pager`: the patch is already in hand, whatever git ran to make it.
+            _ if let Some(patch) = piped_patch => {
+                vec![screen::pager::create(Arc::clone(&config), params, patch)?]
+            }
             Some(cli::Commands::Show { ref reference }) => {
                 vec![screen::show::create(
                     Arc::clone(&config),

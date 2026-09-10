@@ -457,6 +457,21 @@ fn rendered_diff_items(
     items
 }
 
+/// Colored text as one row per line, keeping the colors it arrived with. For
+/// output that offers no structure to navigate — a grep, a blame, a plain
+/// `diff -u`, anything that isn't a git patch — this is all there is to show.
+pub(crate) fn plain_rows(text: &str) -> Vec<Item> {
+    crate::diff_colorizer::parse_ansi_lines(text)
+        .lines
+        .iter()
+        .map(|line| Item {
+            depth: 0,
+            rendered: Some(Rc::new(rendered_spans(line))),
+            ..Default::default()
+        })
+        .collect()
+}
+
 /// The colorizer's styled runs for a line, as owned `(text, style)` spans with
 /// tabs expanded (matching the built-in hunk-line rendering).
 fn rendered_spans(line: &crate::diff_colorizer::ParsedLine) -> RenderedRow {

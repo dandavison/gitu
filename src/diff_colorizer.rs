@@ -271,6 +271,17 @@ fn feature_overlay(features: &[String]) -> Option<String> {
     Some(format!("+{}", features.join(" ")))
 }
 
+/// `text` with its escape sequences removed, as the plain text a parser needs.
+/// git colours what it writes to a pager, and a diff parser reads nothing
+/// through the escapes.
+pub(crate) fn strip_ansi(text: &str) -> String {
+    parse_ansi_lines(text)
+        .lines
+        .iter()
+        .flat_map(|line| [line.text.as_str(), "\n"])
+        .collect()
+}
+
 /// Parse ANSI-colored text into per-line styled runs, capturing any OSC-1717
 /// diff-line-metadata records the renderer emitted.
 pub(crate) fn parse_ansi_lines(output: &str) -> ParsedOutput {

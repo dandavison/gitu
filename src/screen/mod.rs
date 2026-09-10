@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 pub(crate) mod blame;
 pub(crate) mod log;
+pub(crate) mod pager;
 pub(crate) mod rebase_todo;
 pub(crate) mod show;
 pub(crate) mod show_refs;
@@ -488,6 +489,16 @@ impl Screen {
 
     pub(crate) fn is_collapsed(&self, item: &Item) -> bool {
         self.collapsed.contains(&item.id)
+    }
+
+    /// The text of each row, for asserting on what a screen shows.
+    #[cfg(test)]
+    pub(crate) fn row_texts(&self) -> Vec<String> {
+        self.items
+            .iter()
+            .filter_map(|item| item.rendered.as_ref())
+            .map(|row| row.iter().map(|(text, _)| text.as_str()).collect())
+            .collect()
     }
 
     pub(crate) fn get_selected_item(&self) -> &Item {

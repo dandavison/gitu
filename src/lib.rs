@@ -31,6 +31,7 @@ use git2::Repository;
 use items::Item;
 use ops::Action;
 use std::{
+    io::{self, IsTerminal},
     path::{Path, PathBuf},
     process::Command,
     rc::Rc,
@@ -87,12 +88,15 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
     let dir = find_git_dir()?;
     let repo = open_repo(&dir)?;
 
+    let piped_patch = args.pager.then(read_piped_patch).transpose()?;
+
     let mut app = app::App::create(
         Rc::new(repo),
         term.size().map_err(Error::Term)?,
         args,
         config,
         true,
+        piped_patch,
     )?;
 
     if let Some(keys_string) = &args.keys {
@@ -114,6 +118,16 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
     app.run(term, Duration::from_millis(100))?;
 
     Ok(app.state.exit_code)
+}
+
+/// The patch git piped to us as its pager. Reading the terminal instead would
+/// wait for input that is never coming, so that is refused outright.
+fn read_piped_patch() -> Res<String> {
+    if io::stdin().is_terminal() {
+        return Err(Error::PagerWithoutInput);
+    }
+
+    io::read_to_string(io::stdin()).map_err(Error::ReadPipedInput)
 }
 
 fn open_repo(dir: &Path) -> Res<Repository> {

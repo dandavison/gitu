@@ -21,6 +21,11 @@ pub struct Args {
     #[clap(long, action)]
     pub print: bool,
 
+    /// Read a patch on stdin and browse it, for use as git's pager:
+    ///     GIT_PAGER='gitu --pager' git show
+    #[clap(long, action, verbatim_doc_comment)]
+    pub pager: bool,
+
     /// Enable logging to 'gitu.log'
     #[clap(long, action)]
     pub log: bool,
