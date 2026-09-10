@@ -302,14 +302,20 @@ fn rendered_diff_items(
     // draws its own file header — as are the renderer's blank spacer rows.
     let mut headers_by_hunk: HashMap<(usize, usize), Vec<RenderedRow>> = HashMap::new();
     let mut content_by_hunk: HashMap<(usize, usize), Vec<Item>> = HashMap::new();
+    // The content line the previous row belonged to; a row repeating it is a
+    // wrapped continuation of it. Cleared by every other kind of row, so only a
+    // consecutive run counts as one line.
+    let mut last_content: Option<(usize, usize, usize)> = None;
 
     for line in lines {
         let Some(first) = line.records.first() else {
+            last_content = None;
             continue; // Un-annotated decoration (dividers): dropped.
         };
         match first.kind {
-            LineKind::FileHeader | LineKind::Commit => {}
+            LineKind::FileHeader | LineKind::Commit => last_content = None,
             LineKind::HunkHeader => {
+                last_content = None;
                 if line.text.trim().is_empty() {
                     continue;
                 }
@@ -336,28 +342,44 @@ fn rendered_diff_items(
                     .map(|(_, _, li)| li)
                     .collect();
                 let hunk_hash = hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]);
+                let rows = content_by_hunk.entry((file_i, hunk_i)).or_default();
+
+                // A renderer that wraps a long line emits a row per screen line,
+                // re-emitting the same record on each. They are one diff line, so
+                // the first takes the cursor and the rest nest under it.
+                let continues_previous = last_content
+                    .replace((file_i, hunk_i, line_i))
+                    .is_some_and(|previous| previous == (file_i, hunk_i, line_i));
+                if continues_previous {
+                    rows.push(Item {
+                        id: hunk_hash,
+                        depth: depth + 3,
+                        unselectable: true,
+                        rendered: Some(Rc::new(rendered_spans(line))),
+                        ..Default::default()
+                    });
+                    continue;
+                }
+
                 let line_range = highlight::line_range_iterator(diff.hunk_content(file_i, hunk_i))
                     .nth(line_i)
                     .map(|(range, _)| range)
                     .unwrap_or_default();
-                content_by_hunk
-                    .entry((file_i, hunk_i))
-                    .or_default()
-                    .push(Item {
-                        id: hunk_hash,
-                        depth: depth + 2,
-                        unselectable: matches!(first.kind, LineKind::Context),
-                        data: ItemData::HunkLine {
-                            diff: Rc::clone(diff),
-                            file_i,
-                            hunk_i,
-                            line_i,
-                            line_range,
-                            line_indices,
-                        },
-                        rendered: Some(Rc::new(rendered_spans(line))),
-                        ..Default::default()
-                    });
+                rows.push(Item {
+                    id: hunk_hash,
+                    depth: depth + 2,
+                    unselectable: matches!(first.kind, LineKind::Context),
+                    data: ItemData::HunkLine {
+                        diff: Rc::clone(diff),
+                        file_i,
+                        hunk_i,
+                        line_i,
+                        line_range,
+                        line_indices,
+                    },
+                    rendered: Some(Rc::new(rendered_spans(line))),
+                    ..Default::default()
+                });
             }
         }
     }
@@ -1012,5 +1034,39 @@ mod tests {
             vec![(2, false), (3, true)],
             "the wrapped remainder is not a second selectable diff line"
         );
+    }
+
+    /// However many rows a line wraps to, they are still one line: each is a
+    /// continuation of the line, not of the row above it.
+    #[test]
+    fn a_line_wrapping_to_several_rows_stays_one_line() {
+        let diff = diff_from(DIFF);
+        let row = "\x1b]1717;1;a;2;;f.rs\x1b\\part\n";
+        let lines = parse_ansi_lines(&format!("\x1b]1717;1\x1b\\\n{}", row.repeat(3))).lines;
+
+        let items = rendered_diff_items(&diff, &lines, 0, false, None);
+
+        assert_eq!(
+            hunk_line_rows(&items),
+            vec![(2, false), (3, true), (3, true)]
+        );
+    }
+
+    /// Distinct lines that happen to be adjacent are not continuations.
+    #[test]
+    fn consecutive_rows_for_different_lines_are_both_selectable() {
+        let diff = diff_from(DIFF);
+        let lines = parse_ansi_lines(
+            "\x1b]1717;1\x1b\\\n\
+             \x1b]1717;1;a;2;;f.rs\x1b\\+added\n\
+             \x1b]1717;1;c;1;;f.rs\x1b\\ keep\n",
+        )
+        .lines;
+
+        let items = rendered_diff_items(&diff, &lines, 0, false, None);
+
+        // The context row is unselectable for its own reason, but sits at the
+        // same depth: it is a diff line, not a continuation.
+        assert_eq!(hunk_line_rows(&items), vec![(2, false), (2, true)]);
     }
 }
