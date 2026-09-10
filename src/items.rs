@@ -267,8 +267,6 @@ fn create_rendered_diff_items(
     default_collapsed: bool,
     commit: Option<String>,
 ) -> Option<Vec<Item>> {
-    use std::collections::HashMap;
-
     let output = crate::diff_colorizer::run(
         &config.general.diff_colorizer.command,
         Some(&diff.text),
@@ -278,6 +276,25 @@ fn create_rendered_diff_items(
     let parsed = crate::diff_colorizer::parse_ansi_lines(&output);
     parsed.protocol_version?; // Not an OSC-1717 renderer: fall back to built-in.
 
+    Some(rendered_diff_items(
+        diff,
+        &parsed.lines,
+        depth,
+        default_collapsed,
+        commit,
+    ))
+}
+
+/// Lay the renderer's rows out under gitu's file/hunk structure. Split from
+/// [`create_rendered_diff_items`] so the mapping can be exercised on rows
+/// without running a renderer.
+fn rendered_diff_items(
+    diff: &Rc<Diff>,
+    lines: &[crate::diff_colorizer::ParsedLine],
+    depth: usize,
+    default_collapsed: bool,
+    commit: Option<String>,
+) -> Vec<Item> {
     use crate::diff_colorizer::LineKind;
 
     // Per hunk: the renderer's own hunk-header rows (`h`) to display in place of
@@ -286,7 +303,7 @@ fn create_rendered_diff_items(
     let mut headers_by_hunk: HashMap<(usize, usize), Vec<RenderedRow>> = HashMap::new();
     let mut content_by_hunk: HashMap<(usize, usize), Vec<Item>> = HashMap::new();
 
-    for line in &parsed.lines {
+    for line in lines {
         let Some(first) = line.records.first() else {
             continue; // Un-annotated decoration (dividers): dropped.
         };
@@ -394,7 +411,7 @@ fn create_rendered_diff_items(
             }
         }
     }
-    Some(items)
+    items
 }
 
 /// The colorizer's styled runs for a line, as owned `(text, style)` spans with
@@ -941,4 +958,59 @@ pub(crate) fn hash<T: Hash>(x: T) -> ItemId {
     let mut hasher = DefaultHasher::new();
     x.hash(&mut hasher);
     hasher.finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::diff_colorizer::parse_ansi_lines;
+    use crate::git::diff::{Diff, DiffType};
+
+    const DIFF: &str = "diff --git a/f.rs b/f.rs\n\
+                        index 1..2 100644\n\
+                        --- a/f.rs\n\
+                        +++ b/f.rs\n\
+                        @@ -1,2 +1,2 @@\n\
+                        \x20keep\n\
+                        +added\n";
+
+    fn diff_from(text: &str) -> Rc<Diff> {
+        Rc::new(Diff {
+            text: text.to_string(),
+            diff_type: DiffType::WorkdirToIndex,
+            file_diffs: crate::gitu_diff::Parser::new(text).parse_diff().unwrap(),
+            commit: None,
+        })
+    }
+
+    fn hunk_line_rows(items: &[Item]) -> Vec<(usize, bool)> {
+        items
+            .iter()
+            .skip_while(|item| !matches!(item.data, ItemData::HunkLine { .. }))
+            .map(|item| (item.depth, item.unselectable))
+            .collect()
+    }
+
+    /// A renderer that wraps a long line emits several rows for it, re-emitting
+    /// the same record on each (OSC-1717 §6.3). Those continuation rows are one
+    /// diff line, so only the first takes the cursor; the rest nest under it, as
+    /// a hunk's extra header rows do.
+    #[test]
+    fn wrapped_row_continuations_nest_under_their_line() {
+        let diff = diff_from(DIFF);
+        let lines = parse_ansi_lines(
+            "\x1b]1717;1\x1b\\\n\
+             \x1b]1717;1;a;2;;f.rs\x1b\\+added the first part of a long line\n\
+             \x1b]1717;1;a;2;;f.rs\x1b\\ and its wrapped remainder\n",
+        )
+        .lines;
+
+        let items = rendered_diff_items(&diff, &lines, 0, false, None);
+
+        assert_eq!(
+            hunk_line_rows(&items),
+            vec![(2, false), (3, true)],
+            "the wrapped remainder is not a second selectable diff line"
+        );
+    }
 }
