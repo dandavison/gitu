@@ -138,6 +138,51 @@ mod tests {
         );
     }
 
+    /// A patch from `git show` opens with the commit it is the diff of. That is
+    /// not part of any file's diff, and dropping it loses who wrote the change
+    /// and why.
+    #[test]
+    fn a_commit_patch_keeps_its_message_above_the_diff() {
+        let ctx = repo_setup_clone!();
+        let patch = format!(
+            "commit 0123456789abcdef\n\
+                             Author: Author Name <author@email.com>\n\
+                             \n\
+                             \x20   add initial-file\n\
+                             \n\
+                             {PATCH}"
+        );
+
+        let screen = create(
+            Arc::new(config::init_test_config().unwrap()),
+            &ctx.local_repo,
+            RenderParams {
+                size: ratatui::layout::Size::new(80, 20),
+                features: Rc::from([]),
+            },
+            patch.clone(),
+        )
+        .unwrap();
+
+        let rows = screen.row_texts();
+        assert!(
+            rows.starts_with(&[
+                "commit 0123456789abcdef".to_string(),
+                "Author: Author Name <author@email.com>".to_string(),
+                String::new(),
+                "    add initial-file".to_string(),
+                String::new(),
+            ]),
+            "got {rows:?}"
+        );
+        assert!(
+            items_of(&ctx.local_repo, &patch)
+                .iter()
+                .any(|data| matches!(data, ItemData::HunkLine { .. })),
+            "the diff below it is still a diff"
+        );
+    }
+
     /// Input that is not a git patch offers no structure rather than failing.
     #[test]
     fn output_that_is_not_a_patch_yields_no_files() {
