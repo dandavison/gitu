@@ -84,6 +84,42 @@ fn a_staged_hunk_leaves_the_view_it_was_staged_from() {
     );
 }
 
+fn twenty_lines(tenth: &str) -> String {
+    (1..=20)
+        .map(|i| {
+            if i == 10 {
+                format!("{tenth}\n")
+            } else {
+                format!("line {i}\n")
+            }
+        })
+        .collect()
+}
+
+/// A diff gitu can ask git for again can be asked for differently: the context
+/// around a change is a property of the question, not of the answer.
+#[test]
+fn widening_the_context_asks_git_for_more_of_the_file() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", &twenty_lines("line 10"));
+    fs::write(ctx.dir.join("firstfile"), twenty_lines("changed")).unwrap();
+
+    let patch = run(&ctx.dir, &["git", "diff"]);
+    let mut app = ctx.init_app_with_patch(patch);
+    assert!(
+        !ctx.redact_buffer().contains("line 2 "),
+        "three lines of context already reach line 2"
+    );
+
+    ctx.update(&mut app, keys("U-U8<enter>"));
+
+    assert!(
+        ctx.redact_buffer().contains("line 2 "),
+        "the diff was not re-asked for:\n{}",
+        ctx.redact_buffer()
+    );
+}
+
 /// Folding everything leaves one folded thing, not a stack of them: opening a
 /// file shows the diff inside it, rather than another thing to open.
 #[test]
