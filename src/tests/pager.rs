@@ -344,6 +344,44 @@ fn a_raw_log_becomes_a_log_view_when_the_renderer_marks_commits() {
     );
 }
 
+/// A commit whose message is taller than the screen leaves a run of rows with
+/// nothing to select on it that is longer than a page. Paging into that run
+/// must not be pulled back onto the commit above it: holding space reaches the
+/// end of the stream.
+#[test]
+fn paging_past_a_commit_taller_than_the_screen_reaches_the_end() {
+    let mut ctx = setup_clone!();
+    let body = (1..=30).fold(String::new(), |mut acc, i| {
+        use std::fmt::Write as _;
+
+        writeln!(acc, "body line {i}").unwrap();
+        acc
+    });
+    fs::write(ctx.dir.join("tallfile"), "testing\n").unwrap();
+    run(&ctx.dir, &["git", "add", "tallfile"]);
+    run(
+        &ctx.dir,
+        &["git", "commit", "-m", &format!("a tall commit\n\n{body}")],
+    );
+
+    ctx.config().general.diff_colorizer.enabled = true;
+    ctx.config().general.diff_colorizer.command = [
+        "awk",
+        r#"/^commit /{printf "\033]1717;1;C;;;%s\033\\", $2} {print}"#,
+    ]
+    .map(String::from)
+    .to_vec();
+
+    let mut app = ctx.init_app_with_patch(run(&ctx.dir, &["git", "log"]));
+    ctx.update(&mut app, keys(&"<space>".repeat(10)));
+
+    let buffer = ctx.redact_buffer();
+    assert!(
+        buffer.contains("add initial-file"),
+        "paging stalled before the end:\n{buffer}"
+    );
+}
+
 fn offers(app: &App, op: Op) -> bool {
     let item = app.state.screens.last().unwrap().get_selected_item();
     assert!(
