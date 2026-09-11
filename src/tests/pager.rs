@@ -120,6 +120,28 @@ fn widening_the_context_asks_git_for_more_of_the_file() {
     );
 }
 
+/// A commit's patch says which commit it is, so gitu can ask git for it again
+/// — and ask differently. This is the case that matters for reading a commit
+/// someone else wrote.
+#[test]
+fn widening_the_context_of_a_piped_commit() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", &twenty_lines("line 10"));
+    commit(&ctx.dir, "firstfile", &twenty_lines("changed"));
+
+    let patch = run(&ctx.dir, &["git", "show", "HEAD"]);
+    let mut app = ctx.init_app_with_patch(patch);
+    assert!(!ctx.redact_buffer().contains("line 2 "));
+
+    ctx.update(&mut app, keys("U-U8<enter>"));
+
+    assert!(
+        ctx.redact_buffer().contains("line 2 "),
+        "the commit was not re-asked for:\n{}",
+        ctx.redact_buffer()
+    );
+}
+
 /// Folding everything leaves one folded thing, not a stack of them: opening a
 /// file shows the diff inside it, rather than another thing to open.
 #[test]
