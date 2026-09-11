@@ -167,7 +167,7 @@ impl OpTrait for DiffContext {
             let answer = app.prompt(
                 term,
                 &PromptParams {
-                    prompt: "Context lines, or W for the whole function",
+                    prompt: "",
                     create_default_value: Box::new(move |_| {
                         Some(match current.as_deref() {
                             Some("-W") => "W".to_owned(),

@@ -648,10 +648,12 @@ impl App {
     }
 
     pub fn prompt(&mut self, term: &mut Term, params: &PromptParams) -> Res<String> {
-        let prompt_text = if let Some(default) = (params.create_default_value)(self) {
-            format!("{} (default {}):", params.prompt, default).into()
-        } else {
-            format!("{}:", params.prompt).into()
+        // A prompt with nothing to say says nothing: the key that opened it
+        // already said what is being answered.
+        let prompt_text = match (params.prompt, (params.create_default_value)(self)) {
+            ("", _) => Cow::Borrowed(""),
+            (prompt, Some(default)) => format!("{prompt} (default {default}):").into(),
+            (prompt, None) => format!("{prompt}:").into(),
         };
 
         if params.hide_menu {
