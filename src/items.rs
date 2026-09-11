@@ -871,11 +871,13 @@ fn commit_block_items(
     references: &[(git2::Commit, Ref)],
     block: &RenderedCommit,
 ) -> Vec<Item> {
+    // A renderer states the commit as git printed it, which is abbreviated in
+    // most log formats, so it is resolved rather than parsed.
     let commit = block
         .oid
         .as_ref()
-        .and_then(|oid| Oid::from_str(oid).ok())
-        .and_then(|oid| repo.find_commit(oid).ok());
+        .and_then(|oid| repo.revparse_single(oid).ok())
+        .and_then(|object| object.peel_to_commit().ok());
 
     let Some(commit) = commit else {
         return block.rows.iter().map(|row| row_item(0, 1, row)).collect();
