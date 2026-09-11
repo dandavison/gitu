@@ -281,10 +281,11 @@ impl App {
                     self.state.current_cmd_log.clear();
                 }
 
-                // The character received in the KeyEvent changes as shift is pressed,
-                // e.g. '/' becomes '?' on a US keyboard, so the modifier is redundant
-                // there. On the other keys it is the only sign shift was held.
-                if matches!(key.code, KeyCode::Char(_)) {
+                // The key received changes as shift is pressed: '/' becomes '?'
+                // on a US keyboard, and tab becomes backtab. The modifier is
+                // redundant there, and on the other keys it is the only sign
+                // shift was held.
+                if matches!(key.code, KeyCode::Char(_) | KeyCode::BackTab) {
                     key.modifiers = key.modifiers.difference(KeyModifiers::SHIFT);
                 }
 
