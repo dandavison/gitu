@@ -142,6 +142,8 @@ pub(crate) enum Op {
     MoveBottom,
     HalfPageUp,
     HalfPageDown,
+    FullPageUp,
+    FullPageDown,
     ScrollViewUp,
     ScrollViewDown,
 
@@ -176,6 +178,8 @@ impl Op {
             Op::MoveParentSection => Box::new(editor::MoveParentSection),
             Op::HalfPageUp => Box::new(editor::HalfPageUp),
             Op::HalfPageDown => Box::new(editor::HalfPageDown),
+            Op::FullPageUp => Box::new(editor::FullPageUp),
+            Op::FullPageDown => Box::new(editor::FullPageDown),
             Op::MoveTop => Box::new(editor::MoveTop),
             Op::MoveBottom => Box::new(editor::MoveBottom),
             Op::ScrollViewUp => Box::new(editor::ScrollViewUp),

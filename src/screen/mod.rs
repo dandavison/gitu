@@ -284,6 +284,14 @@ impl Screen {
         self.scroll_view_down(half_screen);
     }
 
+    pub(crate) fn scroll_view_full_page_up(&mut self) {
+        self.scroll_view_up(self.size.height as usize);
+    }
+
+    pub(crate) fn scroll_view_full_page_down(&mut self) {
+        self.scroll_view_down(self.size.height as usize);
+    }
+
     pub(crate) fn scroll_view_up(&mut self, lines: usize) {
         self.scroll = self.scroll.saturating_sub(lines);
         self.clamp_scroll();

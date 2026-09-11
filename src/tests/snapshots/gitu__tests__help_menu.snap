@@ -19,7 +19,7 @@ expression: ctx.redact_buffer()
  G                Bottom                  A   Cherry-pick                       |
  ctrl+u           Scroll half page up     z   Stash                             |
  ctrl+d           Scroll half page down                                         |
+ pageup           Scroll page up                                                |
+ pagedown         Scroll page down                                              |
  ctrl+y           Scroll view up                                                |
- ctrl+e           Scroll view down                                              |
- g+r              Refresh                                                       |
-styles_hash: 1423d0f93c16b8b0
+styles_hash: 7688de1e4b89d400
