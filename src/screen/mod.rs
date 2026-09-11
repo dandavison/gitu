@@ -295,14 +295,10 @@ impl Screen {
     }
 
     /// Move the view by `lines`, taking the cursor with it: what a page lands
-    /// on is what the next op acts on. The cursor keeps the row it was on,
-    /// then moves to the nearest selectable line.
+    /// on is what the next op acts on. The cursor travels the same distance and
+    /// is held to the page, so it keeps its row while the view moves, and goes
+    /// on alone to the last line once the view has no further to go.
     fn turn_page(&mut self, lines: usize, forwards: bool) {
-        let row = self
-            .cursor
-            .saturating_sub(self.scroll)
-            .min(self.size.height.saturating_sub(1) as usize);
-
         self.scroll = if forwards {
             self.scroll.saturating_add(lines)
         } else {
@@ -311,7 +307,13 @@ impl Screen {
         self.clamp_scroll();
 
         self.anchor = None;
-        self.cursor = self.scroll + row;
+        let last_row = self.scroll + self.size.height.saturating_sub(1) as usize;
+        self.cursor = if forwards {
+            self.cursor.saturating_add(lines)
+        } else {
+            self.cursor.saturating_sub(lines)
+        }
+        .clamp(self.scroll, last_row);
         self.clamp_cursor();
         let nav_mode = self.selected_item_nav_mode();
         self.select_after_page(nav_mode, forwards);
