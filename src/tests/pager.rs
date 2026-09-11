@@ -142,6 +142,25 @@ fn widening_the_context_of_a_piped_commit() {
     );
 }
 
+/// The key already said what is being set, so the prompt says nothing at all:
+/// a line to type on, and no words explaining it every time.
+#[test]
+fn the_context_prompt_says_nothing() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", &twenty_lines("line 10"));
+    fs::write(ctx.dir.join("firstfile"), twenty_lines("changed")).unwrap();
+
+    let patch = run(&ctx.dir, &["git", "diff"]);
+    let mut app = ctx.init_app_with_patch(patch);
+
+    ctx.update(&mut app, keys("U"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(!buffer.contains('\u{203a}'), "{buffer}");
+    assert!(!buffer.contains("Context"), "{buffer}");
+    assert!(!buffer.contains("default"), "{buffer}");
+}
+
 /// The whole function is the other thing worth asking for, and is a letter
 /// rather than a number.
 #[test]
