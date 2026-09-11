@@ -1,4 +1,5 @@
 use super::*;
+use crate::item_data::ItemData;
 
 fn setup(ctx: TestContext) -> TestContext {
     commit(&ctx.dir, "third commit", "");
@@ -254,4 +255,37 @@ fn rendered_log_keeps_the_first_commit_when_the_renderer_greets_on_its_line() {
     let mut app = ctx.init_app();
     ctx.update(&mut app, keys("ll"));
     insta::assert_snapshot!(ctx.redact_buffer());
+}
+
+/// Turning the page takes the cursor with it: the commit selected afterwards is
+/// one of those now on screen, so the next op acts on what is being looked at.
+#[test]
+fn paging_lands_on_a_commit_of_the_new_page() {
+    let mut ctx = setup_clone!();
+    for i in 1..=40 {
+        commit(&ctx.dir, &format!("file-{i:02}"), "");
+    }
+
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("ll"));
+    let top = selected_summary(&app);
+
+    ctx.update(&mut app, keys("<pagedown>"));
+    let paged = selected_summary(&app);
+    assert_ne!(top, paged, "the cursor stayed on the first commit");
+    assert!(
+        ctx.redact_buffer().contains(&paged),
+        "selected {paged} is off screen:\n{}",
+        ctx.redact_buffer()
+    );
+
+    ctx.update(&mut app, keys("<pageup>"));
+    assert_eq!(top, selected_summary(&app), "paging back missed the commit");
+}
+
+fn selected_summary(app: &crate::app::App) -> String {
+    match &app.state.screens.last().unwrap().get_selected_item().data {
+        ItemData::Commit { summary, .. } => summary.clone(),
+        data => panic!("not a commit: {data:?}"),
+    }
 }
