@@ -99,8 +99,10 @@ fn a_page_down_and_a_page_up_come_back() {
     assert_eq!(ctx.redact_buffer(), before, "page up did not come back");
 }
 
+/// Paging through a diff carries the cursor with the view, selecting whatever
+/// row it lands on — a line within a hunk, when that is what is there.
 #[test]
-fn scroll_past_selection() {
+fn paging_carries_the_cursor_into_the_hunk() {
     let (mut ctx, mut app) = setup_scroll(setup_clone!());
     ctx.update(&mut app, keys("<ctrl+d><ctrl+d><ctrl+d>"));
     insta::assert_snapshot!(ctx.redact_buffer());

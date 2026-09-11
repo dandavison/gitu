@@ -278,22 +278,43 @@ impl Screen {
             .unwrap_or(self.cursor)
     }
 
-    pub(crate) fn scroll_view_half_page_up(&mut self) {
-        let half_screen = self.size.height as usize / 2;
-        self.scroll_view_up(half_screen);
+    pub(crate) fn half_page_up(&mut self) {
+        self.turn_page(self.size.height as usize / 2, false);
     }
 
-    pub(crate) fn scroll_view_half_page_down(&mut self) {
-        let half_screen = self.size.height as usize / 2;
-        self.scroll_view_down(half_screen);
+    pub(crate) fn half_page_down(&mut self) {
+        self.turn_page(self.size.height as usize / 2, true);
     }
 
-    pub(crate) fn scroll_view_full_page_up(&mut self) {
-        self.scroll_view_up(self.size.height as usize);
+    pub(crate) fn full_page_up(&mut self) {
+        self.turn_page(self.size.height as usize, false);
     }
 
-    pub(crate) fn scroll_view_full_page_down(&mut self) {
-        self.scroll_view_down(self.size.height as usize);
+    pub(crate) fn full_page_down(&mut self) {
+        self.turn_page(self.size.height as usize, true);
+    }
+
+    /// Move the view by `lines`, taking the cursor with it: what a page lands
+    /// on is what the next op acts on. The cursor keeps the row it was on,
+    /// then moves to the nearest selectable line.
+    fn turn_page(&mut self, lines: usize, forwards: bool) {
+        let row = self
+            .cursor
+            .saturating_sub(self.scroll)
+            .min(self.size.height.saturating_sub(1) as usize);
+
+        self.scroll = if forwards {
+            self.scroll.saturating_add(lines)
+        } else {
+            self.scroll.saturating_sub(lines)
+        };
+        self.clamp_scroll();
+
+        self.anchor = None;
+        self.cursor = self.scroll + row;
+        self.clamp_cursor();
+        let nav_mode = self.selected_item_nav_mode();
+        self.move_from_unselectable(nav_mode);
     }
 
     pub(crate) fn scroll_view_up(&mut self, lines: usize) {
