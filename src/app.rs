@@ -66,6 +66,9 @@ pub(crate) struct State {
     /// Renderer features chosen in-session, overlaying the user's own
     /// configuration. Never written to disk: quitting returns them to it.
     pub features: Rc<[String]>,
+    /// How much of a file to ask git for around each change (`-U8`, `-W`),
+    /// chosen in-session. `None` is git's own default.
+    pub context: Option<Rc<str>>,
     pub clipboard: Option<Clipboard>,
     needs_redraw: bool,
     file_watcher: Option<FileWatcher>,
@@ -88,6 +91,7 @@ impl App {
         let params = RenderParams {
             size,
             features: Rc::from([]),
+            context: None,
         };
         let screens = match args.command {
             // `--pager`: the patch is already in hand, whatever git ran to make it.
@@ -153,6 +157,7 @@ impl App {
                 picker: None,
                 picked_commit: None,
                 features: Rc::from([]),
+                context: None,
                 clipboard,
                 file_watcher: None,
                 needs_redraw: true,
@@ -247,6 +252,7 @@ impl App {
         let features = Rc::clone(&self.state.features);
         for screen in &mut self.state.screens {
             screen.features = Rc::clone(&features);
+            screen.context = self.state.context.clone();
             rebuild(screen)?;
         }
 
@@ -436,6 +442,7 @@ impl App {
         RenderParams {
             size,
             features: Rc::clone(&self.state.features),
+            context: self.state.context.clone(),
         }
     }
 

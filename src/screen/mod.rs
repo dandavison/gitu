@@ -53,6 +53,9 @@ pub(crate) struct Screen {
     /// The renderer features to rebuild with, as chosen in-session. Pushed down
     /// from the app so a screen always renders with the current selection.
     pub(crate) features: Rc<[String]>,
+    /// How much context to ask git for, pushed down from the app as the
+    /// features are.
+    pub(crate) context: Option<Rc<str>>,
     refresh_items: Box<dyn Fn(RenderParams) -> Res<Vec<Item>>>,
     items: Vec<Item>,
     line_index: Vec<usize>,
@@ -82,6 +85,7 @@ impl Screen {
             size: params.size,
             config,
             features: params.features,
+            context: params.context,
             refresh_items,
             items: vec![],
             line_index: vec![],
@@ -352,6 +356,7 @@ impl Screen {
         self.items = (self.refresh_items)(RenderParams {
             size: self.size,
             features: Rc::clone(&self.features),
+            context: self.context.clone(),
         })?;
 
         // A view is legitimately empty — nothing staged, the last hunk staged
@@ -825,6 +830,7 @@ mod tests {
             RenderParams {
                 size: Size::new(80, 40),
                 features: Rc::from([]),
+                context: None,
             },
             Box::new(move |params: RenderParams| {
                 let rows = if params.features.iter().any(|f| f == rows_per_line) {

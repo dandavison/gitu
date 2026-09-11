@@ -38,6 +38,9 @@ pub(crate) struct RenderParams {
     /// Named renderer features overlaying the user's own configuration, chosen
     /// in-session. Empty means their configuration alone.
     pub features: Rc<[String]>,
+    /// How much of a file to ask git for around each change (`-U8`, `-W`),
+    /// chosen in-session. `None` is git's own default.
+    pub context: Option<Rc<str>>,
 }
 
 impl RenderParams {

@@ -40,7 +40,7 @@ pub(crate) fn create(
 enum Source {
     /// A patch recognised as one git can be asked for again: staging a hunk
     /// from it changes what it shows, as it does on the status screen.
-    Live(fn(&Repository) -> Res<Diff>),
+    Live(fn(&Repository, Option<&str>) -> Res<Diff>),
     /// A patch git cannot be asked for again — a commit, two revs, another
     /// repo's. It stays as it came, and gitu structures it.
     Patch { patch: String, diff: Rc<Diff> },
@@ -59,10 +59,10 @@ impl Source {
         let text = crate::diff_colorizer::strip_ansi(&patch);
 
         for ask_git in [
-            git::diff_unstaged as fn(&Repository) -> Res<Diff>,
+            git::diff_unstaged as fn(&Repository, Option<&str>) -> Res<Diff>,
             git::diff_staged,
         ] {
-            if ask_git(repo)?.text == text {
+            if ask_git(repo, None)?.text == text {
                 return Ok(Source::Live(ask_git));
             }
         }
@@ -87,7 +87,11 @@ impl Source {
 
     fn items(&self, config: &Config, repo: &Repository, params: &RenderParams) -> Res<Vec<Item>> {
         match self {
-            Source::Live(ask_git) => Ok(diff_items(config, params, &Rc::new(ask_git(repo)?))),
+            Source::Live(ask_git) => Ok(diff_items(
+                config,
+                params,
+                &Rc::new(ask_git(repo, params.context.as_deref())?),
+            )),
             // `git show` and `git log -p` open with the commit their diff is of.
             // It belongs to no file, so it is shown as it arrived, above the
             // diff that gitu does structure.
@@ -164,6 +168,7 @@ mod tests {
             RenderParams {
                 size: ratatui::layout::Size::new(80, 20),
                 features: Rc::from([]),
+                context: None,
             },
             patch.to_string(),
         )

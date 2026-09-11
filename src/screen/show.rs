@@ -24,7 +24,7 @@ pub(crate) fn create(
         params,
         Box::new(move |params: RenderParams| {
             let commit = git::show_summary(repo.as_ref(), &reference)?;
-            let show = git::show(repo.as_ref(), &reference)?;
+            let show = git::show(repo.as_ref(), &reference, params.context.as_deref())?;
             let details = commit.details.lines();
 
             Ok(iter::once(Item {

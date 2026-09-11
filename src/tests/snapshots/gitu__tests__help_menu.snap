@@ -7,19 +7,19 @@ expression: ctx.redact_buffer()
  Y                Show Refs               b   Branch        tab Fold            |
  |                Renderer features       c   Commit                            |
  backtab          Fold all                f   Fetch                             |
- k/up             Up                      h/? Help                              |
- j/down           Down                    l   Log                               |
- ctrl+k/ctrl+up   Up line                 m   Merge                             |
- ctrl+j/ctrl+down Down line               M   Remote                            |
- shift+up         Select up               F   Pull                              |
- shift+down       Select down             P   Push                              |
- alt+k/alt+up     Prev section            r   Rebase                            |
- alt+j/alt+down   Next section            X   Reset                             |
- alt+h/alt+left   Parent section          V   Revert                            |
- g+g              Top                     A   Cherry-pick                       |
- G                Bottom                  z   Stash                             |
+ U                Diff context            h/? Help                              |
+ k/up             Up                      l   Log                               |
+ j/down           Down                    m   Merge                             |
+ ctrl+k/ctrl+up   Up line                 M   Remote                            |
+ ctrl+j/ctrl+down Down line               F   Pull                              |
+ shift+up         Select up               P   Push                              |
+ shift+down       Select down             r   Rebase                            |
+ alt+k/alt+up     Prev section            X   Reset                             |
+ alt+j/alt+down   Next section            V   Revert                            |
+ alt+h/alt+left   Parent section          A   Cherry-pick                       |
+ g+g              Top                     z   Stash                             |
+ G                Bottom                                                        |
  ctrl+u           Scroll half page up                                           |
  ctrl+d           Scroll half page down                                         |
  pageup           Scroll page up                                                |
- pagedown         Scroll page down                                              |
-styles_hash: ef7add3980ee55e5
+styles_hash: 5690bda976a6694c

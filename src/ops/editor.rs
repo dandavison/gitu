@@ -157,6 +157,51 @@ impl OpTrait for ToggleSection {
     }
 }
 
+/// Ask git for a different amount of the file around each change. The flag
+/// itself is what is edited, so `-W` is available alongside `-U<n>`; anything
+/// else would change the output into something with no hunks to act on.
+pub(crate) struct DiffContext;
+impl OpTrait for DiffContext {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app: &mut App, term: &mut Term| {
+            let current = app.state.context.clone();
+            let flag = app.prompt(
+                term,
+                &PromptParams {
+                    prompt: "Diff context",
+                    create_default_value: Box::new(move |_| {
+                        Some(current.as_deref().unwrap_or(DEFAULT_CONTEXT).to_string())
+                    }),
+                    hide_menu: false,
+                },
+            )?;
+
+            if !is_context_flag(&flag) {
+                app.display_error(format!("Not a context flag: {flag}"));
+                return Ok(());
+            }
+
+            app.state.context = (flag != DEFAULT_CONTEXT).then(|| Rc::from(flag.as_str()));
+            app.rerender_screens()
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Diff context".into()
+    }
+}
+
+/// What git gives without being asked, so asking for it is asking for nothing.
+const DEFAULT_CONTEXT: &str = "-U3";
+
+fn is_context_flag(flag: &str) -> bool {
+    flag == "-W"
+        || flag == "--function-context"
+        || flag
+            .strip_prefix("-U")
+            .is_some_and(|lines| !lines.is_empty() && lines.chars().all(|c| c.is_ascii_digit()))
+}
+
 /// Fold the whole view down to its headings, or open all of it.
 pub(crate) struct ToggleAllSections;
 impl OpTrait for ToggleAllSections {

@@ -113,13 +113,16 @@ pub(crate) fn create(
                 &config,
                 &params,
                 SectionID::UnstagedChanges,
-                &Rc::new(git::diff_unstaged(repo.as_ref())?),
+                &Rc::new(git::diff_unstaged(
+                    repo.as_ref(),
+                    params.context.as_deref(),
+                )?),
             ))
             .chain(create_status_section_items(
                 &config,
                 &params,
                 SectionID::StagedChanges,
-                &Rc::new(git::diff_staged(repo.as_ref())?),
+                &Rc::new(git::diff_staged(repo.as_ref(), params.context.as_deref())?),
             ))
             .chain(create_stash_list_section_items(
                 repo.as_ref(),
