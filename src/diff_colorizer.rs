@@ -85,7 +85,15 @@ pub(crate) fn commit_blocks(lines: &[ParsedLine]) -> Vec<CommitBlock<'_>> {
             .iter()
             .find(|record| record.kind == LineKind::Commit)
         {
-            starts.push((i, Some(record.file.as_str())));
+            let commit = record.file.as_str();
+            let already_open = starts
+                .last()
+                .and_then(|&(_, open)| open)
+                .is_some_and(|open| names_same_commit(open, commit));
+
+            if !already_open {
+                starts.push((i, Some(commit)));
+            }
         } else if starts.is_empty() {
             starts.push((0, None));
         }
@@ -99,6 +107,13 @@ pub(crate) fn commit_blocks(lines: &[ParsedLine]) -> Vec<CommitBlock<'_>> {
             rows: &lines[start..starts.get(n + 1).map_or(lines.len(), |&(next, _)| next)],
         })
         .collect()
+}
+
+/// Whether two ids name the same commit. The host names it as git gave it and
+/// a renderer names it as git printed it, which is usually abbreviated, so one
+/// being a prefix of the other is what "the same" means here.
+fn names_same_commit(one: &str, other: &str) -> bool {
+    !one.is_empty() && (one.starts_with(other) || other.starts_with(one))
 }
 
 /// The patch-space identity of a rendered line, recovered from its OSC-1717
