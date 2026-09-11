@@ -27,6 +27,31 @@ fn scroll_down() {
     insta::assert_snapshot!(ctx.redact_buffer());
 }
 
+/// A page is a whole viewport, which is two half pages.
+#[test]
+fn a_page_is_a_whole_viewport() {
+    let (mut halves, mut halves_app) = setup_scroll(TestContext::setup_clone("page_in_halves"));
+    halves.update(&mut halves_app, keys("<ctrl+d><ctrl+d>"));
+
+    let (mut page, mut page_app) = setup_scroll(TestContext::setup_clone("page_at_once"));
+    page.update(&mut page_app, keys("<pagedown>"));
+
+    assert_eq!(page.redact_buffer(), halves.redact_buffer());
+}
+
+#[test]
+fn a_page_down_and_a_page_up_come_back() {
+    let (mut ctx, mut app) = setup_scroll(setup_clone!());
+    let before = ctx.redact_buffer();
+
+    ctx.update(&mut app, keys("<pagedown>"));
+    let paged = ctx.redact_buffer();
+    ctx.update(&mut app, keys("<pageup>"));
+
+    assert_ne!(paged, before, "page down did not scroll");
+    assert_eq!(ctx.redact_buffer(), before, "page up did not come back");
+}
+
 #[test]
 fn scroll_past_selection() {
     let (mut ctx, mut app) = setup_scroll(setup_clone!());
