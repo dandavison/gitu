@@ -479,18 +479,6 @@ pub(crate) fn plain_rows(text: &str) -> Vec<Item> {
     rows_of(crate::diff_colorizer::parse_ansi_lines(text).lines.iter())
 }
 
-/// The rows of `text` up to its first file diff: a commit's own header and
-/// message, when the patch is one of `git show`. Colors are kept, so under git
-/// the commit line arrives bold as git wrote it.
-pub(crate) fn plain_rows_before_first_file_diff(text: &str) -> Vec<Item> {
-    rows_of(
-        crate::diff_colorizer::parse_ansi_lines(text)
-            .lines
-            .iter()
-            .take_while(|line| !line.text.starts_with("diff --git ")),
-    )
-}
-
 fn rows_of<'a>(lines: impl Iterator<Item = &'a crate::diff_colorizer::ParsedLine>) -> Vec<Item> {
     lines
         .map(|line| Item {
