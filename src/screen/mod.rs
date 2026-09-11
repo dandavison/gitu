@@ -302,22 +302,27 @@ impl Screen {
         self.clamp_scroll();
     }
 
-    /// Fold every section, or open them all when none is folded. The cursor can
-    /// end up inside what was just folded away, so it is re-placed afterwards.
+    /// Fold the view down to its outermost headings, or open all of it when
+    /// they are already folded. Only the outermost are folded, and everything
+    /// within them is opened, so that opening one shows what is inside it
+    /// rather than another folded thing. The cursor can end up inside what was
+    /// folded away, so it is re-placed afterwards.
     pub(crate) fn toggle_all_sections(&mut self) {
         self.anchor = None;
 
-        let sections: Vec<ItemId> = self
-            .items
-            .iter()
-            .filter(|item| item.data.is_section())
+        let sections = || self.items.iter().filter(|item| item.data.is_section());
+        let Some(outermost) = sections().map(|item| item.depth).min() else {
+            return;
+        };
+        let headings: Vec<ItemId> = sections()
+            .filter(|item| item.depth == outermost)
             .map(|item| item.id)
             .collect();
 
-        if sections.iter().all(|id| self.collapsed.contains(id)) {
-            self.collapsed.clear();
-        } else {
-            self.collapsed.extend(sections);
+        let folded = headings.iter().all(|id| self.collapsed.contains(id));
+        self.collapsed.clear();
+        if !folded {
+            self.collapsed.extend(headings);
         }
 
         self.update_line_index();
