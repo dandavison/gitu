@@ -348,6 +348,17 @@ impl Screen {
             size: self.size,
             features: Rc::clone(&self.features),
         })?;
+
+        // A view is legitimately empty — nothing staged, the last hunk staged
+        // away, a branch with no commits — and a screen still has to answer
+        // what is selected. So it has a row, which nothing can act on.
+        if self.items.is_empty() {
+            self.items.push(Item {
+                unselectable: true,
+                ..Default::default()
+            });
+        }
+
         self.update_line_index();
         self.update_cursor(nav_mode);
         Ok(())
