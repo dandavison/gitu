@@ -314,7 +314,25 @@ impl Screen {
         self.cursor = self.scroll + row;
         self.clamp_cursor();
         let nav_mode = self.selected_item_nav_mode();
+        self.select_after_page(nav_mode, forwards);
+    }
+
+    /// Place the cursor on a selectable line, looking first the way the page
+    /// went, and leave the view where the page put it. Fitting the cursor would
+    /// scroll back onto the line it came from, so a run of lines with nothing
+    /// to select on it — a commit message taller than the screen — could never
+    /// be turned past.
+    fn select_after_page(&mut self, nav_mode: NavMode, forwards: bool) {
+        if self.nav_filter(self.cursor, nav_mode) {
+            return;
+        }
+
+        let scroll = self.scroll;
+        if forwards {
+            self.move_next(nav_mode);
+        }
         self.move_from_unselectable(nav_mode);
+        self.scroll = scroll;
     }
 
     pub(crate) fn scroll_view_up(&mut self, lines: usize) {
