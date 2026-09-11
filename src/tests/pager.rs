@@ -162,6 +162,30 @@ fn a_log_naming_its_commits_by_abbreviation_is_navigable() {
     );
 }
 
+/// A view is legitimately empty: `git diff --cached` with nothing staged is no
+/// bytes at all. A screen with no rows must still answer what is selected, or
+/// the next keypress indexes into nothing.
+#[test]
+fn a_key_press_on_an_empty_view_does_nothing() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app_with_patch(String::new());
+
+    ctx.update(&mut app, keys("j"));
+}
+
+/// The same view, reached the other way: everything it showed has been staged.
+#[test]
+fn a_key_press_after_staging_everything_does_nothing() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\n").unwrap();
+
+    let patch = run(&ctx.dir, &["git", "diff"]);
+    let mut app = ctx.init_app_with_patch(patch);
+
+    ctx.update(&mut app, keys("jsj"));
+}
+
 /// Output gitu can find no structure in is still the renderer's to draw. Shown
 /// as it arrived it would carry git's colours, and setting gitu as the pager
 /// would cost the rendering of everything that is not a diff.
