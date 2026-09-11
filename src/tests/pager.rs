@@ -134,6 +134,34 @@ fn a_piped_log_with_commit_records_is_navigable() {
     );
 }
 
+/// A renderer names the commit as git printed it, and most log formats print
+/// `%h`. An id gitu cannot resolve costs more than the commit ops: the rows
+/// fall back to being decoration, and the cursor cannot move at all.
+#[test]
+fn a_log_naming_its_commits_by_abbreviation_is_navigable() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+    let short = run(&ctx.dir, &["git", "rev-parse", "--short", "HEAD"])
+        .trim()
+        .to_string();
+    let oid = run(&ctx.dir, &["git", "rev-parse", "HEAD"])
+        .trim()
+        .to_string();
+
+    let app = ctx.init_app_with_patch(format!(
+        "\x1b]1717;1;C;;;{short}\x1b\\▸ {short} Author Name\n\
+         \n\
+         \x20   add firstfile\n"
+    ));
+
+    let item = app.state.screens.last().unwrap().get_selected_item();
+    assert!(
+        matches!(&item.data, crate::item_data::ItemData::Commit { oid: o, .. } if *o == oid),
+        "got {:?}",
+        item.data
+    );
+}
+
 /// Output gitu can find no structure in is still the renderer's to draw. Shown
 /// as it arrived it would carry git's colours, and setting gitu as the pager
 /// would cost the rendering of everything that is not a diff.

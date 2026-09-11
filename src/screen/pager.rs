@@ -245,6 +245,27 @@ mod tests {
         );
     }
 
+    /// Unstructured rows are rows like any other: each one takes the cursor.
+    #[test]
+    fn the_cursor_moves_between_unstructured_rows() {
+        let ctx = repo_setup_clone!();
+        let mut screen = screen_of(&ctx, "one\ntwo\nthree\n");
+        assert_eq!(screen.row_texts().len(), 3, "{:?}", screen.row_texts());
+
+        screen.select_next(crate::screen::NavMode::IncludeSubLines);
+
+        assert_eq!(selected_row(&screen), "two");
+    }
+
+    fn selected_row(screen: &Screen) -> String {
+        screen
+            .get_selected_item()
+            .rendered
+            .as_ref()
+            .map(|row| row.iter().map(|(text, _)| text.as_str()).collect())
+            .unwrap_or_default()
+    }
+
     /// Input that is not a git patch offers no structure rather than failing.
     #[test]
     fn output_that_is_not_a_patch_yields_no_files() {
