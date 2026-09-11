@@ -166,7 +166,7 @@ blame.line_num = { mods = "DIM" }
 blame.code_line = { mods = "DIM" }
 
 [bindings]
-root.quit = ["q", "esc"]
+root.quit = ["q", "esc", "left"]
 root.refresh = ["g+r"]
 root.toggle_section = ["tab"]
 root.toggle_all_sections = ["backtab"]
@@ -192,7 +192,7 @@ root.move_bottom = ["G"]
 root.scroll_view_up = ["ctrl+y"]
 root.scroll_view_down = ["ctrl+e"]
 root.show_refs = ["Y"]
-root.show = ["enter"]
+root.show = ["enter", "right"]
 root.discard = ["K"]
 root.stage = ["s"]
 root.unstage = ["u"]
