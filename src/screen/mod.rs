@@ -857,6 +857,10 @@ mod tests {
     /// `wide` feature is on — standing in for a renderer laying the same diff
     /// out differently.
     fn screen_of(rows_per_line: &'static str) -> Screen {
+        screen_of_lines(rows_per_line, 3, 40)
+    }
+
+    fn screen_of_lines(rows_per_line: &'static str, lines: usize, height: u16) -> Screen {
         let diff = Rc::new(Diff {
             text: DIFF.to_string(),
             diff_type: DiffType::WorkdirToIndex,
@@ -867,7 +871,7 @@ mod tests {
         Screen::new(
             Arc::new(config::init_test_config().unwrap()),
             RenderParams {
-                size: Size::new(80, 40),
+                size: Size::new(80, height),
                 features: Rc::from([]),
                 context: None,
             },
@@ -877,7 +881,7 @@ mod tests {
                 } else {
                     1
                 };
-                Ok(diff_items(&diff, rows))
+                Ok(diff_items(&diff, rows, lines))
             }),
         )
         .unwrap()
@@ -885,7 +889,7 @@ mod tests {
 
     /// Items for the diff: a file, a hunk, then each content line drawn over
     /// `rows` rows (the extra ones nesting, as wrapped rows do).
-    fn diff_items(diff: &Rc<Diff>, rows: usize) -> Vec<Item> {
+    fn diff_items(diff: &Rc<Diff>, rows: usize, lines: usize) -> Vec<Item> {
         let mut items = vec![
             Item {
                 depth: 0,
@@ -907,7 +911,7 @@ mod tests {
             },
         ];
 
-        for line_i in 0..3 {
+        for line_i in 0..lines {
             for row in 0..rows {
                 let rendered: RenderedRow =
                     vec![(format!("line {line_i} row {row}"), Style::new())];
@@ -939,6 +943,21 @@ mod tests {
             ItemData::HunkLine { line_i, .. } => Some(line_i),
             _ => None,
         }
+    }
+
+    /// The view stops once the last page is on screen, but the cursor does not:
+    /// it goes on to the end of the content, so holding the page key arrives at
+    /// the last line rather than at whichever one it was on when the view ran
+    /// out of room.
+    #[test]
+    fn paging_on_past_the_last_page_reaches_the_last_line() {
+        let mut screen = screen_of_lines("wide", 50, 20);
+
+        for _ in 0..10 {
+            screen.full_page_down();
+        }
+
+        assert_eq!(selected_line(&screen), Some(49));
     }
 
     #[test]
