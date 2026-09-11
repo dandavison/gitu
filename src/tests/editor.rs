@@ -73,6 +73,19 @@ fn a_page_is_a_whole_viewport() {
     assert_eq!(page.redact_buffer(), halves.redact_buffer());
 }
 
+/// Space is how every pager since `more` turns the page, and what magit binds
+/// it to; backspace is its other half.
+#[test]
+fn space_turns_the_page() {
+    let (mut keys_ctx, mut keys_app) = setup_scroll(TestContext::setup_clone("page_by_key"));
+    keys_ctx.update(&mut keys_app, keys("<pagedown><pagedown><pageup>"));
+
+    let (mut space_ctx, mut space_app) = setup_scroll(TestContext::setup_clone("page_by_space"));
+    space_ctx.update(&mut space_app, keys("<space><space><backspace>"));
+
+    assert_eq!(space_ctx.redact_buffer(), keys_ctx.redact_buffer());
+}
+
 #[test]
 fn a_page_down_and_a_page_up_come_back() {
     let (mut ctx, mut app) = setup_scroll(setup_clone!());
