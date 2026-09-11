@@ -84,6 +84,26 @@ fn a_staged_hunk_leaves_the_view_it_was_staged_from() {
     );
 }
 
+/// Folding everything leaves one folded thing, not a stack of them: opening a
+/// file shows the diff inside it, rather than another thing to open.
+#[test]
+fn opening_a_folded_file_shows_its_diff() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
+
+    let patch = run(&ctx.dir, &["git", "diff"]);
+    let mut app = ctx.init_app_with_patch(patch);
+
+    ctx.update(&mut app, keys("<backtab><tab>"));
+
+    assert!(
+        ctx.redact_buffer().contains("changed"),
+        "the file opened onto something still folded:\n{}",
+        ctx.redact_buffer()
+    );
+}
+
 /// A commit's patch is not something git can be asked for again, so it stays
 /// exactly as it arrived.
 #[test]
