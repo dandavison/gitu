@@ -27,6 +27,24 @@ fn scroll_down() {
     insta::assert_snapshot!(ctx.redact_buffer());
 }
 
+/// One key folds the whole view down to its headings, and opens it again.
+#[test]
+fn folding_everything_and_opening_it_again() {
+    let (mut ctx, mut app) = setup_scroll(setup_clone!());
+
+    ctx.update(&mut app, keys("<backtab>"));
+    let folded = ctx.redact_buffer();
+    ctx.update(&mut app, keys("<backtab>"));
+    let opened = ctx.redact_buffer();
+
+    assert!(!folded.contains("file-1"), "still open:\n{folded}");
+    assert!(folded.contains("Unstaged changes"), "{folded}");
+    assert!(
+        opened.contains("line 1 (file-1)"),
+        "still folded:\n{opened}"
+    );
+}
+
 /// A page is a whole viewport, which is two half pages.
 #[test]
 fn a_page_is_a_whole_viewport() {
