@@ -157,31 +157,34 @@ impl OpTrait for ToggleSection {
     }
 }
 
-/// Ask git for a different amount of the file around each change. The flag
-/// itself is what is edited, so `-W` is available alongside `-U<n>`; anything
-/// else would change the output into something with no hunks to act on.
+/// Ask git for a different amount of the file around each change: a number of
+/// lines, or the whole enclosing function.
 pub(crate) struct DiffContext;
 impl OpTrait for DiffContext {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {
         Some(Rc::new(|app: &mut App, term: &mut Term| {
             let current = app.state.context.clone();
-            let flag = app.prompt(
+            let answer = app.prompt(
                 term,
                 &PromptParams {
-                    prompt: "Diff context",
+                    prompt: "Context lines, or W for the whole function",
                     create_default_value: Box::new(move |_| {
-                        Some(current.as_deref().unwrap_or(DEFAULT_CONTEXT).to_string())
+                        Some(match current.as_deref() {
+                            Some("-W") => "W".to_owned(),
+                            Some(flag) => flag.trim_start_matches("-U").to_owned(),
+                            None => DEFAULT_LINES.to_owned(),
+                        })
                     }),
                     hide_menu: false,
                 },
             )?;
 
-            if !is_context_flag(&flag) {
-                app.display_error(format!("Not a context flag: {flag}"));
+            let Some(flag) = context_flag(&answer) else {
+                app.display_error(format!("Not a number of lines, nor W: {answer}"));
                 return Ok(());
-            }
+            };
 
-            app.state.context = (flag != DEFAULT_CONTEXT).then(|| Rc::from(flag.as_str()));
+            app.state.context = flag;
             app.rerender_screens()
         }))
     }
@@ -192,14 +195,20 @@ impl OpTrait for DiffContext {
 }
 
 /// What git gives without being asked, so asking for it is asking for nothing.
-const DEFAULT_CONTEXT: &str = "-U3";
+const DEFAULT_LINES: &str = "3";
 
-fn is_context_flag(flag: &str) -> bool {
-    flag == "-W"
-        || flag == "--function-context"
-        || flag
-            .strip_prefix("-U")
-            .is_some_and(|lines| !lines.is_empty() && lines.chars().all(|c| c.is_ascii_digit()))
+/// The git flag an answer asks for: `None` for the default, which is to pass
+/// no flag at all. An answer that is neither a count nor the whole function
+/// isn't one, since a flag that leaves no hunks leaves nothing to act on.
+fn context_flag(answer: &str) -> Option<Option<Rc<str>>> {
+    match answer {
+        "W" | "w" => Some(Some(Rc::from("-W"))),
+        DEFAULT_LINES => Some(None),
+        lines if !lines.is_empty() && lines.chars().all(|c| c.is_ascii_digit()) => {
+            Some(Some(Rc::from(format!("-U{lines}").as_str())))
+        }
+        _ => None,
+    }
 }
 
 /// Fold the whole view down to its headings, or open all of it.
