@@ -111,7 +111,7 @@ fn widening_the_context_asks_git_for_more_of_the_file() {
         "three lines of context already reach line 2"
     );
 
-    ctx.update(&mut app, keys("U-U8<enter>"));
+    ctx.update(&mut app, keys("U8<enter>"));
 
     assert!(
         ctx.redact_buffer().contains("line 2 "),
@@ -133,13 +133,29 @@ fn widening_the_context_of_a_piped_commit() {
     let mut app = ctx.init_app_with_patch(patch);
     assert!(!ctx.redact_buffer().contains("line 2 "));
 
-    ctx.update(&mut app, keys("U-U8<enter>"));
+    ctx.update(&mut app, keys("U8<enter>"));
 
     assert!(
         ctx.redact_buffer().contains("line 2 "),
         "the commit was not re-asked for:\n{}",
         ctx.redact_buffer()
     );
+}
+
+/// The whole function is the other thing worth asking for, and is a letter
+/// rather than a number.
+#[test]
+fn the_whole_function_is_asked_for_by_letter() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", &twenty_lines("line 10"));
+    fs::write(ctx.dir.join("firstfile"), twenty_lines("changed")).unwrap();
+
+    let patch = run(&ctx.dir, &["git", "diff"]);
+    let mut app = ctx.init_app_with_patch(patch);
+
+    ctx.update(&mut app, keys("UW<enter>"));
+
+    assert_eq!(app.state.context.as_deref(), Some("-W"));
 }
 
 /// Folding everything leaves one folded thing, not a stack of them: opening a
