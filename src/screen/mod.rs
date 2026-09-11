@@ -8,7 +8,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::{
     Res,
     config::Config,
-    items::{RenderParams, hash},
+    items::{ItemId, RenderParams, hash},
 };
 
 use super::Item;
@@ -300,6 +300,28 @@ impl Screen {
     pub(crate) fn scroll_view_down(&mut self, lines: usize) {
         self.scroll = self.scroll.saturating_add(lines);
         self.clamp_scroll();
+    }
+
+    /// Fold every section, or open them all when none is folded. The cursor can
+    /// end up inside what was just folded away, so it is re-placed afterwards.
+    pub(crate) fn toggle_all_sections(&mut self) {
+        self.anchor = None;
+
+        let sections: Vec<ItemId> = self
+            .items
+            .iter()
+            .filter(|item| item.data.is_section())
+            .map(|item| item.id)
+            .collect();
+
+        if sections.iter().all(|id| self.collapsed.contains(id)) {
+            self.collapsed.clear();
+        } else {
+            self.collapsed.extend(sections);
+        }
+
+        self.update_line_index();
+        self.update_cursor(NavMode::Normal);
     }
 
     pub(crate) fn toggle_section(&mut self) {

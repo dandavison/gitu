@@ -157,6 +157,21 @@ impl OpTrait for ToggleSection {
     }
 }
 
+/// Fold the whole view down to its headings, or open all of it.
+pub(crate) struct ToggleAllSections;
+impl OpTrait for ToggleAllSections {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app, _term| {
+            app.screen_mut().toggle_all_sections();
+            Ok(())
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Fold all".into()
+    }
+}
+
 /// Show or hide the list of what a screen's own keymap does.
 pub(crate) struct ToggleMenu;
 impl OpTrait for ToggleMenu {

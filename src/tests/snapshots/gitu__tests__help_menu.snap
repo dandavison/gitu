@@ -6,20 +6,20 @@ expression: ctx.redact_buffer()
  Help                                     Submenu           main                |
  Y                Show Refs               b   Branch        tab Fold            |
  |                Renderer features       c   Commit                            |
- k/up             Up                      f   Fetch                             |
- j/down           Down                    h/? Help                              |
- ctrl+k/ctrl+up   Up line                 l   Log                               |
- ctrl+j/ctrl+down Down line               m   Merge                             |
- shift+up         Select up               M   Remote                            |
- shift+down       Select down             F   Pull                              |
- alt+k/alt+up     Prev section            P   Push                              |
- alt+j/alt+down   Next section            r   Rebase                            |
- alt+h/alt+left   Parent section          X   Reset                             |
- g+g              Top                     V   Revert                            |
- G                Bottom                  A   Cherry-pick                       |
- ctrl+u           Scroll half page up     z   Stash                             |
+ backtab          Fold all                f   Fetch                             |
+ k/up             Up                      h/? Help                              |
+ j/down           Down                    l   Log                               |
+ ctrl+k/ctrl+up   Up line                 m   Merge                             |
+ ctrl+j/ctrl+down Down line               M   Remote                            |
+ shift+up         Select up               F   Pull                              |
+ shift+down       Select down             P   Push                              |
+ alt+k/alt+up     Prev section            r   Rebase                            |
+ alt+j/alt+down   Next section            X   Reset                             |
+ alt+h/alt+left   Parent section          V   Revert                            |
+ g+g              Top                     A   Cherry-pick                       |
+ G                Bottom                  z   Stash                             |
+ ctrl+u           Scroll half page up                                           |
  ctrl+d           Scroll half page down                                         |
  pageup           Scroll page up                                                |
  pagedown         Scroll page down                                              |
- ctrl+y           Scroll view up                                                |
-styles_hash: 7688de1e4b89d400
+styles_hash: ef7add3980ee55e5
