@@ -772,6 +772,26 @@ mod tests {
         assert_eq!(rows(&blocks[2]), vec!["", "▸ bbb summary"]);
     }
 
+    /// The host names the commit of each row it asked git to mark, and the
+    /// renderer may name it again — abbreviated, as git prints it. Two names
+    /// for one commit are one commit, not two, or its rows are split between
+    /// them and whoever looks the commit up finds only part of it.
+    #[test]
+    fn a_commit_named_again_by_the_renderer_is_the_same_commit() {
+        let out = parse_ansi_lines(&format!(
+            "{}\n{}▸ aaa123 summary\n    body\n{}\n▸ bbb456 summary\n",
+            commit_record("aaa123def"),
+            commit_record("aaa123"),
+            commit_record("bbb456789"),
+        ));
+        let blocks = commit_blocks(&out.lines);
+
+        assert_eq!(blocks.len(), 2, "{blocks:?}");
+        assert_eq!(blocks[0].commit, Some("aaa123def"));
+        assert_eq!(rows(&blocks[0]), vec!["", "▸ aaa123 summary", "    body"]);
+        assert_eq!(blocks[1].commit, Some("bbb456789"));
+    }
+
     #[test]
     fn commit_blocks_of_unmarked_output_is_a_single_headless_block() {
         let out = parse_ansi_lines("no markers here\nat all\n");
