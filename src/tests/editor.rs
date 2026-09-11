@@ -45,6 +45,22 @@ fn folding_everything_and_opening_it_again() {
     );
 }
 
+/// A terminal sends shift-tab as backtab with the shift modifier still set.
+/// The keycode already says shift was held, so a `backtab` binding — which is
+/// what config can name — has to match it.
+#[test]
+fn shift_tab_reaches_a_backtab_binding() {
+    let (mut ctx, mut app) = setup_scroll(setup_clone!());
+
+    ctx.update(&mut app, keys("<shift+backtab>"));
+
+    assert!(
+        !ctx.redact_buffer().contains("file-1"),
+        "shift-tab did nothing:\n{}",
+        ctx.redact_buffer()
+    );
+}
+
 /// A page is a whole viewport, which is two half pages.
 #[test]
 fn a_page_is_a_whole_viewport() {
