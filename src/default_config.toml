@@ -171,6 +171,8 @@ root.refresh = ["g+r"]
 root.toggle_section = ["tab"]
 root.toggle_all_sections = ["backtab"]
 root.diff_context = ["U"]
+# Edit the git command the view is the output of, and ask it again.
+root.edit_git_command = [":"]
 root.move_up = ["k", "up"]
 root.move_down = ["j", "down"]
 root.move_up_line = ["ctrl+k", "ctrl+up"]

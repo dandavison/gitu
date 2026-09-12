@@ -8,18 +8,18 @@ expression: ctx.redact_buffer()
  |                Renderer features       c   Commit                            |
  backtab          Fold all                f   Fetch                             |
  U                Diff context            h/? Help                              |
- k/up             Up                      l   Log                               |
- j/down           Down                    m   Merge                             |
- ctrl+k/ctrl+up   Up line                 M   Remote                            |
- ctrl+j/ctrl+down Down line               F   Pull                              |
- shift+up         Select up               P   Push                              |
- shift+down       Select down             r   Rebase                            |
- alt+k/alt+up     Prev section            X   Reset                             |
- alt+j/alt+down   Next section            V   Revert                            |
- alt+h/alt+left   Parent section          A   Cherry-pick                       |
- g+g              Top                     z   Stash                             |
+ :                Edit git command        l   Log                               |
+ k/up             Up                      m   Merge                             |
+ j/down           Down                    M   Remote                            |
+ ctrl+k/ctrl+up   Up line                 F   Pull                              |
+ ctrl+j/ctrl+down Down line               P   Push                              |
+ shift+up         Select up               r   Rebase                            |
+ shift+down       Select down             X   Reset                             |
+ alt+k/alt+up     Prev section            V   Revert                            |
+ alt+j/alt+down   Next section            A   Cherry-pick                       |
+ alt+h/alt+left   Parent section          z   Stash                             |
+ g+g              Top                                                           |
  G                Bottom                                                        |
  ctrl+u           Scroll half page up                                           |
  ctrl+d           Scroll half page down                                         |
- pageup/backspace Scroll page up                                                |
-styles_hash: 8c02a5fc839d20fd
+styles_hash: 555976dfc95a16d8

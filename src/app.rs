@@ -662,6 +662,16 @@ impl App {
         }
 
         self.state.prompt.set(prompt::PromptData { prompt_text });
+
+        // Prefilled, the default is the answer being edited rather than the one
+        // an empty answer falls back to, so an emptied prompt means empty.
+        if params.prefill
+            && let Some(default) = (params.create_default_value)(self)
+        {
+            *self.state.prompt.state.value_mut() = default;
+            self.state.prompt.state.move_end();
+        }
+
         let result = self.handle_prompt(term, params);
 
         self.unhide_menu();
@@ -855,6 +865,10 @@ impl App {
 
 fn get_prompt_result(params: &PromptParams, app: &mut App) -> Res<String> {
     let input = app.state.prompt.state.value();
+    if params.prefill {
+        return Ok(input.to_owned());
+    }
+
     let default_value = (params.create_default_value)(app);
 
     let value = match (input, &default_value) {
@@ -959,6 +973,9 @@ pub(crate) struct PromptParams {
     pub prompt: &'static str,
     pub create_default_value: DefaultFn,
     pub hide_menu: bool,
+    /// Put the default value in the prompt for the user to edit, rather than
+    /// keeping it as what an empty answer means.
+    pub prefill: bool,
 }
 
 impl Default for PromptParams {
@@ -967,6 +984,7 @@ impl Default for PromptParams {
             prompt: "",
             create_default_value: Box::new(|_| None),
             hide_menu: true,
+            prefill: false,
         }
     }
 }

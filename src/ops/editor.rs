@@ -114,6 +114,7 @@ impl OpTrait for ToggleArg {
                         prompt: display,
                         create_default_value: Box::new(move |_| default.clone()),
                         hide_menu: false,
+                        prefill: false,
                     },
                 )?;
 
@@ -176,6 +177,7 @@ impl OpTrait for DiffContext {
                         })
                     }),
                     hide_menu: false,
+                    prefill: false,
                 },
             )?;
 
@@ -191,6 +193,49 @@ impl OpTrait for DiffContext {
 
     fn display(&self, _state: &State) -> String {
         "Diff context".into()
+    }
+}
+
+/// Edit the question git is being asked. Everything a view is — the revs, what
+/// is compared with what, which paths, how much context — is in that command,
+/// so this is the general case of which [`DiffContext`] is one canned edit.
+pub(crate) struct EditGitCommand;
+impl OpTrait for EditGitCommand {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app: &mut App, term: &mut Term| {
+            let Some(git) = app.screen().git_command.clone() else {
+                app.display_error("This view is not something gitu asked git for");
+                return Ok(());
+            };
+
+            let line = git.borrow().line(app.state.context.as_deref());
+            let answer = app.prompt(
+                term,
+                &PromptParams {
+                    prompt: "",
+                    create_default_value: Box::new(move |_| Some(line.clone())),
+                    prefill: true,
+                    ..Default::default()
+                },
+            )?;
+
+            let edited = git.borrow().edited(&answer);
+            match edited {
+                Ok(edited) => *git.borrow_mut() = edited,
+                Err(err) => {
+                    app.display_error(err.to_string());
+                    return Ok(());
+                }
+            }
+
+            // The edit said what context it wants, in the line it was given.
+            app.state.context = None;
+            app.rerender_screens()
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Edit git command".into()
     }
 }
 

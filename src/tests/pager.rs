@@ -168,6 +168,87 @@ fn the_whole_function_is_asked_for_by_letter() {
     assert_eq!(app.state.context.as_deref(), Some("-W"));
 }
 
+/// Every property of a view is in the command it is the output of, so the
+/// command itself is what is offered for editing — prefilled, and with nothing
+/// said about it.
+#[test]
+fn the_command_is_offered_for_editing_as_it_is_being_asked() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", &twenty_lines("line 10"));
+    fs::write(ctx.dir.join("firstfile"), twenty_lines("changed")).unwrap();
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "-c", "color.diff=always", "diff"]);
+    ctx.update(&mut app, keys("U8<enter>:"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(
+        buffer.contains("git -c color.diff=always diff -U8"),
+        "{buffer}"
+    );
+}
+
+/// The edit is a different question, so the answer is a different view: what
+/// the patch is a diff of has changed, and with it which ops mean anything.
+#[test]
+fn editing_the_command_asks_the_new_question() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
+    run(&ctx.dir, &["git", "add", "firstfile"]);
+    fs::write(ctx.dir.join("firstfile"), "changed\nagain\n").unwrap();
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(&mut app, keys("j"));
+    assert!(offers(&app, Op::Stage));
+    assert!(ctx.redact_buffer().contains("+again"));
+
+    ctx.update(&mut app, keys(": --cached<enter>j"));
+
+    assert!(offers(&app, Op::Unstage));
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("+changed"), "{buffer}");
+    assert!(!buffer.contains("+again"), "{buffer}");
+}
+
+/// The line handed over says what context it is asking for, so accepting it
+/// keeps that: the command is the whole of what the view is, and the session's
+/// own context override is spent.
+#[test]
+fn an_edit_takes_over_the_context_asked_for() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", &twenty_lines("line 10"));
+    fs::write(ctx.dir.join("firstfile"), twenty_lines("changed")).unwrap();
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(&mut app, keys("U8<enter>:<enter>"));
+
+    assert_eq!(app.state.context, None);
+    assert!(
+        ctx.redact_buffer().contains("line 2 "),
+        "the widened context was lost:\n{}",
+        ctx.redact_buffer()
+    );
+}
+
+/// A patch with no command behind it has no question to edit.
+#[test]
+fn a_patch_with_no_command_cannot_be_edited() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+
+    let patch = run(&ctx.dir, &["git", "show", "HEAD"]);
+    let mut app = ctx.init_app_with_patch(patch);
+
+    ctx.update(&mut app, keys(":"));
+
+    assert!(
+        ctx.redact_buffer()
+            .contains("not something gitu asked git for"),
+        "{}",
+        ctx.redact_buffer()
+    );
+}
+
 /// Folding everything leaves one folded thing, not a stack of them: opening a
 /// file shows the diff inside it, rather than another thing to open.
 #[test]
