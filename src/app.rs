@@ -141,6 +141,7 @@ impl App {
         let clipboard = Clipboard::new()
             .inspect_err(|e| log::warn!("Couldn't initialize clipboard: {e}"))
             .ok();
+        let prompt = prompt::Prompt::with_history(repo.path().join("gitu"));
 
         let mut app = Self {
             state: State {
@@ -154,7 +155,7 @@ impl App {
                 pending_cmd: None,
                 pending_menu: None,
                 current_cmd_log: CmdLog::new(),
-                prompt: prompt::Prompt::new(),
+                prompt,
                 picker: None,
                 picked_commit: None,
                 features: Rc::from([]),
@@ -675,6 +676,7 @@ impl App {
             *self.state.prompt.state.value_mut() = default;
             self.state.prompt.state.move_end();
         }
+        self.state.prompt.start_history(params.history)?;
 
         let result = self.handle_prompt(term, params);
 
@@ -692,7 +694,9 @@ impl App {
             self.handle_event(term, event)?;
 
             if self.state.prompt.state.status().is_done() {
-                return get_prompt_result(params, self);
+                let value = get_prompt_result(params, self)?;
+                self.state.prompt.remember(&value)?;
+                return Ok(value);
             } else if self.state.prompt.state.status().is_aborted() {
                 return Err(Error::PromptAborted);
             }
@@ -980,6 +984,7 @@ pub(crate) struct PromptParams {
     /// Put the default value in the prompt for the user to edit, rather than
     /// keeping it as what an empty answer means.
     pub prefill: bool,
+    pub history: Option<prompt::HistoryKind>,
 }
 
 impl Default for PromptParams {
@@ -989,6 +994,7 @@ impl Default for PromptParams {
             create_default_value: Box::new(|_| None),
             hide_menu: true,
             prefill: false,
+            history: None,
         }
     }
 }

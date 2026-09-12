@@ -3,11 +3,20 @@ use crate::error::Error;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{Terminal, backend::Backend};
 use std::borrow::Cow;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::ops::Range;
+use std::path::{Path, PathBuf};
 use tui_prompts::{State, TextState};
 
 pub(crate) struct PromptData {
     pub(crate) prompt_text: Cow<'static, str>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum HistoryKind {
+    GitCommand,
+    FilePatterns,
 }
 
 pub(crate) struct Prompt {
@@ -15,6 +24,15 @@ pub(crate) struct Prompt {
     pub(crate) state: TextState<'static>,
     /// What the last kill took, for `ctrl+y` to put back.
     killed: String,
+    history_dir: Option<PathBuf>,
+    active_history: Option<ActiveHistory>,
+}
+
+struct ActiveHistory {
+    kind: HistoryKind,
+    entries: Vec<String>,
+    position: usize,
+    draft: String,
 }
 
 impl Prompt {
@@ -23,6 +41,15 @@ impl Prompt {
             data: None,
             state: TextState::new(),
             killed: String::new(),
+            history_dir: None,
+            active_history: None,
+        }
+    }
+
+    pub(crate) fn with_history(history_dir: PathBuf) -> Self {
+        Self {
+            history_dir: Some(history_dir),
+            ..Self::new()
         }
     }
 
@@ -37,8 +64,45 @@ impl Prompt {
     ) -> Res<()> {
         self.data = None;
         self.state = TextState::new();
+        self.active_history = None;
         terminal.hide_cursor().map_err(Error::Term)?;
         Ok(())
+    }
+
+    pub(crate) fn start_history(&mut self, kind: Option<HistoryKind>) -> Res<()> {
+        let (Some(kind), Some(dir)) = (kind, &self.history_dir) else {
+            return Ok(());
+        };
+        let draft = self.state.value().to_owned();
+        let entries = read_history(dir, kind)?
+            .into_iter()
+            .filter(|entry| entry != &draft)
+            .collect::<Vec<_>>();
+        self.active_history = Some(ActiveHistory {
+            kind,
+            position: entries.len(),
+            entries,
+            draft,
+        });
+        Ok(())
+    }
+
+    pub(crate) fn remember(&self, value: &str) -> Res<()> {
+        let (Some(history), Some(dir)) = (&self.active_history, &self.history_dir) else {
+            return Ok(());
+        };
+        if value.is_empty() {
+            return Ok(());
+        }
+
+        fs::create_dir_all(dir).map_err(Error::WritePromptHistory)?;
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(history_path(dir, history.kind))
+            .map_err(Error::WritePromptHistory)?;
+        file.write_all(format!("{value}\n").as_bytes())
+            .map_err(Error::WritePromptHistory)
     }
 
     /// A line being edited is a line to edit as any other: the readline keys,
@@ -60,6 +124,8 @@ impl Prompt {
         let cursor = self.cursor();
 
         match (key.code, key.modifiers) {
+            (KeyCode::Up, KeyModifiers::NONE) => self.history_previous(),
+            (KeyCode::Down, KeyModifiers::NONE) => self.history_next(),
             (KeyCode::Char('b'), ALT) | (KeyCode::Left, ALT | CTRL) => {
                 self.move_to(self.previous_word_start());
             }
@@ -91,6 +157,40 @@ impl Prompt {
 
     fn move_to(&mut self, cursor: usize) {
         *self.state.position_mut() = cursor;
+    }
+
+    fn history_previous(&mut self) {
+        let Some(history) = &mut self.active_history else {
+            return;
+        };
+        save_history_edit(history, self.state.value());
+        if history.position > 0 {
+            history.position -= 1;
+        }
+        self.show_history_value();
+    }
+
+    fn history_next(&mut self) {
+        let Some(history) = &mut self.active_history else {
+            return;
+        };
+        save_history_edit(history, self.state.value());
+        if history.position < history.entries.len() {
+            history.position += 1;
+        }
+        self.show_history_value();
+    }
+
+    fn show_history_value(&mut self) {
+        let Some(history) = &self.active_history else {
+            return;
+        };
+        let value = history
+            .entries
+            .get(history.position)
+            .unwrap_or(&history.draft);
+        *self.state.value_mut() = value.clone();
+        self.state.move_end();
     }
 
     /// Take `range` out of the line, keeping it for [`Self::yank`]. A kill of
@@ -156,6 +256,29 @@ impl Prompt {
         let end = skipping_back(&chars, self.cursor(), |c| c.is_whitespace());
         skipping_back(&chars, end, |c| !c.is_whitespace())
     }
+}
+
+fn save_history_edit(history: &mut ActiveHistory, value: &str) {
+    if let Some(entry) = history.entries.get_mut(history.position) {
+        *entry = value.to_owned();
+    } else {
+        history.draft = value.to_owned();
+    }
+}
+
+fn read_history(dir: &Path, kind: HistoryKind) -> Res<Vec<String>> {
+    match fs::read_to_string(history_path(dir, kind)) {
+        Ok(contents) => Ok(contents.lines().map(str::to_owned).collect()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(err) => Err(Error::ReadPromptHistory(err)),
+    }
+}
+
+fn history_path(dir: &Path, kind: HistoryKind) -> PathBuf {
+    dir.join(match kind {
+        HistoryKind::GitCommand => "git-command-history",
+        HistoryKind::FilePatterns => "file-pattern-history",
+    })
 }
 
 fn skipping_back(chars: &[char], from: usize, matching: impl Fn(&char) -> bool) -> usize {

@@ -117,6 +117,7 @@ impl OpTrait for ToggleArg {
                         create_default_value: Box::new(move |_| default.clone()),
                         hide_menu: false,
                         prefill: false,
+                        history: None,
                     },
                 )?;
 
@@ -180,6 +181,7 @@ impl OpTrait for DiffContext {
                     }),
                     hide_menu: false,
                     prefill: false,
+                    history: None,
                 },
             )?;
 
@@ -217,6 +219,7 @@ impl OpTrait for EditGitCommand {
                     prompt: "",
                     create_default_value: Box::new(move |_| Some(line.clone())),
                     prefill: true,
+                    history: Some(crate::prompt::HistoryKind::GitCommand),
                     ..Default::default()
                 },
             )?;
@@ -260,6 +263,7 @@ impl OpTrait for FilePatterns {
                     prompt: "Files",
                     create_default_value: Box::new(move |_| Some(patterns.clone())),
                     prefill: true,
+                    history: Some(crate::prompt::HistoryKind::FilePatterns),
                     ..Default::default()
                 },
             )?;

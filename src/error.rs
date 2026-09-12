@@ -55,6 +55,8 @@ pub enum Error {
     ListGitReferences(git2::Error),
     OpenLogFile(io::Error),
     PromptAborted,
+    ReadPromptHistory(io::Error),
+    WritePromptHistory(io::Error),
     NoMoreEvents,
     CannotSpinoffCurrentBranch,
     SpinoffBranchExists(String),
@@ -172,6 +174,12 @@ impl Display for Error {
             }
             Error::OpenLogFile(e) => f.write_fmt(format_args!("Couldn't open log file: {e}")),
             Error::PromptAborted => f.write_str("Aborted"),
+            Error::ReadPromptHistory(e) => {
+                f.write_fmt(format_args!("Couldn't read prompt history: {e}"))
+            }
+            Error::WritePromptHistory(e) => {
+                f.write_fmt(format_args!("Couldn't write prompt history: {e}"))
+            }
             Error::NoMoreEvents => unimplemented!(),
             Error::CannotSpinoffCurrentBranch => f.write_str("Cannot spin-off current branch"),
             Error::SpinoffBranchExists(new_branch_name) => f.write_fmt(format_args!(
