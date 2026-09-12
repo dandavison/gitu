@@ -130,12 +130,15 @@ fn commit_named_by(text: &str) -> Option<String> {
 }
 
 /// The commit a patch opens with, as the renderer draws it. It belongs to no
-/// file, so gitu has no structure to give it.
+/// file, so gitu has no structure to give it. A patch whose first line already
+/// begins a file's diff opens with nothing.
 fn preamble_items(config: &Config, params: &RenderParams, text: &str) -> Vec<Item> {
-    match text.find("\ndiff --git ") {
-        Some(end) => items::plain_rows(&render(config, params, &text[..=end])),
-        None => Vec::new(),
-    }
+    let end = match text.find("\ndiff --git ") {
+        Some(i) if !text.starts_with("diff --git ") => i + 1,
+        _ => return Vec::new(),
+    };
+
+    items::plain_rows(&render(config, params, &text[..end]))
 }
 
 fn diff_items(config: &Config, params: &RenderParams, diff: &Rc<Diff>) -> Vec<Item> {
