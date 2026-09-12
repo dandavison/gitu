@@ -63,6 +63,9 @@ pub enum Error {
     BaseCommitOid,
     UpstreamCommitOid,
     GitBlame(io::Error),
+    EditedCommandQuotes,
+    EditedCommandFixed,
+    EditedCommandWrites(String),
 }
 
 impl std::error::Error for Error {}
@@ -182,6 +185,13 @@ impl Display for Error {
                 f.write_str("Could not resolve OID of upstream branch commit")
             }
             Error::GitBlame(e) => f.write_fmt(format_args!("Git blame error: {e}")),
+            Error::EditedCommandQuotes => f.write_str("Unbalanced quotes"),
+            Error::EditedCommandFixed => f.write_str(
+                "Only git's arguments can be edited, not the program or git's own options",
+            ),
+            Error::EditedCommandWrites(subcommand) => f.write_fmt(format_args!(
+                "gitu re-runs this command on every refresh, so it must only report: {subcommand}"
+            )),
         }
     }
 }

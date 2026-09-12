@@ -84,3 +84,4 @@ imara-diff = { version = "0.2.0", default-features = false }
 fuzzy-matcher = "0.3.7"
 url = "2.5.7"
 sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
+shell-words = "1.1"

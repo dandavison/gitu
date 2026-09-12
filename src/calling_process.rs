@@ -8,13 +8,23 @@
 //! change — and know what the patch is a diff *of*, which is what decides
 //! whether staging part of it means anything.
 
+use crate::Res;
+use crate::error::Error;
 use crate::git::diff::DiffType;
+use std::iter;
 use std::path::Path;
 use std::process::Command;
 use sysinfo::{Pid, Process, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 /// The subcommands whose output gitu structures.
 const SUBCOMMANDS: [&str; 3] = ["diff", "show", "log"];
+
+/// The subcommands an edited command may ask for. gitu re-runs the command it
+/// holds on every rebuild — staging a hunk re-asks it — so a command that
+/// changed anything would run repeatedly and unbidden.
+const READ_ONLY: [&str; 10] = [
+    "diff", "show", "log", "blame", "grep", "shortlog", "reflog", "ls-files", "describe", "status",
+];
 
 /// How far above gitu to look for the git process: git may spawn its pager
 /// through a shell, and that shell through another.
@@ -70,18 +80,73 @@ impl GitCommand {
     /// `-W`) in place of whatever it originally asked for. `None` puts the
     /// question exactly as git put it.
     pub(crate) fn command(&self, context: Option<&str>) -> Command {
-        let mut command = Command::new(&self.argv[0]);
-        command.args(&self.argv[1..=self.subcommand]);
+        let words = self.words(context);
+        let mut command = Command::new(words[0]);
+        command.args(&words[1..=self.subcommand]);
         // gitu parses what comes back, so an external differ must not stand in
         // for the patch, and git's colours have to be off however the user has
         // configured them.
         command.args(["--no-ext-diff", "--no-color"]);
-        command.args(context);
-        match context {
-            Some(_) => command.args(without_context(self.arguments())),
-            None => command.args(self.arguments()),
-        };
+        command.args(&words[self.subcommand + 1..]);
         command
+    }
+
+    /// The command as gitu is putting it, for the user to edit. The flags gitu
+    /// forces are left out: they are not the question, and not the user's to
+    /// change.
+    pub(crate) fn line(&self, context: Option<&str>) -> String {
+        let words = self.words(context);
+        iter::once("git")
+            .chain(words[1..].iter().copied())
+            .map(quoted)
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// The command an edit of [`Self::line`] asks for. git's program and its own
+    /// options are fixed — gitu's ops act on the repository gitu opened, and an
+    /// edit pointing git elsewhere would make the view and the ops disagree —
+    /// and the subcommand must be one that only reports.
+    pub(crate) fn edited(&self, line: &str) -> Res<Self> {
+        let words = shell_words::split(line).map_err(|_| Error::EditedCommandQuotes)?;
+        let own = &self.argv[1..self.subcommand];
+
+        let [program, rest @ ..] = words.as_slice() else {
+            return Err(Error::EditedCommandFixed);
+        };
+        if program != "git" || !rest.starts_with(own) {
+            return Err(Error::EditedCommandFixed);
+        }
+
+        match rest.get(own.len()) {
+            None => return Err(Error::EditedCommandFixed),
+            Some(subcommand) if !READ_ONLY.contains(&subcommand.as_str()) => {
+                return Err(Error::EditedCommandWrites(subcommand.clone()));
+            }
+            Some(_) => (),
+        }
+
+        Ok(Self {
+            argv: iter::once(self.argv[0].clone())
+                .chain(rest.iter().cloned())
+                .collect(),
+            subcommand: self.subcommand,
+        })
+    }
+
+    /// git's own options and the subcommand, then what is asked of it with
+    /// `context` in place of whatever it said.
+    fn words<'a>(&'a self, context: Option<&'a str>) -> Vec<&'a str> {
+        let mut words: Vec<&str> = self.argv[..=self.subcommand]
+            .iter()
+            .map(String::as_str)
+            .collect();
+        words.extend(context);
+        match context {
+            Some(_) => words.extend(without_context(self.arguments())),
+            None => words.extend(self.arguments()),
+        }
+        words
     }
 
     fn subcommand(&self) -> &str {
@@ -92,6 +157,24 @@ impl GitCommand {
     fn arguments(&self) -> impl Iterator<Item = &str> + Clone {
         self.argv[self.subcommand + 1..].iter().map(String::as_str)
     }
+}
+
+/// `word` as it has to be written to survive being read back, and to mean the
+/// same thing if it is pasted into a shell. Revisions (`HEAD~2`, `x^!`) and
+/// git's own `k=v` options are left bare; a pathspec's parentheses and
+/// wildcards are not.
+fn quoted(word: &str) -> String {
+    const BARE: &str = "_@%+=:,./-~^";
+
+    if !word.is_empty()
+        && word
+            .chars()
+            .all(|c| c.is_alphanumeric() || BARE.contains(c))
+    {
+        return word.to_owned();
+    }
+
+    format!("'{}'", word.replace('\'', r"'\''"))
 }
 
 /// `args` with whatever they said about context dropped, so that what gitu asks
@@ -216,6 +299,86 @@ mod tests {
             git(&["git", "show", "HEAD"]).diff_type(),
             DiffType::TreeToTree
         );
+    }
+
+    /// What the user is given to edit is the question as gitu is putting it,
+    /// less the flags gitu forces on every ask.
+    #[test]
+    fn the_line_offered_for_editing_is_the_effective_command() {
+        assert_eq!(git(&["git", "diff", "main"]).line(None), "git diff main");
+        assert_eq!(
+            git(&["/usr/bin/git", "-c", "color.ui=always", "diff"]).line(None),
+            "git -c color.ui=always diff"
+        );
+        assert_eq!(
+            git(&["git", "diff", "-U10", "main"]).line(Some("-U2")),
+            "git diff -U2 main"
+        );
+        assert_eq!(
+            git(&["git", "log", "-p", "--", "a file"]).line(None),
+            "git log -p -- 'a file'"
+        );
+    }
+
+    #[test]
+    fn an_edit_may_ask_git_anything_that_only_reports() {
+        let edited = |line: &str| {
+            git(&["/usr/bin/git", "diff", "main"])
+                .edited(line)
+                .map(|git| git.line(None))
+        };
+
+        assert_eq!(edited("git show HEAD~2").unwrap(), "git show HEAD~2");
+        assert_eq!(edited("git log -p -- src").unwrap(), "git log -p -- src");
+        assert_eq!(
+            edited("git diff main -- ':(top,exclude)*_test.go'").unwrap(),
+            "git diff main -- ':(top,exclude)*_test.go'"
+        );
+    }
+
+    /// The program gitu found is the program gitu runs, whatever the edit says.
+    #[test]
+    fn an_edit_leaves_the_program_and_gits_own_options_alone() {
+        let git = git(&["/usr/bin/git", "-c", "color.ui=always", "diff"]);
+        let program = |line: &str| Ok::<_, Error>(git.edited(line)?.argv[0].clone());
+
+        assert_eq!(
+            program("git -c color.ui=always show").unwrap(),
+            "/usr/bin/git"
+        );
+        assert!(matches!(
+            program("/usr/bin/git -c color.ui=always show"),
+            Err(Error::EditedCommandFixed)
+        ));
+        assert!(matches!(
+            program("git show"),
+            Err(Error::EditedCommandFixed)
+        ));
+        assert!(matches!(
+            program("git -c color.ui=always --git-dir=/elsewhere show"),
+            Err(Error::EditedCommandWrites(_))
+        ));
+    }
+
+    /// The held command is re-run on every rebuild, so nothing that writes may
+    /// be held.
+    #[test]
+    fn an_edit_that_would_change_the_repository_is_refused() {
+        let git = git(&["git", "diff"]);
+
+        assert!(matches!(
+            git.edited("git commit --amend"),
+            Err(Error::EditedCommandWrites(subcommand)) if subcommand == "commit"
+        ));
+        assert!(matches!(
+            git.edited("git reset --hard"),
+            Err(Error::EditedCommandWrites(_))
+        ));
+        assert!(matches!(git.edited("git"), Err(Error::EditedCommandFixed)));
+        assert!(matches!(
+            git.edited("git diff 'unbalanced"),
+            Err(Error::EditedCommandQuotes)
+        ));
     }
 
     #[test]
