@@ -1,5 +1,6 @@
 use super::{Action, OpTrait};
 use crate::{
+    Res,
     app::{App, PromptParams, State},
     error::Error,
     item_data::ItemData,
@@ -8,6 +9,7 @@ use crate::{
     screen::NavMode,
     term::Term,
 };
+use std::cell::RefCell;
 use std::rc::Rc;
 
 pub(crate) struct Quit;
@@ -204,7 +206,7 @@ impl OpTrait for EditGitCommand {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {
         Some(Rc::new(|app: &mut App, term: &mut Term| {
             let Some(git) = app.screen().git_command.clone() else {
-                app.display_error("This view is not something gitu asked git for");
+                app.display_error(NOT_ASKED_FOR);
                 return Ok(());
             };
 
@@ -237,6 +239,107 @@ impl OpTrait for EditGitCommand {
     fn display(&self, _state: &State) -> String {
         "Edit git command".into()
     }
+}
+
+/// Limit the view to some of the files it covers, or drop some of them. Both
+/// are edits of the same command, and so of the same kind as [`EditGitCommand`]
+/// — this only saves writing the pathspec magic out.
+pub(crate) struct FilePatterns;
+impl OpTrait for FilePatterns {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app: &mut App, term: &mut Term| {
+            let Some(git) = app.screen().git_command.clone() else {
+                app.display_error(NOT_ASKED_FOR);
+                return Ok(());
+            };
+
+            let patterns = git.borrow().file_patterns().join(" ");
+            let answer = app.prompt(
+                term,
+                &PromptParams {
+                    prompt: "Files",
+                    create_default_value: Box::new(move |_| Some(patterns.clone())),
+                    prefill: true,
+                    ..Default::default()
+                },
+            )?;
+
+            let patterns = match shell_words::split(&answer) {
+                Ok(patterns) => patterns,
+                Err(_) => {
+                    app.display_error(Error::EditedCommandQuotes.to_string());
+                    return Ok(());
+                }
+            };
+
+            ask_for(app, &git, &patterns)
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Files".into()
+    }
+}
+
+/// Drop the file under the cursor from the view, as if it were not in the
+/// patch. The frequent case, and the one worth a keystroke: the noise is in
+/// front of you and it goes away.
+pub(crate) struct HideFile;
+impl OpTrait for HideFile {
+    fn get_action(&self, target: &ItemData) -> Option<Action> {
+        let path = file_of(target)?;
+
+        Some(Rc::new(move |app: &mut App, _term: &mut Term| {
+            let Some(git) = app.screen().git_command.clone() else {
+                app.display_error(NOT_ASKED_FOR);
+                return Ok(());
+            };
+
+            let mut patterns = git.borrow().file_patterns();
+            patterns.push(crate::calling_process::excluding(&path));
+
+            ask_for(app, &git, &patterns)
+        }))
+    }
+
+    fn is_target_op(&self) -> bool {
+        true
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Hide file".into()
+    }
+}
+
+const NOT_ASKED_FOR: &str = "This view is not something gitu asked git for";
+
+/// Put the held command again, for these paths.
+fn ask_for(
+    app: &mut App,
+    git: &Rc<RefCell<crate::calling_process::GitCommand>>,
+    patterns: &[String],
+) -> Res<()> {
+    let asking_for = git.borrow().asking_for(patterns);
+    *git.borrow_mut() = asking_for;
+    app.rerender_screens()
+}
+
+/// The file a row belongs to, where it belongs to one.
+fn file_of(target: &ItemData) -> Option<String> {
+    let (diff, file_i) = match target {
+        ItemData::Delta { diff, file_i, .. }
+        | ItemData::Hunk { diff, file_i, .. }
+        | ItemData::HunkLine { diff, file_i, .. } => (diff, file_i),
+        _ => return None,
+    };
+
+    let header = &diff.file_diffs[*file_i].header;
+    let path = match header.status {
+        crate::gitu_diff::Status::Deleted => &header.old_file,
+        _ => &header.new_file,
+    };
+
+    Some(path.fmt(&diff.text).into_owned())
 }
 
 /// What git gives without being asked, so asking for it is asking for nothing.

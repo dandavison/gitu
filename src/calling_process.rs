@@ -134,6 +134,37 @@ impl GitCommand {
         })
     }
 
+    /// The paths the command limits itself to, as the user writes them (see
+    /// [`pattern_of`]). What follows `--` is pathspecs; a command that names
+    /// none limits nothing.
+    pub(crate) fn file_patterns(&self) -> Vec<String> {
+        self.pathspecs().map(pattern_of).collect()
+    }
+
+    /// The same command asking for these paths in place of whatever it asked
+    /// for before.
+    pub(crate) fn asking_for(&self, patterns: &[String]) -> Self {
+        let mut argv: Vec<String> = self.argv[..=self.subcommand].to_vec();
+        argv.extend(
+            self.arguments()
+                .take_while(|arg| *arg != "--")
+                .map(str::to_owned),
+        );
+        if !patterns.is_empty() {
+            argv.push("--".to_owned());
+            argv.extend(patterns.iter().map(|pattern| pathspec_of(pattern)));
+        }
+
+        Self {
+            argv,
+            subcommand: self.subcommand,
+        }
+    }
+
+    fn pathspecs(&self) -> impl Iterator<Item = &str> {
+        self.arguments().skip_while(|arg| *arg != "--").skip(1)
+    }
+
     /// git's own options and the subcommand, then what is asked of it with
     /// `context` in place of whatever it said.
     fn words<'a>(&'a self, context: Option<&'a str>) -> Vec<&'a str> {
@@ -157,6 +188,47 @@ impl GitCommand {
     fn arguments(&self) -> impl Iterator<Item = &str> + Clone {
         self.argv[self.subcommand + 1..].iter().map(String::as_str)
     }
+}
+
+/// The pathspec a file pattern asks for. The language is git's own, less the
+/// magic: a bare pattern limits the diff to what it matches, `!` excludes what
+/// it matches, and a pattern that is already a pathspec is passed on as it is.
+/// The wildcards are git's, so `*_test.go` matches at any depth and a directory
+/// matches its subtree.
+///
+/// `:(top)` is not decoration: a pathspec is relative to git's working
+/// directory and gitu asks from the root of the repository, where the paths a
+/// diff names are also rooted.
+fn pathspec_of(pattern: &str) -> String {
+    match pattern {
+        _ if pattern.starts_with(':') => pattern.to_owned(),
+        _ if let Some(glob) = pattern.strip_prefix('!') => format!(":(top,exclude){glob}"),
+        _ => format!(":(top){pattern}"),
+    }
+}
+
+/// The pattern a pathspec came from, so that a command's paths can be offered
+/// back for editing. A pathspec gitu did not write is shown as it is.
+fn pattern_of(pathspec: &str) -> String {
+    if let Some(glob) = pathspec.strip_prefix(":(top,exclude)") {
+        return format!("!{glob}");
+    }
+
+    pathspec
+        .strip_prefix(":(top)")
+        .unwrap_or(pathspec)
+        .to_owned()
+}
+
+/// The pattern that excludes one file and nothing else. A path holding
+/// wildcards has to say it means them literally; anything else reads better,
+/// and round-trips through [`pattern_of`], as a glob.
+pub(crate) fn excluding(path: &str) -> String {
+    if path.contains(['*', '?', '[', '\\']) {
+        return format!(":(top,exclude,literal){path}");
+    }
+
+    format!("!{path}")
 }
 
 /// `word` as it has to be written to survive being read back, and to mean the
@@ -379,6 +451,45 @@ mod tests {
             git.edited("git diff 'unbalanced"),
             Err(Error::EditedCommandQuotes)
         ));
+    }
+
+    /// The paths a command asks for are what the user wrote, so they can be
+    /// offered back and asked again unchanged.
+    #[test]
+    fn the_paths_asked_for_round_trip_through_their_patterns() {
+        let patterns = ["src", "!*_test.go", ":(top,exclude,literal)a[1].go"].map(String::from);
+        let asked = git(&["git", "diff", "main"]).asking_for(&patterns);
+
+        assert_eq!(
+            asked.line(None),
+            "git diff main -- ':(top)src' ':(top,exclude)*_test.go' ':(top,exclude,literal)a[1].go'"
+        );
+        assert_eq!(asked.file_patterns(), patterns);
+        assert_eq!(asked.asking_for(&asked.file_patterns()), asked);
+    }
+
+    /// Asking for other paths replaces the ones asked for before, and asking
+    /// for none leaves no `--` behind.
+    #[test]
+    fn the_paths_asked_for_are_replaced_wholesale() {
+        let git = git(&["git", "diff", "-U8", "main", "--", "src"]);
+
+        assert_eq!(
+            git.asking_for(&["lib".to_owned()]).line(None),
+            "git diff -U8 main -- ':(top)lib'"
+        );
+        assert_eq!(git.asking_for(&[]).line(None), "git diff -U8 main");
+    }
+
+    /// A file is hidden by name, and a name that holds wildcards has to say it
+    /// means them literally.
+    #[test]
+    fn one_file_is_excluded_by_its_own_name() {
+        assert_eq!(excluding("src/gen/a.pb.go"), "!src/gen/a.pb.go");
+        assert_eq!(
+            excluding("src/a[1].go"),
+            ":(top,exclude,literal)src/a[1].go"
+        );
     }
 
     #[test]

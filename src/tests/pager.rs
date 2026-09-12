@@ -249,6 +249,68 @@ fn a_patch_with_no_command_cannot_be_edited() {
     );
 }
 
+fn two_changed_files(ctx: &TestContext) {
+    commit(&ctx.dir, "a.rs", "testing\n");
+    commit(&ctx.dir, "a_test.rs", "testing\n");
+    fs::write(ctx.dir.join("a.rs"), "changed\n").unwrap();
+    fs::write(ctx.dir.join("a_test.rs"), "changed\n").unwrap();
+}
+
+/// A hidden file is not "diff not displayed": it is absent, as if the patch
+/// never had it. What is left is a diff like any other.
+#[test]
+fn hiding_the_file_under_the_cursor_drops_it_from_the_view() {
+    let mut ctx = setup_clone!();
+    two_changed_files(&ctx);
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(&mut app, keys("-j"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(!buffer.contains("a.rs"), "{buffer}");
+    assert!(buffer.contains("a_test.rs"), "{buffer}");
+    assert!(offers(&app, Op::Stage));
+}
+
+/// The paths are the user's to say, in git's own language less the magic: a
+/// bare pattern limits the view, `!` drops what it matches.
+#[test]
+fn the_files_to_show_can_be_said_by_pattern() {
+    let mut ctx = setup_clone!();
+    two_changed_files(&ctx);
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(&mut app, keys("_!*_test.rs<enter>"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("a.rs"), "{buffer}");
+    assert!(!buffer.contains("a_test.rs"), "{buffer}");
+}
+
+/// Hiding a file is an edit of the command like any other, so it is there to
+/// be read back, undone, or added to.
+#[test]
+fn the_files_asked_for_come_back_for_editing() {
+    let mut ctx = setup_clone!();
+    two_changed_files(&ctx);
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(&mut app, keys("-_"));
+    assert!(
+        ctx.redact_buffer().contains("Files: › !a.rs"),
+        "{}",
+        ctx.redact_buffer()
+    );
+
+    ctx.update(&mut app, keys("<enter>:"));
+    assert!(
+        ctx.redact_buffer()
+            .contains("git diff -- ':(top,exclude)a.rs'"),
+        "{}",
+        ctx.redact_buffer()
+    );
+}
+
 /// Folding everything leaves one folded thing, not a stack of them: opening a
 /// file shows the diff inside it, rather than another thing to open.
 #[test]

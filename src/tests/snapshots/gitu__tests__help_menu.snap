@@ -9,17 +9,17 @@ expression: ctx.redact_buffer()
  backtab          Fold all                f   Fetch                             |
  U                Diff context            h/? Help                              |
  :                Edit git command        l   Log                               |
- k/up             Up                      m   Merge                             |
- j/down           Down                    M   Remote                            |
- ctrl+k/ctrl+up   Up line                 F   Pull                              |
- ctrl+j/ctrl+down Down line               P   Push                              |
- shift+up         Select up               r   Rebase                            |
- shift+down       Select down             X   Reset                             |
- alt+k/alt+up     Prev section            V   Revert                            |
- alt+j/alt+down   Next section            A   Cherry-pick                       |
- alt+h/alt+left   Parent section          z   Stash                             |
+ _                Files                   m   Merge                             |
+ k/up             Up                      M   Remote                            |
+ j/down           Down                    F   Pull                              |
+ ctrl+k/ctrl+up   Up line                 P   Push                              |
+ ctrl+j/ctrl+down Down line               r   Rebase                            |
+ shift+up         Select up               X   Reset                             |
+ shift+down       Select down             V   Revert                            |
+ alt+k/alt+up     Prev section            A   Cherry-pick                       |
+ alt+j/alt+down   Next section            z   Stash                             |
+ alt+h/alt+left   Parent section                                                |
  g+g              Top                                                           |
  G                Bottom                                                        |
  ctrl+u           Scroll half page up                                           |
- ctrl+d           Scroll half page down                                         |
-styles_hash: 555976dfc95a16d8
+styles_hash: 9740ebd5635e0f2d

@@ -649,12 +649,18 @@ impl App {
     }
 
     pub fn prompt(&mut self, term: &mut Term, params: &PromptParams) -> Res<String> {
+        let default = (params.create_default_value)(self);
+
         // A prompt with nothing to say says nothing: the key that opened it
-        // already said what is being answered.
-        let prompt_text = match (params.prompt, (params.create_default_value)(self)) {
+        // already said what is being answered. Prefilled, the default is the
+        // answer being edited rather than the one an empty answer falls back
+        // to — it is on the line, so naming it again says nothing either.
+        let prompt_text = match (params.prompt, &default) {
             ("", _) => Cow::Borrowed(""),
-            (prompt, Some(default)) => format!("{prompt} (default {default}):").into(),
-            (prompt, None) => format!("{prompt}:").into(),
+            (prompt, Some(default)) if !params.prefill => {
+                format!("{prompt} (default {default}):").into()
+            }
+            (prompt, _) => format!("{prompt}:").into(),
         };
 
         if params.hide_menu {
@@ -663,10 +669,8 @@ impl App {
 
         self.state.prompt.set(prompt::PromptData { prompt_text });
 
-        // Prefilled, the default is the answer being edited rather than the one
-        // an empty answer falls back to, so an emptied prompt means empty.
         if params.prefill
-            && let Some(default) = (params.create_default_value)(self)
+            && let Some(default) = default
         {
             *self.state.prompt.state.value_mut() = default;
             self.state.prompt.state.move_end();

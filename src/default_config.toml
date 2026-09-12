@@ -173,6 +173,10 @@ root.toggle_all_sections = ["backtab"]
 root.diff_context = ["U"]
 # Edit the git command the view is the output of, and ask it again.
 root.edit_git_command = [":"]
+# Drop the file under the cursor from the view, or say which files to show at
+# all: `src !*_test.go` limits the view to src and hides its tests.
+root.hide_file = ["-"]
+root.file_patterns = ["_"]
 root.move_up = ["k", "up"]
 root.move_down = ["j", "down"]
 root.move_up_line = ["ctrl+k", "ctrl+up"]
