@@ -38,7 +38,7 @@ clap = { version = "4.5.54", features = ["derive"] }
 # mio. Gitu needs it to be usable as a pager: with a patch on stdin the keyboard
 # has to come from /dev/tty, and macOS kqueue refuses to register that device,
 # so mio's event source cannot be built at all.
-crossterm = { version = "0.28.1", features = ["use-dev-tty"] }
+crossterm = { version = "0.29.0", features = ["use-dev-tty"] }
 etcetera = "0.11.0"
 figment = { version = "0.10.19", features = ["toml"] }
 git-version = "0.3.9"
@@ -48,10 +48,14 @@ log = "0.4.28"
 nom = "8.0.0"
 notify = "8.0.0"
 serde = { version = "1.0.225", features = ["derive"] }
-ratatui = { version = "0.29.0", features = ["serde"] }
+ratatui = { version = "0.30.2", default-features = false, features = [
+    "crossterm_0_29",
+    "layout-cache",
+    "serde",
+] }
 simple-logging = "2.0.2"
 toml = "0.8.23"
-tui-prompts = "0.5.2"
+tui-prompts = "0.6.7"
 tree-sitter = "=0.25.6"
 tree-sitter-highlight = "=0.25.6"
 tree-sitter-rust = "=0.24.0"
@@ -77,7 +81,7 @@ regex = "1.12.2"
 strip-ansi-escapes = "0.2.1"
 unicode-segmentation = "1.12.0"
 cached = "0.56.0"
-strum = { version = "0.26.3", features = ["strum_macros"] }
+strum = { version = "0.26.3", features = ["derive"] }
 tinyvec = "1.10.0"
 smashquote = "0.1.2"
 imara-diff = { version = "0.2.0", default-features = false }

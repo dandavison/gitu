@@ -18,7 +18,7 @@ use crate::{
     items::{self, Item, RenderParams},
 };
 use git2::Repository;
-use ratatui::style::{Style, Stylize};
+use ratatui::style::Style;
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 /// What git handed gitu as its pager: its output, and the argv of the command
