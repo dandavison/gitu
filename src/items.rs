@@ -494,7 +494,19 @@ fn rows_of<'a>(lines: impl Iterator<Item = &'a crate::diff_colorizer::ParsedLine
 fn rendered_spans(line: &crate::diff_colorizer::ParsedLine) -> RenderedRow {
     line.runs
         .iter()
-        .map(|(range, style)| (line.text[range.clone()].replace('\t', "    "), *style))
+        .map(|(range, style)| {
+            let text = line.text[range.clone()].replace('\t', "    ");
+            let text = if let Some(link) = line
+                .hyperlinks
+                .iter()
+                .find(|link| link.range.contains(&range.start))
+            {
+                crate::ui::osc8_hyperlink(&text, &link.uri)
+            } else {
+                text
+            };
+            (text, *style)
+        })
         .collect()
 }
 
@@ -1086,6 +1098,19 @@ mod tests {
             .skip_while(|item| !matches!(item.data, ItemData::HunkLine { .. }))
             .map(|item| (item.depth, item.unselectable))
             .collect()
+    }
+
+    #[test]
+    fn rendered_spans_keep_hyperlinks() {
+        let line = &parse_ansi_lines(
+            "plain \x1b]8;;file:///tmp/a.rs:12\x1b\\linked\x1b]8;;\x1b\\ plain\n",
+        )
+        .lines[0];
+
+        assert_eq!(
+            rendered_spans(line)[1].0,
+            "\x1b]8;;file:///tmp/a.rs:12\x1b\\linked\x1b]8;;\x1b\\"
+        );
     }
 
     /// A renderer that wraps a long line emits several rows for it, re-emitting

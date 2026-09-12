@@ -25,6 +25,8 @@ pub enum TermBackend {
     Test {
         backend: TestBackend,
         events: Vec<Event>,
+        #[cfg(test)]
+        draws: Vec<Vec<(u16, u16, String)>>,
     },
 }
 
@@ -37,7 +39,29 @@ impl Backend for TermBackend {
     {
         match self {
             TermBackend::Crossterm(t) => t.draw(content),
-            TermBackend::Test { backend, .. } => backend.draw(content).map_err(|e| match e {}),
+            TermBackend::Test {
+                backend,
+                #[cfg(test)]
+                draws,
+                ..
+            } => {
+                #[cfg(test)]
+                {
+                    let content: Vec<_> =
+                        content.map(|(x, y, cell)| (x, y, cell.clone())).collect();
+                    draws.push(
+                        content
+                            .iter()
+                            .map(|(x, y, cell)| (*x, *y, cell.symbol().to_string()))
+                            .collect(),
+                    );
+                    backend
+                        .draw(content.iter().map(|(x, y, cell)| (*x, *y, cell)))
+                        .map_err(|e| match e {})
+                }
+                #[cfg(not(test))]
+                backend.draw(content).map_err(|e| match e {})
+            }
         }
     }
 

@@ -770,7 +770,7 @@ pub(crate) fn layout_screen<'a>(
                 line.display.spans.into_iter().for_each(|span| {
                     let style = bg.patch(line.display.style).patch(span.style);
 
-                    let span_width = span.content.graphemes(true).count();
+                    let span_width = ui::display_text(&span.content).graphemes(true).count();
 
                     if line_end + span_width >= size.width as usize {
                         // Truncate the span and insert an ellipsis to indicate overflow
@@ -779,11 +779,11 @@ pub(crate) fn layout_screen<'a>(
                         ui::layout_span(
                             layout,
                             (
-                                span.content
-                                    .graphemes(true)
-                                    .take(span_width.saturating_sub(overflow + 1))
-                                    .collect::<String>()
-                                    .into(),
+                                ui::truncate_span(
+                                    &span.content,
+                                    span_width.saturating_sub(overflow + 1),
+                                )
+                                .into(),
                                 style,
                             ),
                         );

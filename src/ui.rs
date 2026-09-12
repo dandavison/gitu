@@ -8,6 +8,7 @@ use layout::LayoutTree;
 use layout::OPTS;
 use ratatui::Frame;
 use ratatui::prelude::*;
+use std::num::NonZeroU16;
 use tui_prompts::State as _;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -50,7 +51,12 @@ pub(crate) fn ui(frame: &mut Frame, state: &mut State) {
         let LayoutItem { data, pos, size } = item;
         let area = Rect::new(pos[0], pos[1], size[0], size[1]);
         let (text, style) = data;
-        frame.render_widget(SpanRef(text, *style), area);
+        if let Some((uri, text)) = osc8_parts(text) {
+            let text = Cow::Borrowed(text);
+            frame.render_widget(SpanRef(&text, *style, Some(uri)), area);
+        } else {
+            frame.render_widget(SpanRef(text, *style, None), area);
+        }
     }
 
     layout.clear();
@@ -88,12 +94,25 @@ fn panels_height(state: &State, size: Size) -> u16 {
         .unwrap_or(0)
 }
 
-struct SpanRef<'a>(&'a Cow<'a, str>, Style);
+struct SpanRef<'a>(&'a Cow<'a, str>, Style, Option<&'a str>);
 
 impl<'a> Widget for SpanRef<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let SpanRef(text, style) = self;
-        buf.set_string(area.x, area.y, text, style);
+        let SpanRef(text, style, hyperlink) = self;
+        let Some(hyperlink) = hyperlink else {
+            buf.set_string(area.x, area.y, text, style);
+            return;
+        };
+        for (offset, grapheme) in text.graphemes(true).take(area.width as usize).enumerate() {
+            let Some(cell) = buf.cell_mut(Position::new(area.x + offset as u16, area.y)) else {
+                break;
+            };
+            cell.set_symbol(&osc8_hyperlink(grapheme, hyperlink));
+            cell.set_style(style);
+            cell.set_diff_option(ratatui::buffer::CellDiffOption::ForcedWidth(
+                NonZeroU16::MIN,
+            ));
+        }
     }
 }
 
@@ -157,8 +176,32 @@ pub(crate) fn layout_line<'a>(layout: &mut UiTree<'a>, line: Line<'a>) {
 }
 
 pub(crate) fn layout_span<'a>(layout: &mut UiTree<'a>, span: (Cow<'a, str>, Style)) {
-    let width = span.0.graphemes(true).count() as u16;
+    let width = display_text(&span.0).graphemes(true).count() as u16;
     layout.leaf_with_size(span, [width, 1]);
+}
+
+pub(crate) fn display_text(text: &str) -> &str {
+    osc8_parts(text).map_or(text, |(_, text)| text)
+}
+
+pub(crate) fn truncate_span(text: &str, graphemes: usize) -> String {
+    let truncated = display_text(text)
+        .graphemes(true)
+        .take(graphemes)
+        .collect::<String>();
+    osc8_parts(text).map_or_else(
+        || truncated.clone(),
+        |(uri, _)| osc8_hyperlink(&truncated, uri),
+    )
+}
+
+pub(crate) fn osc8_hyperlink(text: &str, uri: &str) -> String {
+    format!("\x1b]8;;{uri}\x1b\\{text}\x1b]8;;\x1b\\")
+}
+
+fn osc8_parts(text: &str) -> Option<(&str, &str)> {
+    let (uri, text) = text.strip_prefix("\x1b]8;;")?.split_once("\x1b\\")?;
+    Some((uri, text.strip_suffix("\x1b]8;;\x1b\\")?))
 }
 
 pub(crate) fn repeat_chars(layout: &mut UiTree, count: usize, chars: &'static str, style: Style) {
@@ -183,4 +226,41 @@ pub(crate) fn repeat_chars(layout: &mut UiTree, count: usize, chars: &'static st
             layout_span(layout, (chars[..end].into(), style));
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::buffer::CellDiffOption;
+    use std::num::NonZeroU16;
+
+    #[test]
+    fn hyperlink_span_is_independently_redrawable_cells() {
+        let text = Cow::Borrowed("link");
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 8, 1));
+
+        SpanRef(&text, Style::new(), Some("https://example.com"))
+            .render(Rect::new(0, 0, 4, 1), &mut buffer);
+
+        for (x, grapheme) in "link".chars().enumerate() {
+            assert_eq!(
+                buffer[(x as u16, 0)].symbol(),
+                osc8_hyperlink(&grapheme.to_string(), "https://example.com")
+            );
+            assert_eq!(
+                buffer[(x as u16, 0)].diff_option,
+                CellDiffOption::ForcedWidth(NonZeroU16::MIN)
+            );
+        }
+    }
+
+    #[test]
+    fn truncating_a_hyperlink_keeps_it_clickable() {
+        let link = osc8_hyperlink("linked", "https://example.com");
+
+        assert_eq!(
+            truncate_span(&link, 4),
+            osc8_hyperlink("link", "https://example.com")
+        );
+    }
 }

@@ -126,6 +126,12 @@ pub(crate) struct LineMetadata {
     pub file: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Hyperlink {
+    pub range: Range<usize>,
+    pub uri: String,
+}
+
 /// A single line of colorizer output: its plain text (ANSI stripped, newline
 /// excluded), the contiguous `(byte-range, style)` runs that tile it, and the
 /// OSC-1717 records emitted for it. A row usually has one record; a side-by-side
@@ -136,6 +142,7 @@ pub(crate) struct LineMetadata {
 pub(crate) struct ParsedLine {
     pub text: String,
     pub runs: Vec<(Range<usize>, Style)>,
+    pub hyperlinks: Vec<Hyperlink>,
     pub records: Vec<LineMetadata>,
 }
 
@@ -360,6 +367,8 @@ struct Performer {
     runs: Vec<(Range<usize>, Style)>,
     /// Start offset and style of the run currently being accumulated.
     open: Option<(usize, Style)>,
+    hyperlink: Option<(usize, String)>,
+    hyperlinks: Vec<Hyperlink>,
     /// The OSC-1717 records seen on the current line, in emission order.
     records: Vec<LineMetadata>,
     /// Set when the current line carries the version-only handshake record. Its
@@ -370,6 +379,7 @@ struct Performer {
 
 impl Performer {
     fn end_line(&mut self) {
+        self.finish_hyperlink();
         if let Some((start, style)) = self.open.take() {
             self.runs.push((start..self.text.len(), style));
         }
@@ -378,8 +388,12 @@ impl Performer {
         let line = ParsedLine {
             text: mem::take(&mut self.text),
             runs: mem::take(&mut self.runs),
+            hyperlinks: mem::take(&mut self.hyperlinks),
             records: mem::take(&mut self.records),
         };
+        if let Some((start, _)) = &mut self.hyperlink {
+            *start = 0;
+        }
         if !handshake_only {
             self.lines.push(line);
         }
@@ -392,6 +406,32 @@ impl Performer {
         ParsedOutput {
             lines: self.lines,
             protocol_version: self.protocol_version,
+        }
+    }
+
+    fn set_hyperlink(&mut self, parts: &[&[u8]]) {
+        self.finish_hyperlink();
+        if let Some((start, style)) = self.open.take()
+            && start < self.text.len()
+        {
+            self.runs.push((start..self.text.len(), style));
+        }
+        let uri = parts
+            .iter()
+            .map(|part| String::from_utf8_lossy(part))
+            .collect::<Vec<_>>()
+            .join(";");
+        self.hyperlink = (!uri.is_empty()).then_some((self.text.len(), uri));
+    }
+
+    fn finish_hyperlink(&mut self) {
+        if let Some((start, uri)) = &self.hyperlink
+            && *start < self.text.len()
+        {
+            self.hyperlinks.push(Hyperlink {
+                range: *start..self.text.len(),
+                uri: uri.clone(),
+            });
         }
     }
 }
@@ -430,6 +470,10 @@ impl Perform for Performer {
     }
 
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
+        if let [b"8", _, uri @ ..] = params {
+            self.set_hyperlink(uri);
+            return;
+        }
         if params.first() != Some(&b"1717".as_slice()) {
             return;
         }
@@ -662,6 +706,23 @@ mod tests {
         let lines = parse_ansi_lines("\x1b[32m+\tlet x = 1;\x1b[0m\n").lines;
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0].text, "+\tlet x = 1;");
+    }
+
+    #[test]
+    fn parses_osc8_hyperlinks() {
+        let line = &parse_ansi_lines(
+            "plain \x1b]8;;file:///tmp/a.rs:12\x1b\\linked\x1b]8;;\x1b\\ plain\n",
+        )
+        .lines[0];
+
+        assert_eq!(line.text, "plain linked plain");
+        assert_eq!(
+            line.hyperlinks,
+            [Hyperlink {
+                range: 6..12,
+                uri: "file:///tmp/a.rs:12".into(),
+            }]
+        );
     }
 
     #[test]

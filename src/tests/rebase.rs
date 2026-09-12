@@ -158,6 +158,28 @@ fn rebase_todo_shows_the_log_renderer_rows() {
     );
 }
 
+#[test]
+fn rebase_todo_redraws_moved_renderer_hyperlinks() {
+    let mut ctx = setup_todo(setup_clone!());
+    let config = ctx.config();
+    config.general.log_renderer.enabled = true;
+    config.general.log_renderer.command = vec![
+        "git".into(),
+        "log".into(),
+        "--color=always".into(),
+        "--format={commit}%n▸ \x1b]8;;https://example.com/%H\x1b\\%h\x1b]8;;\x1b\\ %s".into(),
+    ];
+
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys(OPEN_TODO));
+
+    let screen = ctx.physical_screen();
+    for rev in ["HEAD", "HEAD~1", "HEAD~2"] {
+        let commit = run(&ctx.dir, &["git", "log", "-1", "--format=%h %s", rev]);
+        assert!(screen.contains(&format!("▸ {}", commit.trim())), "{screen}");
+    }
+}
+
 /// The list git writes for `rebase -i`, oldest first, as its sequence editor
 /// receives it.
 fn write_todo(ctx: &TestContext, revs: &str) -> PathBuf {

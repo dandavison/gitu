@@ -13,6 +13,7 @@ use git2::Repository;
 use ratatui::{Terminal, backend::TestBackend, layout::Size};
 use regex::Regex;
 use std::{path::PathBuf, rc::Rc, sync::Arc, time::Duration};
+use unicode_segmentation::UnicodeSegmentation;
 
 use self::buffer::TestBuffer;
 
@@ -48,6 +49,7 @@ impl TestContext {
         let term = Terminal::new(TermBackend::Test {
             backend: TestBackend::new(size.width, size.height),
             events: vec![],
+            draws: vec![],
         })
         .unwrap();
         let repo_ctx = RepoTestContext::setup_clone(test_name);
@@ -143,6 +145,42 @@ impl TestContext {
 
         debug_output
     }
+
+    pub fn physical_screen(&self) -> String {
+        let TermBackend::Test { draws, .. } = self.term.backend() else {
+            unreachable!();
+        };
+        let mut physical = blank_screen(self.size);
+        for draw in draws {
+            for (x, y, symbol) in draw {
+                draw_symbol(&mut physical, *x, *y, symbol);
+            }
+        }
+        screen_text(&physical)
+    }
+}
+
+fn blank_screen(size: Size) -> Vec<Vec<String>> {
+    vec![vec![" ".to_string(); size.width as usize]; size.height as usize]
+}
+
+fn draw_symbol(screen: &mut [Vec<String>], x: u16, y: u16, symbol: &str) {
+    let Some(row) = screen.get_mut(y as usize) else {
+        return;
+    };
+    for (column, grapheme) in crate::ui::display_text(symbol).graphemes(true).enumerate() {
+        if let Some(cell) = row.get_mut(x as usize + column) {
+            *cell = grapheme.to_string();
+        }
+    }
+}
+
+fn screen_text(screen: &[Vec<String>]) -> String {
+    screen
+        .iter()
+        .map(|row| row.concat())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn redact(debug_output: &mut String, regex: &str) {
