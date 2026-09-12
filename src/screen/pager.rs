@@ -18,6 +18,7 @@ use crate::{
     items::{self, Item, RenderParams},
 };
 use git2::Repository;
+use ratatui::style::{Style, Stylize};
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 /// What git handed gitu as its pager: its output, and the argv of the command
@@ -52,7 +53,12 @@ enum Source {
     /// produced the patch. Asking again is what makes it a live view — staging
     /// a hunk changes what it shows — and the question itself can be edited,
     /// so what comes back is classified afresh on every ask.
-    Live(Rc<RefCell<GitCommand>>),
+    Live {
+        git: Rc<RefCell<GitCommand>>,
+        /// The command as git put it, to say when what is being asked is no
+        /// longer that.
+        found: String,
+    },
     /// A patch gitu found no command for: a saved patch file, another repo's,
     /// one piped in from a process already gone. It stays as it came, and gitu
     /// structures it.
@@ -77,7 +83,10 @@ impl Source {
             let mut patterns = git.file_patterns();
             patterns.extend(hide.iter().map(|glob| format!("!{glob}")));
 
-            return Source::Live(Rc::new(RefCell::new(git.asking_for(&patterns))));
+            return Source::Live {
+                found: git.line(None),
+                git: Rc::new(RefCell::new(git.asking_for(&patterns))),
+            };
         }
 
         let text = crate::diff_colorizer::strip_ansi(&patch);
@@ -100,25 +109,30 @@ impl Source {
     /// The command being asked, where there is one to edit.
     fn git_command(&self) -> Option<Rc<RefCell<GitCommand>>> {
         match self {
-            Source::Live(git) => Some(Rc::clone(git)),
+            Source::Live { git, .. } => Some(Rc::clone(git)),
             Source::Patch(_) | Source::Unstructured(_) => None,
         }
     }
 
     fn items(&self, config: &Config, repo: &Repository, params: &RenderParams) -> Res<Vec<Item>> {
-        let diff = match self {
-            Source::Live(git) => Rc::new(ask_git(&git.borrow(), repo, params.context.as_deref())?),
-            Source::Patch(diff) => Rc::clone(diff),
+        let (diff, mut items) = match self {
+            Source::Live { git, found } => {
+                let line = git.borrow().line(params.context.as_deref());
+                let diff = ask_git(&git.borrow(), repo, params.context.as_deref())?;
+                (Rc::new(diff), asked_rows(&line, found))
+            }
+            Source::Patch(diff) => (Rc::clone(diff), Vec::new()),
             Source::Unstructured(text) => return Ok(rows(config, repo, params, text)),
         };
 
         // What came back has no diff in it: a log, a blame, a grep, a man page.
         // gitu has no structure of its own to impose, so the renderer draws it.
         if diff.file_diffs.is_empty() {
-            return Ok(rows(config, repo, params, &diff.text));
+            items.extend(rows(config, repo, params, &diff.text));
+            return Ok(items);
         }
 
-        let mut items = preamble_items(config, params, &diff.text);
+        items.extend(preamble_items(config, params, &diff.text));
         items.extend(diff_items(config, params, &diff));
         Ok(items)
     }
@@ -153,6 +167,21 @@ fn ask_git(git: &GitCommand, repo: &Repository, context: Option<&str>) -> Res<Di
         commit: commit_named_by(&text),
         text,
     })
+}
+
+/// One line saying what is being asked, and only when that is not what git was
+/// asked: a view with files hidden from it must not pass for the whole patch.
+/// When gitu is asking git's own question there is nothing to say.
+fn asked_rows(line: &str, found: &str) -> Vec<Item> {
+    if line == found {
+        return Vec::new();
+    }
+
+    vec![Item {
+        unselectable: true,
+        rendered: Some(Rc::new(vec![(line.to_owned(), Style::new().dim())])),
+        ..Default::default()
+    }]
 }
 
 /// Text the renderer draws and gitu does not structure. A renderer that says

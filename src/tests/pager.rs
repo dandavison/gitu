@@ -265,11 +265,14 @@ fn a_patch_with_no_command_cannot_be_edited() {
     );
 }
 
+/// Two files whose contents say which is which, so that a view can be asserted
+/// to have dropped one of them without reading its name off the row that says
+/// what is being asked.
 fn two_changed_files(ctx: &TestContext) {
-    commit(&ctx.dir, "a.rs", "testing\n");
-    commit(&ctx.dir, "a_test.rs", "testing\n");
-    fs::write(ctx.dir.join("a.rs"), "changed\n").unwrap();
-    fs::write(ctx.dir.join("a_test.rs"), "changed\n").unwrap();
+    commit(&ctx.dir, "a.rs", "alpha\n");
+    commit(&ctx.dir, "a_test.rs", "beta\n");
+    fs::write(ctx.dir.join("a.rs"), "alpha changed\n").unwrap();
+    fs::write(ctx.dir.join("a_test.rs"), "beta changed\n").unwrap();
 }
 
 /// A hidden file is not "diff not displayed": it is absent, as if the patch
@@ -283,8 +286,8 @@ fn hiding_the_file_under_the_cursor_drops_it_from_the_view() {
     ctx.update(&mut app, keys("-j"));
 
     let buffer = ctx.redact_buffer();
-    assert!(!buffer.contains("a.rs"), "{buffer}");
-    assert!(buffer.contains("a_test.rs"), "{buffer}");
+    assert!(!buffer.contains("alpha"), "{buffer}");
+    assert!(buffer.contains("beta"), "{buffer}");
     assert!(offers(&app, Op::Stage));
 }
 
@@ -299,8 +302,8 @@ fn the_files_to_show_can_be_said_by_pattern() {
     ctx.update(&mut app, keys("_!*_test.rs<enter>"));
 
     let buffer = ctx.redact_buffer();
-    assert!(buffer.contains("a.rs"), "{buffer}");
-    assert!(!buffer.contains("a_test.rs"), "{buffer}");
+    assert!(buffer.contains("alpha"), "{buffer}");
+    assert!(!buffer.contains("beta"), "{buffer}");
 }
 
 /// Hiding a file is an edit of the command like any other, so it is there to
@@ -319,6 +322,30 @@ fn the_files_asked_for_come_back_for_editing() {
     );
 
     ctx.update(&mut app, keys("<enter>:"));
+    assert!(
+        ctx.redact_buffer()
+            .contains("git diff -- ':(top,exclude)a.rs'"),
+        "{}",
+        ctx.redact_buffer()
+    );
+}
+
+/// A view with files hidden from it must not pass for the whole patch, so a
+/// question that is no longer git's own says so — in one line, and only then.
+#[test]
+fn a_view_that_is_not_what_git_asked_for_says_what_it_is() {
+    let mut ctx = setup_clone!();
+    two_changed_files(&ctx);
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    assert!(
+        !ctx.redact_buffer().contains("git diff"),
+        "nothing to say about git's own question:\n{}",
+        ctx.redact_buffer()
+    );
+
+    ctx.update(&mut app, keys("-"));
+
     assert!(
         ctx.redact_buffer()
             .contains("git diff -- ':(top,exclude)a.rs'"),
