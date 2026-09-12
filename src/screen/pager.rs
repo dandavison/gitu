@@ -33,7 +33,7 @@ pub(crate) fn create(
     params: RenderParams,
     paged: Paged,
 ) -> Res<Screen> {
-    let source = Source::of(&repo, paged.text, paged.git_argv)?;
+    let source = Source::of(paged.text, paged.git_argv);
 
     Screen::new(
         Arc::clone(&config),
@@ -68,31 +68,28 @@ impl Source {
     /// diff of, and so which ops it admits (see [`DiffType`]), and it can be
     /// put again. Output with no diff in it is left as it came whatever the
     /// command was, since there is nothing in it for gitu to structure.
-    fn of(repo: &Repository, patch: String, git_argv: Option<Vec<String>>) -> Res<Self> {
+    fn of(patch: String, git_argv: Option<Vec<String>>) -> Self {
         let text = crate::diff_colorizer::strip_ansi(&patch);
         let file_diffs = gitu_diff::Parser::new(&text)
             .parse_diff()
             .unwrap_or_default();
 
         if file_diffs.is_empty() {
-            return Ok(Source::Unstructured(patch));
+            return Source::Unstructured(patch);
         }
 
-        if let Some(git) = git_argv.and_then(GitCommand::of) {
-            let commit = commit_named_by(&text);
-            // Asking again must answer what arrived, or the rows would be of a
-            // different diff than the one git piped in.
-            if ask_git(&git, repo, commit.clone(), None)?.text == text {
-                return Ok(Source::Live { git, commit });
-            }
+        match git_argv.and_then(GitCommand::of) {
+            Some(git) => Source::Live {
+                git,
+                commit: commit_named_by(&text),
+            },
+            None => Source::Patch(Rc::new(Diff {
+                file_diffs,
+                text,
+                diff_type: DiffType::TreeToTree,
+                commit: None,
+            })),
         }
-
-        Ok(Source::Patch(Rc::new(Diff {
-            file_diffs,
-            text,
-            diff_type: DiffType::TreeToTree,
-            commit: None,
-        })))
     }
 
     fn items(&self, config: &Config, repo: &Repository, params: &RenderParams) -> Res<Vec<Item>> {
@@ -213,8 +210,7 @@ mod tests {
 
     fn items_of(repo: &Repository, patch: &str) -> Vec<ItemData> {
         let config = config::init_test_config().unwrap();
-        Source::of(repo, patch.to_string(), None)
-            .unwrap()
+        Source::of(patch.to_string(), None)
             .items(&config, repo, &Default::default())
             .unwrap()
             .into_iter()
@@ -428,8 +424,7 @@ mod tests {
     ) -> usize {
         let config = config::init_test_config().unwrap();
         let repo = Repository::open(&ctx.dir).unwrap();
-        Source::of(&repo, patch.to_string(), Some(argv.to_vec()))
-            .unwrap()
+        Source::of(patch.to_string(), Some(argv.to_vec()))
             .items(
                 &config,
                 &repo,
