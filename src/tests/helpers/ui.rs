@@ -4,6 +4,7 @@ use crate::{
     config::{self, Config},
     error::Error,
     key_parser::parse_test_keys,
+    screen::pager::Paged,
     term::{Term, TermBackend},
     tests::helpers::RepoTestContext,
 };
@@ -71,15 +72,32 @@ impl TestContext {
         self.init_app_with_args(path, Args::default())
     }
 
-    /// Start gitu as git's pager would (`GIT_PAGER='gitu --pager' git diff`).
+    /// Start gitu as git's pager would (`[pager] diff = gitu --pager`), on the
+    /// output of `cmd` and knowing that `cmd` is what produced it.
+    pub fn init_app_as_pager_of(&mut self, cmd: &[&str]) -> App {
+        let text = crate::tests::helpers::run(&self.dir, cmd);
+        self.init_app_paged(Paged {
+            text,
+            git_argv: Some(cmd.iter().map(|arg| (*arg).to_owned()).collect()),
+        })
+    }
+
+    /// Start gitu on piped text no command of git's is known to have produced.
     pub fn init_app_with_patch(&mut self, patch: String) -> App {
+        self.init_app_paged(Paged {
+            text: patch,
+            git_argv: None,
+        })
+    }
+
+    fn init_app_paged(&mut self, paged: Paged) -> App {
         self.init_app_inner(
             self.dir.to_path_buf(),
             Args {
                 pager: true,
                 ..Default::default()
             },
-            Some(patch),
+            Some(paged),
         )
     }
 
@@ -88,14 +106,14 @@ impl TestContext {
         self.init_app_inner(path, args, None)
     }
 
-    fn init_app_inner(&mut self, path: PathBuf, args: Args, patch: Option<String>) -> App {
+    fn init_app_inner(&mut self, path: PathBuf, args: Args, paged: Option<Paged>) -> App {
         let mut app = App::create(
             Rc::new(Repository::open(path).unwrap()),
             self.size,
             &args,
             Arc::clone(&self.config),
             false,
-            patch,
+            paged,
         )
         .unwrap();
 

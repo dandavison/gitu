@@ -41,6 +41,7 @@ use crate::prompt;
 use crate::rebase_todo::RebaseTodo;
 use crate::screen;
 use crate::screen::Screen;
+use crate::screen::pager::Paged;
 use crate::term::Term;
 use crate::ui;
 
@@ -86,7 +87,7 @@ impl App {
         args: &cli::Args,
         config: Arc<Config>,
         enable_async_cmds: bool,
-        piped_patch: Option<String>,
+        piped: Option<Paged>,
     ) -> Res<Self> {
         let params = RenderParams {
             size,
@@ -94,14 +95,13 @@ impl App {
             context: None,
         };
         let screens = match args.command {
-            // `--pager`: the patch is already in hand, whatever git ran to make it.
-            _ if let Some(patch) = piped_patch => {
+            // `--pager`: git's output is already in hand, with the command it ran.
+            _ if let Some(paged) = piped => {
                 vec![screen::pager::create(
                     Arc::clone(&config),
                     Rc::clone(&repo),
                     params,
-                    patch,
-                    None,
+                    paged,
                 )?]
             }
             Some(cli::Commands::Show { ref reference }) => {

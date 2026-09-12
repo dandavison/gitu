@@ -10,25 +10,30 @@
 use super::Screen;
 use crate::{
     Res,
+    calling_process::GitCommand,
     config::Config,
-    git::{
-        self,
-        diff::{Diff, DiffType},
-    },
+    error::Error,
+    git::diff::{Diff, DiffType},
     gitu_diff,
     items::{self, Item, RenderParams},
 };
 use git2::Repository;
 use std::{rc::Rc, sync::Arc};
 
+/// What git handed gitu as its pager: its output, and the argv of the command
+/// that produced it where gitu could find it.
+pub(crate) struct Paged {
+    pub text: String,
+    pub git_argv: Option<Vec<String>>,
+}
+
 pub(crate) fn create(
     config: Arc<Config>,
     repo: Rc<Repository>,
     params: RenderParams,
-    patch: String,
-    git_argv: Option<Vec<String>>,
+    paged: Paged,
 ) -> Res<Screen> {
-    let source = Source::of(&repo, patch, git_argv)?;
+    let source = Source::of(&repo, paged.text, paged.git_argv)?;
 
     Screen::new(
         Arc::clone(&config),
@@ -37,17 +42,20 @@ pub(crate) fn create(
     )
 }
 
-/// How to put the question gitu recognised the patch as the answer to.
-type AskGit = Box<dyn Fn(&Repository, Option<&str>) -> Res<Diff>>;
-
 /// Where the rows come from each time the screen is rebuilt.
 enum Source {
-    /// A patch gitu can ask git for again: the working tree, the index, or a
-    /// commit the patch names. Asking again is what makes it a live view —
-    /// staging a hunk changes what it shows, and the context can be widened.
-    Live(AskGit),
-    /// A patch that says nothing about how to ask for it again — two revs,
-    /// another repo's. It stays as it came, and gitu structures it.
+    /// A patch git can be asked for again, gitu having found the command that
+    /// produced it. Asking again is what makes it a live view — staging a hunk
+    /// changes what it shows, and the context around each change can be
+    /// widened.
+    Live {
+        git: GitCommand,
+        /// The commit the patch is of, where it says so.
+        commit: Option<String>,
+    },
+    /// A patch gitu found no command for: a saved patch file, another repo's,
+    /// one piped in from a process already gone. It stays as it came, and gitu
+    /// structures it.
     Patch(Rc<Diff>),
     /// Output with no diff in it: a log, a blame, a grep, a man page. gitu has
     /// no structure of its own to impose, so the renderer draws it and what it
@@ -56,35 +64,27 @@ enum Source {
 }
 
 impl Source {
-    /// git tells its pager nothing about the command that produced its output,
-    /// so what gitu can ask git for again is asked for and compared against it.
-    /// Recognising the patch is what makes it a live view, and it is also what
-    /// decides which ops it admits (see [`DiffType`]).
-    fn of(repo: &Repository, patch: String, _git_argv: Option<Vec<String>>) -> Res<Self> {
+    /// The command gitu found is what the patch is: it says what the patch is a
+    /// diff of, and so which ops it admits (see [`DiffType`]), and it can be
+    /// put again. Output with no diff in it is left as it came whatever the
+    /// command was, since there is nothing in it for gitu to structure.
+    fn of(repo: &Repository, patch: String, git_argv: Option<Vec<String>>) -> Res<Self> {
         let text = crate::diff_colorizer::strip_ansi(&patch);
-
-        for ask_git in [
-            git::diff_unstaged as fn(&Repository, Option<&str>) -> Res<Diff>,
-            git::diff_staged,
-        ] {
-            if ask_git(repo, None)?.text == text {
-                return Ok(Source::Live(Box::new(ask_git)));
-            }
-        }
-
-        if let Some(commit) = commit_named_by(&text)
-            && git::show(repo, &commit, None)?.text == text
-        {
-            return Ok(Source::Live(Box::new(move |repo, context| {
-                git::show(repo, &commit, context)
-            })));
-        }
-
         let file_diffs = gitu_diff::Parser::new(&text)
             .parse_diff()
             .unwrap_or_default();
+
         if file_diffs.is_empty() {
             return Ok(Source::Unstructured(patch));
+        }
+
+        if let Some(git) = git_argv.and_then(GitCommand::of) {
+            let commit = commit_named_by(&text);
+            // Asking again must answer what arrived, or the rows would be of a
+            // different diff than the one git piped in.
+            if ask_git(&git, repo, commit.clone(), None)?.text == text {
+                return Ok(Source::Live { git, commit });
+            }
         }
 
         Ok(Source::Patch(Rc::new(Diff {
@@ -105,7 +105,12 @@ impl Source {
         }
 
         let diff = match self {
-            Source::Live(ask_git) => Rc::new(ask_git(repo, params.context.as_deref())?),
+            Source::Live { git, commit } => Rc::new(ask_git(
+                git,
+                repo,
+                commit.clone(),
+                params.context.as_deref(),
+            )?),
             Source::Patch(diff) => Rc::clone(diff),
             Source::Unstructured(_) => unreachable!(),
         };
@@ -114,6 +119,31 @@ impl Source {
         items.extend(diff_items(config, params, &diff));
         Ok(items)
     }
+}
+
+/// Put the command again, for however much of the file around each change is
+/// being asked for now.
+fn ask_git(
+    git: &GitCommand,
+    repo: &Repository,
+    commit: Option<String>,
+    context: Option<&str>,
+) -> Res<Diff> {
+    let output = git
+        .command(context)
+        .current_dir(repo.workdir().ok_or(Error::NoRepoWorkdir)?)
+        .output()
+        .map_err(Error::GitDiff)?;
+
+    let text = String::from_utf8_lossy(&output.stdout).into_owned();
+    Ok(Diff {
+        file_diffs: gitu_diff::Parser::new(&text)
+            .parse_diff()
+            .unwrap_or_default(),
+        diff_type: git.diff_type(),
+        text,
+        commit,
+    })
 }
 
 /// The commit a patch from `git show` is of, named in its first line.
@@ -201,8 +231,10 @@ mod tests {
                 features: Rc::from([]),
                 context: None,
             },
-            patch.to_string(),
-            None,
+            Paged {
+                text: patch.to_string(),
+                git_argv: None,
+            },
         )
         .unwrap()
     }

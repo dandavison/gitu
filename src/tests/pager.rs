@@ -3,7 +3,7 @@
 //! There is no such thing as staging a line of `git show HEAD`: that patch is a
 //! committed change, and applying part of it to the index is cherry-picking.
 //! git tells its pager nothing about the command that produced the patch, so
-//! its provenance has to be recognised rather than assumed.
+//! gitu finds it in the process tree; what it finds is what the patch is.
 
 use super::*;
 use crate::{app::App, ops::Op};
@@ -14,9 +14,8 @@ fn a_working_tree_patch_admits_stage_and_not_unstage() {
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
 
-    // git colours what it writes to its pager; provenance survives that.
-    let patch = run(&ctx.dir, &["git", "-c", "color.diff=always", "diff"]);
-    let mut app = ctx.init_app_with_patch(patch);
+    // git colours what it writes to its pager; the command survives that.
+    let mut app = ctx.init_app_as_pager_of(&["git", "-c", "color.diff=always", "diff"]);
     ctx.update(&mut app, keys("j"));
 
     assert!(offers(&app, Op::Stage));
@@ -30,8 +29,7 @@ fn an_index_patch_admits_unstage_and_not_stage() {
     fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
     run(&ctx.dir, &["git", "add", "firstfile"]);
 
-    let patch = run(&ctx.dir, &["git", "diff", "--cached"]);
-    let mut app = ctx.init_app_with_patch(patch);
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff", "--cached"]);
     ctx.update(&mut app, keys("j"));
 
     assert!(offers(&app, Op::Unstage));
@@ -43,8 +41,7 @@ fn a_commit_patch_admits_neither() {
     let mut ctx = setup_clone!();
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
 
-    let patch = run(&ctx.dir, &["git", "show", "HEAD"]);
-    let mut app = ctx.init_app_with_patch(patch);
+    let mut app = ctx.init_app_as_pager_of(&["git", "show", "HEAD"]);
     ctx.update(&mut app, keys("j"));
 
     assert!(!offers(&app, Op::Stage));
@@ -57,8 +54,7 @@ fn staging_a_hunk_of_a_piped_working_tree_patch_stages_it() {
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
 
-    let patch = run(&ctx.dir, &["git", "diff"]);
-    let mut app = ctx.init_app_with_patch(patch);
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
     ctx.update(&mut app, keys("js"));
 
     assert!(run(&ctx.dir, &["git", "diff", "--cached"]).contains("+changed"));
@@ -73,8 +69,7 @@ fn a_staged_hunk_leaves_the_view_it_was_staged_from() {
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
 
-    let patch = run(&ctx.dir, &["git", "diff"]);
-    let mut app = ctx.init_app_with_patch(patch);
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
     ctx.update(&mut app, keys("js"));
 
     assert!(
@@ -104,8 +99,7 @@ fn widening_the_context_asks_git_for_more_of_the_file() {
     commit(&ctx.dir, "firstfile", &twenty_lines("line 10"));
     fs::write(ctx.dir.join("firstfile"), twenty_lines("changed")).unwrap();
 
-    let patch = run(&ctx.dir, &["git", "diff"]);
-    let mut app = ctx.init_app_with_patch(patch);
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
     assert!(
         !ctx.redact_buffer().contains("line 2 "),
         "three lines of context already reach line 2"
@@ -129,8 +123,7 @@ fn widening_the_context_of_a_piped_commit() {
     commit(&ctx.dir, "firstfile", &twenty_lines("line 10"));
     commit(&ctx.dir, "firstfile", &twenty_lines("changed"));
 
-    let patch = run(&ctx.dir, &["git", "show", "HEAD"]);
-    let mut app = ctx.init_app_with_patch(patch);
+    let mut app = ctx.init_app_as_pager_of(&["git", "show", "HEAD"]);
     assert!(!ctx.redact_buffer().contains("line 2 "));
 
     ctx.update(&mut app, keys("U8<enter>"));
@@ -150,8 +143,7 @@ fn the_context_prompt_says_nothing() {
     commit(&ctx.dir, "firstfile", &twenty_lines("line 10"));
     fs::write(ctx.dir.join("firstfile"), twenty_lines("changed")).unwrap();
 
-    let patch = run(&ctx.dir, &["git", "diff"]);
-    let mut app = ctx.init_app_with_patch(patch);
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
 
     ctx.update(&mut app, keys("U"));
 
@@ -169,8 +161,7 @@ fn the_whole_function_is_asked_for_by_letter() {
     commit(&ctx.dir, "firstfile", &twenty_lines("line 10"));
     fs::write(ctx.dir.join("firstfile"), twenty_lines("changed")).unwrap();
 
-    let patch = run(&ctx.dir, &["git", "diff"]);
-    let mut app = ctx.init_app_with_patch(patch);
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
 
     ctx.update(&mut app, keys("UW<enter>"));
 
@@ -185,8 +176,7 @@ fn opening_a_folded_file_shows_its_diff() {
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
 
-    let patch = run(&ctx.dir, &["git", "diff"]);
-    let mut app = ctx.init_app_with_patch(patch);
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
 
     ctx.update(&mut app, keys("<backtab><tab>"));
 
@@ -197,10 +187,11 @@ fn opening_a_folded_file_shows_its_diff() {
     );
 }
 
-/// A commit's patch is not something git can be asked for again, so it stays
-/// exactly as it arrived.
+/// A patch gitu found no command for — a saved file, a process already gone —
+/// is not something git can be asked for again, so it stays exactly as it
+/// arrived.
 #[test]
-fn a_commit_patch_stays_as_it_arrived() {
+fn a_patch_with_no_command_stays_as_it_arrived() {
     let mut ctx = setup_clone!();
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
 
@@ -293,8 +284,7 @@ fn a_key_press_after_staging_everything_does_nothing() {
     commit(&ctx.dir, "firstfile", "testing\n");
     fs::write(ctx.dir.join("firstfile"), "changed\n").unwrap();
 
-    let patch = run(&ctx.dir, &["git", "diff"]);
-    let mut app = ctx.init_app_with_patch(patch);
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
 
     ctx.update(&mut app, keys("jsj"));
 }

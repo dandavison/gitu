@@ -1,5 +1,6 @@
 pub mod app;
 mod bindings;
+mod calling_process;
 pub mod cli;
 mod cmd_log;
 pub mod config;
@@ -41,6 +42,7 @@ use std::{
 use term::Term;
 
 use crate::config::Config;
+use crate::screen::pager::Paged;
 
 pub const LOG_FILE_NAME: &str = "gitu.log";
 
@@ -88,7 +90,7 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
     let dir = find_git_dir()?;
     let repo = open_repo(&dir)?;
 
-    let piped_patch = args.pager.then(read_piped_patch).transpose()?;
+    let piped = args.pager.then(read_piped_input).transpose()?;
 
     let mut app = app::App::create(
         Rc::new(repo),
@@ -96,7 +98,7 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
         args,
         config,
         true,
-        piped_patch,
+        piped,
     )?;
 
     if let Some(keys_string) = &args.keys {
@@ -120,14 +122,18 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
     Ok(app.state.exit_code)
 }
 
-/// The patch git piped to us as its pager. Reading the terminal instead would
-/// wait for input that is never coming, so that is refused outright.
-fn read_piped_patch() -> Res<String> {
+/// What git piped to us as its pager, and the command it ran to produce it.
+/// Reading the terminal instead would wait for input that is never coming, so
+/// that is refused outright.
+fn read_piped_input() -> Res<Paged> {
     if io::stdin().is_terminal() {
         return Err(Error::PagerWithoutInput);
     }
 
-    io::read_to_string(io::stdin()).map_err(Error::ReadPipedInput)
+    Ok(Paged {
+        text: io::read_to_string(io::stdin()).map_err(Error::ReadPipedInput)?,
+        git_argv: calling_process::paging_for(),
+    })
 }
 
 fn open_repo(dir: &Path) -> Res<Repository> {
