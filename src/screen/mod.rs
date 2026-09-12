@@ -13,6 +13,7 @@ use crate::{
 
 use super::Item;
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::ops::RangeInclusive;
 use std::rc::Rc;
@@ -56,6 +57,10 @@ pub(crate) struct Screen {
     /// How much context to ask git for, pushed down from the app as the
     /// features are.
     pub(crate) context: Option<Rc<str>>,
+    /// The git command this screen is showing the output of, where it is one
+    /// gitu can put again. Shared with the closure that rebuilds the screen, so
+    /// that editing it is what the next rebuild asks.
+    pub(crate) git_command: Option<Rc<RefCell<crate::calling_process::GitCommand>>>,
     refresh_items: Box<dyn Fn(RenderParams) -> Res<Vec<Item>>>,
     items: Vec<Item>,
     line_index: Vec<usize>,
@@ -86,6 +91,7 @@ impl Screen {
             config,
             features: params.features,
             context: params.context,
+            git_command: None,
             refresh_items,
             items: vec![],
             line_index: vec![],

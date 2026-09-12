@@ -18,7 +18,7 @@ use crate::{
     items::{self, Item, RenderParams},
 };
 use git2::Repository;
-use std::{rc::Rc, sync::Arc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 /// What git handed gitu as its pager: its output, and the argv of the command
 /// that produced it where gitu could find it.
@@ -34,25 +34,25 @@ pub(crate) fn create(
     paged: Paged,
 ) -> Res<Screen> {
     let source = Source::of(paged.text, paged.git_argv);
+    let git_command = source.git_command();
 
-    Screen::new(
+    let mut screen = Screen::new(
         Arc::clone(&config),
         params,
         Box::new(move |params: RenderParams| source.items(&config, &repo, &params)),
-    )
+    )?;
+    screen.git_command = git_command;
+
+    Ok(screen)
 }
 
 /// Where the rows come from each time the screen is rebuilt.
 enum Source {
-    /// A patch git can be asked for again, gitu having found the command that
-    /// produced it. Asking again is what makes it a live view — staging a hunk
-    /// changes what it shows, and the context around each change can be
-    /// widened.
-    Live {
-        git: GitCommand,
-        /// The commit the patch is of, where it says so.
-        commit: Option<String>,
-    },
+    /// A question git can be put again, gitu having found the command that
+    /// produced the patch. Asking again is what makes it a live view — staging
+    /// a hunk changes what it shows — and the question itself can be edited,
+    /// so what comes back is classified afresh on every ask.
+    Live(Rc<RefCell<GitCommand>>),
     /// A patch gitu found no command for: a saved patch file, another repo's,
     /// one piped in from a process already gone. It stays as it came, and gitu
     /// structures it.
@@ -66,9 +66,13 @@ enum Source {
 impl Source {
     /// The command gitu found is what the patch is: it says what the patch is a
     /// diff of, and so which ops it admits (see [`DiffType`]), and it can be
-    /// put again. Output with no diff in it is left as it came whatever the
-    /// command was, since there is nothing in it for gitu to structure.
+    /// put again. Without one, the patch stays as it came and gitu structures
+    /// whatever of it is a diff.
     fn of(patch: String, git_argv: Option<Vec<String>>) -> Self {
+        if let Some(git) = git_argv.and_then(GitCommand::of) {
+            return Source::Live(Rc::new(RefCell::new(git)));
+        }
+
         let text = crate::diff_colorizer::strip_ansi(&patch);
         let file_diffs = gitu_diff::Parser::new(&text)
             .parse_diff()
@@ -78,39 +82,34 @@ impl Source {
             return Source::Unstructured(patch);
         }
 
-        match git_argv.and_then(GitCommand::of) {
-            Some(git) => Source::Live {
-                git,
-                commit: commit_named_by(&text),
-            },
-            None => Source::Patch(Rc::new(Diff {
-                file_diffs,
-                text,
-                diff_type: DiffType::TreeToTree,
-                commit: None,
-            })),
+        Source::Patch(Rc::new(Diff {
+            file_diffs,
+            text,
+            diff_type: DiffType::TreeToTree,
+            commit: None,
+        }))
+    }
+
+    /// The command being asked, where there is one to edit.
+    fn git_command(&self) -> Option<Rc<RefCell<GitCommand>>> {
+        match self {
+            Source::Live(git) => Some(Rc::clone(git)),
+            Source::Patch(_) | Source::Unstructured(_) => None,
         }
     }
 
     fn items(&self, config: &Config, repo: &Repository, params: &RenderParams) -> Res<Vec<Item>> {
-        // A renderer that says which commit a row belongs to has turned the
-        // text into a log; one that says nothing has just drawn it.
-        if let Source::Unstructured(text) = self {
-            let rendered = render(config, params, text);
-            return Ok(items::rendered_log_items(repo, &rendered)
-                .unwrap_or_else(|| items::plain_rows(&rendered)));
-        }
-
         let diff = match self {
-            Source::Live { git, commit } => Rc::new(ask_git(
-                git,
-                repo,
-                commit.clone(),
-                params.context.as_deref(),
-            )?),
+            Source::Live(git) => Rc::new(ask_git(&git.borrow(), repo, params.context.as_deref())?),
             Source::Patch(diff) => Rc::clone(diff),
-            Source::Unstructured(_) => unreachable!(),
+            Source::Unstructured(text) => return Ok(rows(config, repo, params, text)),
         };
+
+        // What came back has no diff in it: a log, a blame, a grep, a man page.
+        // gitu has no structure of its own to impose, so the renderer draws it.
+        if diff.file_diffs.is_empty() {
+            return Ok(rows(config, repo, params, &diff.text));
+        }
 
         let mut items = preamble_items(config, params, &diff.text);
         items.extend(diff_items(config, params, &diff));
@@ -120,12 +119,7 @@ impl Source {
 
 /// Put the command again, for however much of the file around each change is
 /// being asked for now.
-fn ask_git(
-    git: &GitCommand,
-    repo: &Repository,
-    commit: Option<String>,
-    context: Option<&str>,
-) -> Res<Diff> {
+fn ask_git(git: &GitCommand, repo: &Repository, context: Option<&str>) -> Res<Diff> {
     let output = git
         .command(context)
         .current_dir(repo.workdir().ok_or(Error::NoRepoWorkdir)?)
@@ -138,9 +132,17 @@ fn ask_git(
             .parse_diff()
             .unwrap_or_default(),
         diff_type: git.diff_type(),
+        commit: commit_named_by(&text),
         text,
-        commit,
     })
+}
+
+/// Text the renderer draws and gitu does not structure. A renderer that says
+/// which commit a row belongs to has turned it into a log; one that says
+/// nothing has just drawn it.
+fn rows(config: &Config, repo: &Repository, params: &RenderParams, text: &str) -> Vec<Item> {
+    let rendered = render(config, params, text);
+    items::rendered_log_items(repo, &rendered).unwrap_or_else(|| items::plain_rows(&rendered))
 }
 
 /// The commit a patch from `git show` is of, named in its first line.
@@ -407,6 +409,45 @@ mod tests {
 
         assert!(
             hunk_lines(&ctx, &patch, &argv, Some("-U5")) > hunk_lines(&ctx, &patch, &argv, None)
+        );
+    }
+
+    /// Output with no diff in it is still a question gitu holds, so editing it
+    /// into one that has a diff turns rows into files and hunks.
+    #[test]
+    fn an_edit_that_asks_for_a_diff_gets_one() {
+        let ctx = repo_setup_clone!();
+        let config = config::init_test_config().unwrap();
+        let repo = Repository::open(&ctx.dir).unwrap();
+        let source = Source::of(
+            run(&ctx.dir, &["git", "log"]),
+            Some(["git", "log"].map(String::from).to_vec()),
+        );
+        let items = |source: &Source| {
+            source
+                .items(&config, &repo, &Default::default())
+                .unwrap()
+                .into_iter()
+                .map(|item| item.data)
+                .collect::<Vec<_>>()
+        };
+
+        assert!(
+            !items(&source)
+                .iter()
+                .any(|data| matches!(data, ItemData::HunkLine { .. })),
+            "a log has no diff in it"
+        );
+
+        let git = source.git_command().expect("the command was found");
+        let edited = git.borrow().edited("git log -p").unwrap();
+        *git.borrow_mut() = edited;
+
+        assert!(
+            items(&source)
+                .iter()
+                .any(|data| matches!(data, ItemData::HunkLine { .. })),
+            "a log with patches does"
         );
     }
 
