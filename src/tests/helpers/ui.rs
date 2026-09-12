@@ -77,11 +77,18 @@ impl TestContext {
     /// Start gitu as git's pager would (`[pager] diff = gitu --pager`), on the
     /// output of `cmd` and knowing that `cmd` is what produced it.
     pub fn init_app_as_pager_of(&mut self, cmd: &[&str]) -> App {
-        let text = crate::tests::helpers::run(&self.dir, cmd);
-        self.init_app_paged(Paged {
-            text,
-            git_argv: Some(cmd.iter().map(|arg| (*arg).to_owned()).collect()),
-        })
+        self.init_app_as_pager_of_at(self.dir.clone(), cmd)
+    }
+
+    pub fn init_app_as_pager_of_at(&mut self, path: PathBuf, cmd: &[&str]) -> App {
+        let text = crate::tests::helpers::run(&path, cmd);
+        self.init_app_paged_at(
+            path,
+            Paged {
+                text,
+                git_argv: Some(cmd.iter().map(|arg| (*arg).to_owned()).collect()),
+            },
+        )
     }
 
     /// Start gitu on piped text no command of git's is known to have produced.
@@ -93,8 +100,12 @@ impl TestContext {
     }
 
     fn init_app_paged(&mut self, paged: Paged) -> App {
+        self.init_app_paged_at(self.dir.clone(), paged)
+    }
+
+    fn init_app_paged_at(&mut self, path: PathBuf, paged: Paged) -> App {
         self.init_app_inner(
-            self.dir.to_path_buf(),
+            path,
             Args {
                 pager: true,
                 ..Default::default()

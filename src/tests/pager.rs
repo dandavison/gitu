@@ -371,6 +371,55 @@ fn the_files_asked_for_come_back_for_editing() {
     );
 }
 
+/// Commands and file patterns are two different kinds of question, and what
+/// was answered before remains available after gitu itself has exited.
+#[test]
+fn command_and_file_histories_persist_separately() {
+    let mut ctx = setup_clone!();
+    two_changed_files(&ctx);
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(
+        &mut app,
+        keys(
+            "_!a_test.rs<enter>_<ctrl+u>!a.rs<enter>\
+             : HEAD<enter>:<ctrl+u>git diff --cached<enter>",
+        ),
+    );
+    drop(app);
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(&mut app, keys(":<up>"));
+    assert_eq!(ctx.prompt_line(), "git diff --cached|");
+
+    ctx.update(&mut app, keys("_<up>"));
+    assert_eq!(ctx.prompt_line(), "? Files: › !a.rs|");
+
+    ctx.update(&mut app, keys(":<up><up><down>"));
+    assert_eq!(ctx.prompt_line(), "git diff --cached|");
+}
+
+/// Git shares one object store between linked worktrees, but prompt history is
+/// about the question asked in one checkout and must not leak into another.
+#[test]
+fn command_history_is_scoped_to_the_worktree() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(&mut app, keys(": HEAD<enter>"));
+    drop(app);
+
+    let other = ctx.dir.parent().unwrap().join("other-worktree");
+    let other_arg = other.to_str().unwrap();
+    run(
+        &ctx.dir,
+        &["git", "worktree", "add", "-b", "other", other_arg],
+    );
+    let mut app = ctx.init_app_as_pager_of_at(other, &["git", "diff"]);
+    ctx.update(&mut app, keys(":<up>"));
+
+    assert_eq!(ctx.prompt_line(), "git diff|");
+}
+
 /// A view with files hidden from it must not pass for the whole patch, so a
 /// question that is no longer git's own says so — in one line, and only then.
 #[test]
