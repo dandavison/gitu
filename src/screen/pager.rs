@@ -277,6 +277,35 @@ mod tests {
         );
     }
 
+    /// A patch that opens with a file's diff has nothing above it, and every
+    /// file it touches is shown once.
+    #[test]
+    fn a_patch_of_several_files_shows_each_of_them_once() {
+        let ctx = repo_setup_clone!();
+        let patch = format!("{PATCH}{}", PATCH.replace("f.rs", "g.rs"));
+
+        let items = items_of(&ctx.local_repo, &patch);
+
+        assert!(
+            matches!(items.first(), Some(ItemData::Delta { .. })),
+            "got {items:?}"
+        );
+        assert_eq!(
+            items
+                .iter()
+                .filter(|d| matches!(d, ItemData::Delta { .. }))
+                .count(),
+            2
+        );
+        assert_eq!(
+            items
+                .iter()
+                .filter(|d| matches!(d, ItemData::HunkLine { .. }))
+                .count(),
+            6
+        );
+    }
+
     /// Unstructured rows are rows like any other: each one takes the cursor.
     #[test]
     fn the_cursor_moves_between_unstructured_rows() {
