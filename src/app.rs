@@ -101,6 +101,7 @@ impl App {
                     Rc::clone(&repo),
                     params,
                     patch,
+                    None,
                 )?]
             }
             Some(cli::Commands::Show { ref reference }) => {

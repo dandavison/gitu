@@ -26,8 +26,9 @@ pub(crate) fn create(
     repo: Rc<Repository>,
     params: RenderParams,
     patch: String,
+    git_argv: Option<Vec<String>>,
 ) -> Res<Screen> {
-    let source = Source::of(&repo, patch)?;
+    let source = Source::of(&repo, patch, git_argv)?;
 
     Screen::new(
         Arc::clone(&config),
@@ -59,7 +60,7 @@ impl Source {
     /// so what gitu can ask git for again is asked for and compared against it.
     /// Recognising the patch is what makes it a live view, and it is also what
     /// decides which ops it admits (see [`DiffType`]).
-    fn of(repo: &Repository, patch: String) -> Res<Self> {
+    fn of(repo: &Repository, patch: String, _git_argv: Option<Vec<String>>) -> Res<Self> {
         let text = crate::diff_colorizer::strip_ansi(&patch);
 
         for ask_git in [
@@ -168,7 +169,7 @@ mod tests {
     use crate::config;
     use crate::item_data::ItemData;
     use crate::repo_setup_clone;
-    use crate::tests::helpers::RepoTestContext;
+    use crate::tests::helpers::{RepoTestContext, run};
     use stdext::function_name;
 
     const PATCH: &str = "diff --git a/f.rs b/f.rs\n\
@@ -182,7 +183,7 @@ mod tests {
 
     fn items_of(repo: &Repository, patch: &str) -> Vec<ItemData> {
         let config = config::init_test_config().unwrap();
-        Source::of(repo, patch.to_string())
+        Source::of(repo, patch.to_string(), None)
             .unwrap()
             .items(&config, repo, &Default::default())
             .unwrap()
@@ -201,6 +202,7 @@ mod tests {
                 context: None,
             },
             patch.to_string(),
+            None,
         )
         .unwrap()
     }
@@ -356,5 +358,57 @@ mod tests {
             screen.row_texts(),
             ["m.rs:2:    let alpha = 1;", "m.rs:3:    let gamma = 42;"]
         );
+    }
+
+    /// A diff against another rev is as live as any other: git names the
+    /// command it ran, so gitu can run it again and ask for more of the file
+    /// around each change.
+    #[test]
+    fn the_context_of_a_diff_against_a_rev_can_be_widened() {
+        let ctx = repo_setup_clone!();
+        let lines = (1..=21).map(|n| format!("line {n}\n")).collect::<String>();
+        write(&ctx, &lines);
+        run(&ctx.dir, &["git", "add", "f.txt"]);
+        run(&ctx.dir, &["git", "commit", "-m", "add f.txt"]);
+        run(&ctx.dir, &["git", "checkout", "-b", "topic"]);
+        write(&ctx, &lines.replace("line 11\n", "LINE 11\n"));
+        run(&ctx.dir, &["git", "commit", "-am", "change f.txt"]);
+
+        let patch = run(&ctx.dir, &["git", "diff", "main"]);
+        let argv = ["git", "diff", "main"].map(String::from).to_vec();
+
+        assert!(
+            hunk_lines(&ctx, &patch, &argv, Some("-U5")) > hunk_lines(&ctx, &patch, &argv, None)
+        );
+    }
+
+    fn write(ctx: &RepoTestContext, content: &str) {
+        std::fs::write(ctx.dir.join("f.txt"), content).unwrap();
+    }
+
+    /// How many lines of the diff the screen shows, for the patch git piped and
+    /// the command it ran to make it.
+    fn hunk_lines(
+        ctx: &RepoTestContext,
+        patch: &str,
+        argv: &[String],
+        context: Option<&str>,
+    ) -> usize {
+        let config = config::init_test_config().unwrap();
+        let repo = Repository::open(&ctx.dir).unwrap();
+        Source::of(&repo, patch.to_string(), Some(argv.to_vec()))
+            .unwrap()
+            .items(
+                &config,
+                &repo,
+                &RenderParams {
+                    context: context.map(Rc::from),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .iter()
+            .filter(|item| matches!(item.data, ItemData::HunkLine { .. }))
+            .count()
     }
 }
