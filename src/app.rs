@@ -299,7 +299,7 @@ impl App {
                 if self.state.picker.is_some() {
                     self.handle_picker_input(key);
                 } else if self.state.prompt.state.is_focused() {
-                    self.state.prompt.state.handle_key_event(key);
+                    self.state.prompt.handle_key(key);
                 } else {
                     self.handle_key_input(term, key)?;
                 }

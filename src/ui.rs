@@ -145,9 +145,34 @@ fn layout_prompt<'a>(layout: &mut UiTree<'a>, state: &'a State, width: usize) {
             );
             layout_span(layout, (" › ".into(), prompt_style));
         }
-        layout_span(layout, (state.prompt.state.value().into(), Style::new()));
-        layout_span(layout, (CARET.into(), Style::new()));
+        layout_typed_line(
+            layout,
+            state.prompt.state.value(),
+            state.prompt.state.position(),
+        );
     });
+}
+
+/// A line being typed, with the cursor where the next character will land: on
+/// the character it is at, which is drawn through it, or standing on its own at
+/// the end of the line where there is no character to draw.
+pub(crate) fn layout_typed_line<'a>(layout: &mut UiTree<'a>, value: &str, position: usize) {
+    let mut rest = value.chars();
+    let before: String = rest.by_ref().take(position).collect();
+    let at = rest.next();
+    let after: String = rest.collect();
+
+    layout_span(layout, (before.into(), Style::new()));
+    match at {
+        Some(character) => {
+            layout_span(
+                layout,
+                (character.to_string().into(), Style::new().reversed()),
+            );
+            layout_span(layout, (after.into(), Style::new()));
+        }
+        None => layout_span(layout, (CARET.into(), Style::new())),
+    }
 }
 
 fn layout_picker<'a>(layout: &mut UiTree<'a>, state: &'a State, width: usize) {

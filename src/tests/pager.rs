@@ -246,6 +246,47 @@ fn a_command_git_refuses_says_so_and_changes_nothing() {
     assert!(buffer.contains("+changed"), "{buffer}");
 }
 
+/// The editing keys reach the line being edited, rather than the view behind
+/// it: `ctrl+w` in a prompt takes back a word, and does not scroll.
+#[test]
+fn a_command_can_be_edited_with_the_readline_keys() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\n").unwrap();
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff", "--cached"]);
+    ctx.update(&mut app, keys(":<ctrl+w>"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("git diff "), "{buffer}");
+    assert!(!buffer.contains("--cached"), "{buffer}");
+}
+
+/// The cursor is drawn where the next character will land. A line that shows
+/// it at the end while typing inserts in the middle is unusable.
+#[test]
+fn the_cursor_is_drawn_at_the_insertion_point() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\n").unwrap();
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+
+    // A prompt left open by one batch of keys is abandoned before the next, so
+    // each of these is a fresh prompt typed into from the start.
+    ctx.update(&mut app, keys(":"));
+    assert_eq!(ctx.prompt_line(), "git diff|");
+
+    ctx.update(&mut app, keys(":<ctrl+a>"));
+    assert_eq!(ctx.prompt_line(), "|git diff");
+
+    ctx.update(&mut app, keys(":<ctrl+a><alt+f>"));
+    assert_eq!(ctx.prompt_line(), "git| diff");
+
+    ctx.update(&mut app, keys(":<ctrl+a><alt+f>X"));
+    assert_eq!(ctx.prompt_line(), "gitX| diff");
+}
+
 /// A patch with no command behind it has no question to edit.
 #[test]
 fn a_patch_with_no_command_cannot_be_edited() {

@@ -134,6 +134,33 @@ impl TestContext {
         assert!(app.state.quit || matches!(result, Err(Error::NoMoreEvents)));
     }
 
+    /// The line being typed, with `|` where the cursor is drawn: what the user
+    /// can see of where their next character will land.
+    pub fn prompt_line(&self) -> String {
+        let TermBackend::Test { backend, .. } = self.term.backend() else {
+            unreachable!();
+        };
+        let buffer = backend.buffer();
+        let row = buffer.area.height - 1;
+
+        let mut line = String::new();
+        for column in 0..buffer.area.width {
+            let cell = &buffer[(column, row)];
+            // The block standing on its own is the cursor; a reversed cell is
+            // the cursor standing on a character.
+            if cell.symbol() == "\u{2588}" {
+                line.push('|');
+                continue;
+            }
+            if cell.modifier.contains(ratatui::style::Modifier::REVERSED) {
+                line.push('|');
+            }
+            line.push_str(cell.symbol());
+        }
+
+        line.trim_end().to_owned()
+    }
+
     pub fn redact_buffer(&self) -> String {
         let TermBackend::Test { backend, .. } = self.term.backend() else {
             unreachable!();

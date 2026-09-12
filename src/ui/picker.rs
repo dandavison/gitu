@@ -7,7 +7,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::config::Config;
 use crate::picker::PickerState;
 use crate::ui::layout::OPTS;
-use crate::ui::{CARET, DASHES, UiTree, layout_span, repeat_chars};
+use crate::ui::{DASHES, UiTree, layout_span, repeat_chars};
 
 const MAX_ITEMS_DISPLAY: usize = 10;
 
@@ -31,8 +31,11 @@ pub(crate) fn layout_picker<'a>(
         // Prompt with separator (like regular prompt)
         layout_span(layout, (state.prompt_text.as_ref().into(), prompt_style));
         layout_span(layout, (" › ".into(), prompt_style));
-        layout_span(layout, (state.input_state.value().into(), Style::new()));
-        layout_span(layout, (CARET.into(), Style::new()));
+        crate::ui::layout_typed_line(
+            layout,
+            state.input_state.value(),
+            state.input_state.position(),
+        );
     });
 
     // Calculate visible items range (scroll window)
