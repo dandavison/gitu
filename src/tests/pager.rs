@@ -230,6 +230,22 @@ fn an_edit_takes_over_the_context_asked_for() {
     );
 }
 
+/// A command the user can edit is one the user can get wrong. git says what it
+/// thought of it, and the view it could not answer stays as it was.
+#[test]
+fn a_command_git_refuses_says_so_and_changes_nothing() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(&mut app, keys(": --nonsense<enter>"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("invalid option: --nonsense"), "{buffer}");
+    assert!(buffer.contains("+changed"), "{buffer}");
+}
+
 /// A patch with no command behind it has no question to edit.
 #[test]
 fn a_patch_with_no_command_cannot_be_edited() {

@@ -126,6 +126,17 @@ fn ask_git(git: &GitCommand, repo: &Repository, context: Option<&str>) -> Res<Di
         .output()
         .map_err(Error::GitDiff)?;
 
+    // A command the user can edit is a command the user can get wrong, and an
+    // empty screen does not say what git thought of it. (`git diff
+    // --exit-code` answers with a status too, so a command that answered at
+    // all is taken to have worked.)
+    if !output.status.success() && output.stdout.is_empty() {
+        let complaint = String::from_utf8_lossy(&output.stderr);
+        return Err(Error::GitRefusedTheCommand(
+            complaint.lines().next().unwrap_or_default().to_owned(),
+        ));
+    }
+
     let text = String::from_utf8_lossy(&output.stdout).into_owned();
     Ok(Diff {
         file_diffs: gitu_diff::Parser::new(&text)

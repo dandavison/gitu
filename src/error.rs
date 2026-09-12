@@ -66,6 +66,7 @@ pub enum Error {
     EditedCommandQuotes,
     EditedCommandFixed,
     EditedCommandWrites(String),
+    GitRefusedTheCommand(String),
 }
 
 impl std::error::Error for Error {}
@@ -192,6 +193,7 @@ impl Display for Error {
             Error::EditedCommandWrites(subcommand) => f.write_fmt(format_args!(
                 "gitu re-runs this command on every refresh, so it must only report: {subcommand}"
             )),
+            Error::GitRefusedTheCommand(stderr) => f.write_str(stderr),
         }
     }
 }
