@@ -87,10 +87,17 @@ pub type Res<T> = Result<T, Error>;
 
 /// Run gitu, returning the status to exit with.
 pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
+    // Before anything slower, and before reading the input: the git process on
+    // the other end of a pipe exits as soon as its output fits in the pipe, and
+    // cannot be found once it has. Reading to EOF is always too late — EOF is
+    // git closing the pipe.
+    let git_argv = args.pager.then(calling_process::paging_for).flatten();
+    log::debug!("Paging the output of {git_argv:?}");
+
     let dir = find_git_dir()?;
     let repo = open_repo(&dir)?;
 
-    let piped = args.pager.then(read_piped_input).transpose()?;
+    let piped = args.pager.then(|| read_piped_input(git_argv)).transpose()?;
 
     let mut app = app::App::create(
         Rc::new(repo),
@@ -122,17 +129,17 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
     Ok(app.state.exit_code)
 }
 
-/// What git piped to us as its pager, and the command it ran to produce it.
-/// Reading the terminal instead would wait for input that is never coming, so
-/// that is refused outright.
-fn read_piped_input() -> Res<Paged> {
+/// What git piped to us as its pager, alongside the command already found to
+/// have produced it. Reading the terminal instead would wait for input that is
+/// never coming, so that is refused outright.
+fn read_piped_input(git_argv: Option<Vec<String>>) -> Res<Paged> {
     if io::stdin().is_terminal() {
         return Err(Error::PagerWithoutInput);
     }
 
     Ok(Paged {
         text: io::read_to_string(io::stdin()).map_err(Error::ReadPipedInput)?,
-        git_argv: calling_process::paging_for(),
+        git_argv,
     })
 }
 
