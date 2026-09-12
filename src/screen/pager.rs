@@ -33,7 +33,7 @@ pub(crate) fn create(
     params: RenderParams,
     paged: Paged,
 ) -> Res<Screen> {
-    let source = Source::of(paged.text, paged.git_argv);
+    let source = Source::of(paged.text, paged.git_argv, &config.general.hide);
     let git_command = source.git_command();
 
     let mut screen = Screen::new(
@@ -68,9 +68,16 @@ impl Source {
     /// diff of, and so which ops it admits (see [`DiffType`]), and it can be
     /// put again. Without one, the patch stays as it came and gitu structures
     /// whatever of it is a diff.
-    fn of(patch: String, git_argv: Option<Vec<String>>) -> Self {
+    ///
+    /// The files the user has said to `hide` are dropped from the question
+    /// before it is first asked, so the command holds them like any other
+    /// pathspec: `:` shows them, and `_` takes them back.
+    fn of(patch: String, git_argv: Option<Vec<String>>, hide: &[String]) -> Self {
         if let Some(git) = git_argv.and_then(GitCommand::of) {
-            return Source::Live(Rc::new(RefCell::new(git)));
+            let mut patterns = git.file_patterns();
+            patterns.extend(hide.iter().map(|glob| format!("!{glob}")));
+
+            return Source::Live(Rc::new(RefCell::new(git.asking_for(&patterns))));
         }
 
         let text = crate::diff_colorizer::strip_ansi(&patch);
@@ -223,7 +230,7 @@ mod tests {
 
     fn items_of(repo: &Repository, patch: &str) -> Vec<ItemData> {
         let config = config::init_test_config().unwrap();
-        Source::of(patch.to_string(), None)
+        Source::of(patch.to_string(), None, &[])
             .items(&config, repo, &Default::default())
             .unwrap()
             .into_iter()
@@ -433,6 +440,7 @@ mod tests {
         let source = Source::of(
             run(&ctx.dir, &["git", "log"]),
             Some(["git", "log"].map(String::from).to_vec()),
+            &[],
         );
         let items = |source: &Source| {
             source
@@ -462,6 +470,42 @@ mod tests {
         );
     }
 
+    /// Generated files and fixtures are noise in every patch, so saying so once
+    /// in config drops them before the question is first asked.
+    #[test]
+    fn the_files_config_hides_are_gone_from_the_first_ask() {
+        let ctx = repo_setup_clone!();
+        let config = config::init_test_config().unwrap();
+        let repo = Repository::open(&ctx.dir).unwrap();
+        for file in ["a.rs", "a.pb.rs"] {
+            std::fs::write(ctx.dir.join(file), "generated\n").unwrap();
+        }
+        run(&ctx.dir, &["git", "add", "."]);
+
+        let source = Source::of(
+            run(&ctx.dir, &["git", "diff", "--cached"]),
+            Some(["git", "diff", "--cached"].map(String::from).to_vec()),
+            &["*.pb.rs".to_owned()],
+        );
+        let files = source
+            .items(&config, &repo, &Default::default())
+            .unwrap()
+            .iter()
+            .filter_map(|item| match &item.data {
+                ItemData::Delta { diff, file_i, .. } => Some(
+                    diff.file_diffs[*file_i]
+                        .header
+                        .new_file
+                        .fmt(&diff.text)
+                        .into_owned(),
+                ),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(files, ["a.rs"]);
+    }
+
     fn write(ctx: &RepoTestContext, content: &str) {
         std::fs::write(ctx.dir.join("f.txt"), content).unwrap();
     }
@@ -476,7 +520,7 @@ mod tests {
     ) -> usize {
         let config = config::init_test_config().unwrap();
         let repo = Repository::open(&ctx.dir).unwrap();
-        Source::of(patch.to_string(), Some(argv.to_vec()))
+        Source::of(patch.to_string(), Some(argv.to_vec()), &[])
             .items(
                 &config,
                 &repo,

@@ -59,6 +59,11 @@ pub struct GeneralConfig {
     pub recent_commits_limit: usize,
     pub mouse_support: bool,
     pub mouse_scroll_lines: usize,
+    /// Globs whose files are dropped from a paged view, as if the patch never
+    /// had them. Generated code and fixtures recur, so hiding them is worth
+    /// saying once rather than per session.
+    #[serde(default)]
+    pub hide: Vec<String>,
     #[serde(default)]
     pub diff_colorizer: DiffColorizerConfig,
     #[serde(default)]

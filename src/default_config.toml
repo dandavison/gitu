@@ -14,6 +14,13 @@ recent_commits_limit = 10
 mouse_support = false
 mouse_scroll_lines = 3
 
+# Files to drop from a paged view (`gitu --pager`), as if the patch never had
+# them. The wildcards are git's: `*.pb.go` matches at any depth, and naming a
+# directory hides its subtree. `_` says which files to show while reading, and
+# `:` shows the pathspecs these became. e.g.:
+#   hide = ["*.pb.go", "*_test.go", "vendor"]
+hide = []
+
 # Colorize diffs with an external command (e.g. delta) instead of Gitu's
 # built-in syntax/diff highlighting. The command receives a unified diff on
 # stdin and emits ANSI-colored output.
