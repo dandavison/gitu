@@ -1,0 +1,25 @@
+---
+source: src/tests/log.rs
+expression: ctx.redact_buffer()
+---
+                                                                                |
+▌▸ 6c08cf7 Author Name 2024-02-16                                               |
+▌    add second commit                                                          |
+                                                                                |
+ ▸ 79e63f1 Author Name 2024-02-16                                               |
+     add third commit                                                           |
+                                                                                |
+ ▸ b66a0bf Author Name 2024-02-16 (origin/main, origin/HEAD)                    |
+     add initial-file                                                           |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: bb3a064f4212c91
