@@ -1,7 +1,9 @@
 //! Render diffs with an external command (e.g. `delta`).
 //!
 //! The command is fed a unified diff on stdin and emits ANSI-colored output that
-//! we parse back into per-line styled runs.
+//! we parse back into per-line styled runs. The same ANSI/OSC-1717 parsing drives
+//! the log view, whose rows come from a `git log` command instead of stdin (see
+//! [`COMMIT_RECORD_FORMAT`]).
 //!
 //! Two cooperation levels are supported:
 //! - A `--color-only` renderer preserves line structure 1:1, and
@@ -18,6 +20,7 @@ use anstyle_parse::{DefaultCharAccumulator, Params, Parser, Perform};
 use std::io::Write;
 use std::mem;
 use std::ops::Range;
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::thread;
 
@@ -25,9 +28,16 @@ use std::thread;
 /// advertised to the renderer via `OSC1717_METADATA` (a version set, `V`-prefixed).
 const OSC1717_METADATA_ADVERTISED: &str = "V1";
 
+/// The git `--format` directives that emit a commit record: gitu substitutes
+/// them for the `{commit}` token in the configured log command, so git itself
+/// states which commit each rendered row belongs to.
+pub(crate) const COMMIT_RECORD_FORMAT: &str = "%x1b]1717;1;C;;;%H%x1b\\";
+
 /// What a rendered row is, per its OSC-1717 `type`. `Context`/`Added`/`Deleted`
 /// are content lines; `HunkHeader`/`FileHeader` are the renderer's own header rows
-/// (spec §12), which the host may display in place of drawing its own.
+/// (spec §12), which the host may display in place of drawing its own. `Commit`
+/// (`C`) marks the first row of a commit in rendered log output; it carries the
+/// commit id in the record's last field, where a diff row carries its file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LineKind {
     Context,
@@ -35,6 +45,42 @@ pub(crate) enum LineKind {
     Deleted,
     HunkHeader,
     FileHeader,
+    Commit,
+}
+
+/// A run of rendered log rows belonging to one commit, as split by the `C`
+/// records: a record starts a new block and the rows that follow it, up to the
+/// next record, are that commit's.
+#[derive(Debug, PartialEq)]
+pub(crate) struct CommitBlock<'a> {
+    /// The commit id, or `None` for rows preceding the first record.
+    pub commit: Option<&'a str>,
+    pub rows: &'a [ParsedLine],
+}
+
+/// Split rendered log rows into per-commit blocks.
+pub(crate) fn commit_blocks(lines: &[ParsedLine]) -> Vec<CommitBlock<'_>> {
+    let mut starts: Vec<(usize, Option<&str>)> = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        if let Some(record) = line
+            .records
+            .iter()
+            .find(|record| record.kind == LineKind::Commit)
+        {
+            starts.push((i, Some(record.file.as_str())));
+        } else if starts.is_empty() {
+            starts.push((0, None));
+        }
+    }
+
+    starts
+        .iter()
+        .enumerate()
+        .map(|(n, &(start, commit))| CommitBlock {
+            commit,
+            rows: &lines[start..starts.get(n + 1).map_or(lines.len(), |&(next, _)| next)],
+        })
+        .collect()
 }
 
 /// The patch-space identity of a rendered line, recovered from its OSC-1717
@@ -139,42 +185,63 @@ pub(crate) fn resolve_hunk(diff: &Diff, meta: &LineMetadata) -> Option<(usize, u
     None
 }
 
-/// Run the renderer `command`, feeding `input` on stdin and returning its
-/// stdout. `None` if the command can't be spawned or exits non-zero.
+/// Run `command` in `dir`, feeding it `input` on stdin (a diff to render; the
+/// log command takes none) and returning its stdout. `None` if the command can't
+/// be spawned or exits non-zero.
 ///
 /// `width` is the number of columns gitu will render the output into. A renderer
 /// that reflows (delta side-by-side/wrapping) can't detect this over a pipe and
 /// defaults too narrow, so we make it available two ways: a literal `{width}`
 /// token anywhere in the command is substituted (e.g. `delta --width {width}`),
 /// and `COLUMNS` is exported for renderers that read it.
-pub(crate) fn run(command: &[String], input: &str, width: usize) -> Option<String> {
+pub(crate) fn run(
+    command: &[String],
+    input: Option<&str>,
+    width: usize,
+    dir: Option<&Path>,
+) -> Option<String> {
     let (program, args) = command.split_first()?;
     let args: Vec<String> = args
         .iter()
         .map(|arg| arg.replace("{width}", &width.to_string()))
         .collect();
 
-    let mut child = Command::new(program)
+    let mut command = Command::new(program);
+    command
         .args(&args)
         .env("OSC1717_METADATA", OSC1717_METADATA_ADVERTISED)
         .env("COLUMNS", width.to_string())
-        .stdin(Stdio::piped())
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::null());
+
+    if let Some(dir) = dir {
+        command.current_dir(dir);
+    }
+
+    let mut child = command
         .spawn()
-        .inspect_err(|e| log::warn!("diff renderer '{program}' failed to spawn: {e}"))
+        .inspect_err(|e| log::warn!("renderer '{program}' failed to spawn: {e}"))
         .ok()?;
 
     // Write stdin on a separate thread so a full stdout pipe can't deadlock us.
-    let mut stdin = child.stdin.take()?;
-    let input = input.to_owned();
-    let writer = thread::spawn(move || stdin.write_all(input.as_bytes()));
+    let writer = input.map(|input| {
+        let mut stdin = child.stdin.take().expect("stdin was piped");
+        let input = input.to_owned();
+        thread::spawn(move || stdin.write_all(input.as_bytes()))
+    });
 
     let output = child.wait_with_output().ok()?;
-    let _ = writer.join();
+    if let Some(writer) = writer {
+        let _ = writer.join();
+    }
 
     if !output.status.success() {
-        log::warn!("diff renderer '{program}' exited with {}", output.status);
+        log::warn!("renderer '{program}' exited with {}", output.status);
         return None;
     }
 
@@ -311,6 +378,7 @@ fn line_kind(bytes: &[u8]) -> Option<LineKind> {
         b"d" => Some(LineKind::Deleted),
         b"h" => Some(LineKind::HunkHeader),
         b"f" => Some(LineKind::FileHeader),
+        b"C" => Some(LineKind::Commit),
         _ => None, // Unknown type: treat the row as non-actionable (spec §5.1).
     }
 }
@@ -484,6 +552,63 @@ mod tests {
     fn file_field_may_contain_semicolons() {
         let out = parse_ansi_lines("\x1b]1717;1;a;1;;weird;name.txt\x1b\\x\n").lines;
         assert_eq!(out[0].records[0].file, "weird;name.txt");
+    }
+
+    /// What `COMMIT_RECORD_FORMAT` expands to once git has run it.
+    fn commit_record(oid: &str) -> String {
+        format!("\x1b]1717;1;C;;;{oid}\x1b\\")
+    }
+
+    #[test]
+    fn parses_commit_records() {
+        let out = parse_ansi_lines(&format!(
+            "{}▸ abc1234 summary\n",
+            commit_record("abc1234def")
+        ));
+        assert_eq!(
+            out.lines[0].records,
+            vec![LineMetadata {
+                kind: LineKind::Commit,
+                new_line: 0,
+                old_line: None,
+                file: "abc1234def".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn commit_blocks_start_at_each_commit_record() {
+        // A commit's rows run from its record up to the next one; here each
+        // commit's format emits the record on its own (blank) leading row.
+        let out = parse_ansi_lines(&format!(
+            "preamble\n\
+             {}\n▸ aaa summary\n    body\n\
+             {}\n▸ bbb summary\n",
+            commit_record("aaa"),
+            commit_record("bbb"),
+        ));
+        let blocks = commit_blocks(&out.lines);
+
+        assert_eq!(blocks.len(), 3);
+        assert_eq!(blocks[0].commit, None);
+        assert_eq!(rows(&blocks[0]), vec!["preamble"]);
+        assert_eq!(blocks[1].commit, Some("aaa"));
+        assert_eq!(rows(&blocks[1]), vec!["", "▸ aaa summary", "    body"]);
+        assert_eq!(blocks[2].commit, Some("bbb"));
+        assert_eq!(rows(&blocks[2]), vec!["", "▸ bbb summary"]);
+    }
+
+    #[test]
+    fn commit_blocks_of_unmarked_output_is_a_single_headless_block() {
+        let out = parse_ansi_lines("no markers here\nat all\n");
+        let blocks = commit_blocks(&out.lines);
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].commit, None);
+        assert_eq!(rows(&blocks[0]), vec!["no markers here", "at all"]);
+    }
+
+    fn rows<'a>(block: &'a CommitBlock) -> Vec<&'a str> {
+        block.rows.iter().map(|row| row.text.as_str()).collect()
     }
 
     fn diff_from(text: &str) -> crate::git::diff::Diff {

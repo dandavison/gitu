@@ -1,0 +1,25 @@
+---
+source: src/tests/log.rs
+expression: ctx.redact_buffer()
+---
+                                                                                |
+ ─────                                                                          |
+ ▸ 8bb5532 add first commit                                                     |
+                                                                                |
+▌─────                                                                          |
+▌▸ 6c08cf7 add second commit                                                    |
+                                                                                |
+ ─────                                                                          |
+ ▸ 79e63f1 add third commit                                                     |
+                                                                                |
+ ─────                                                                          |
+ ▸ b66a0bf add initial-file                                                     |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: e96c53b4cfc2f187

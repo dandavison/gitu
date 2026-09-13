@@ -1,0 +1,25 @@
+---
+source: src/tests/log.rs
+expression: ctx.redact_buffer()
+---
+                                                                                |
+▌▸ 8bb5532 Author Name 2024-02-16 (HEAD -> main)                                |
+▌    add first commit                                                           |
+                                                                                |
+ ▸ 6c08cf7 Author Name 2024-02-16                                               |
+     add second commit                                                          |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: f9eb61ba79441941
