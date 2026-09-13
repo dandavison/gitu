@@ -86,7 +86,7 @@ pub(crate) fn create(config: Arc<Config>, repo: Rc<Repository>, size: (u16, u16)
                 }]
                 .into_iter()
             } else {
-                branch_status_items(&status.branch_status)?.into_iter()
+                branch_status_items(&status.branch_status, &config)?.into_iter()
             }
             .chain(if untracked.is_empty() {
                 vec![]
@@ -143,7 +143,7 @@ fn untracked_list(files: &[&String]) -> Vec<Item> {
         .collect::<Vec<_>>()
 }
 
-fn branch_status_items(status: &BranchStatus) -> Res<Vec<Item>> {
+fn branch_status_items(status: &BranchStatus, config: &Config) -> Res<Vec<Item>> {
     let Some(ref head) = status.local else {
         return Ok(vec![Item {
             id: hash(SectionID::BranchStatus),
@@ -160,17 +160,17 @@ fn branch_status_items(status: &BranchStatus) -> Res<Vec<Item>> {
         ..Default::default()
     }];
 
-    let Some(ref upstream_name) = status.remote else {
-        return Ok(items);
-    };
-
-    items.push(Item {
-        id: hash(SectionID::BranchStatus),
-        depth: 1,
-        unselectable: true,
-        data: ItemData::BranchStatus(upstream_name.clone(), status.ahead, status.behind),
-        ..Default::default()
-    });
+    if config.general.verbose_branch_status
+        && let Some(ref upstream_name) = status.remote
+    {
+        items.push(Item {
+            id: hash(SectionID::BranchStatus),
+            depth: 1,
+            unselectable: true,
+            data: ItemData::BranchStatus(upstream_name.clone(), status.ahead, status.behind),
+            ..Default::default()
+        });
+    }
 
     Ok(items)
 }
@@ -238,19 +238,26 @@ fn create_log_section_items<'a>(
     repo: &Repository,
     limit: usize,
 ) -> impl Iterator<Item = Item> + 'a {
-    [
-        Item {
-            depth: 0,
-            unselectable: true,
-            ..Default::default()
-        },
-        Item {
-            id: hash(SectionID::RecentCommits),
-            depth: 0,
-            data: ItemData::Header(SectionHeader::RecentCommits),
-            ..Default::default()
-        },
-    ]
-    .into_iter()
-    .chain(items::log(repo, limit, None, None).unwrap())
+    let (header, log) = if limit == 0 {
+        (vec![], vec![])
+    } else {
+        (
+            vec![
+                Item {
+                    depth: 0,
+                    unselectable: true,
+                    ..Default::default()
+                },
+                Item {
+                    id: hash(SectionID::RecentCommits),
+                    depth: 0,
+                    data: ItemData::Header(SectionHeader::RecentCommits),
+                    ..Default::default()
+                },
+            ],
+            items::log(repo, limit, None, None).unwrap(),
+        )
+    };
+
+    header.into_iter().chain(log)
 }

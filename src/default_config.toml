@@ -15,6 +15,9 @@ log_author_width = 15
 mouse_support = false
 mouse_scroll_lines = 3
 
+# The branch section is git's wording: 'On branch {name}' over a line placing
+# the branch relative to its upstream. Off, it is the branch name alone.
+verbose_branch_status = true
 # Render diffs with an external command (e.g. delta) instead of Gitu's
 # built-in syntax/diff highlighting. The command receives a unified diff on
 # stdin and emits ANSI-colored output.

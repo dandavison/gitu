@@ -6,7 +6,7 @@ expression: ctx.redact_buffer()
 ▌Your branch is ahead of 'origin/main' by 1 commit(s).                          |
                                                                                 |
  Staged changes (1)                                                             |
- renamed    new-file -> moved-file…                                             |
+ renamed    new-file -> moved-file                                              |
                                                                                 |
  Recent commits                                                                 |
  46c81ca main add new-file                                       Author Name __ |

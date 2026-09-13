@@ -60,6 +60,9 @@ pub struct GeneralConfig {
     pub log_author_width: usize,
     pub mouse_support: bool,
     pub mouse_scroll_lines: usize,
+    /// Whether the branch section uses git's wording - 'On branch {name}' over
+    /// a line placing it relative to its upstream - or the branch name alone.
+    pub verbose_branch_status: bool,
     #[serde(default)]
     pub diff_renderer: DiffRendererConfig,
 }

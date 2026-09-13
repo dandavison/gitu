@@ -956,8 +956,12 @@ fn layout_item<'a>(layout: &mut UiTree<'a>, screen: &'a Screen, hide_cursor: boo
         let item = &screen.items[line.item_index];
         ui::item::layout_item(layout, item, &screen.config, bg);
 
-        // Add ellipsis indicator for collapsed sections
-        if screen.is_collapsed(item) {
+        // A collapsed section says so only when it is hiding something.
+        let has_children = screen
+            .items
+            .get(line.item_index + 1)
+            .is_some_and(|next| next.depth > item.depth);
+        if has_children && screen.is_collapsed(item) {
             layout_span(layout, ("…".into(), bg));
         }
     });

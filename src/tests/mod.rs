@@ -130,6 +130,28 @@ fn collapsed_sections_config() {
     snapshot!(ctx, "");
 }
 
+/// The branch's position relative to its upstream, which the terse header omits.
+#[test]
+fn branch_status_shows_upstream() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "new-file", "testing\n");
+
+    ctx.init_app();
+    assert!(
+        ctx.redact_buffer()
+            .contains("Your branch is ahead of 'origin/main' by 1 commit(s).")
+    );
+}
+
+/// Off, the branch section is the branch name alone.
+#[test]
+fn terse_branch_status() {
+    let mut ctx = setup_clone!();
+    ctx.config().general.verbose_branch_status = false;
+    commit(&ctx.dir, "new-file", "testing\n");
+    snapshot!(ctx, "");
+}
+
 #[test]
 fn stash_list_with_limit() {
     let mut ctx = setup_clone!();
@@ -155,6 +177,15 @@ fn recent_commits_with_limit() {
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     commit(&ctx.dir, "secondfile", "testing\ntesttest\n");
     commit(&ctx.dir, "thirdfile", "testing\ntesttest\n");
+    snapshot!(ctx, "");
+}
+
+/// A limit of none means the section itself is not wanted, not an empty one.
+#[test]
+fn recent_commits_with_no_limit() {
+    let mut ctx = setup_clone!();
+    ctx.config().general.recent_commits_limit = 0;
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     snapshot!(ctx, "");
 }
 

@@ -5,12 +5,12 @@ expression: ctx.redact_buffer()
 ▌Merging other-branch                                                           |
                                                                                 |
  Unstaged changes (2)                                                           |
- unmerged   new-file…                                                           |
- unmerged   new-file-2…                                                         |
+ unmerged   new-file                                                            |
+ unmerged   new-file-2                                                          |
                                                                                 |
  Staged changes (2)                                                             |
- unmerged   new-file…                                                           |
- unmerged   new-file-2…                                                         |
+ unmerged   new-file                                                            |
+ unmerged   new-file-2                                                          |
                                                                                 |
  Recent commits                                                                 |
  44bb4dc main modify new-file-2                                  Author Name __ |

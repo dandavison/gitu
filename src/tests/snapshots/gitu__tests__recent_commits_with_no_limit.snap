@@ -2,18 +2,8 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
-▌Rebasing other-branch onto main                                                |
-                                                                                |
- Unstaged changes (1)                                                           |
- unmerged   new-file                                                            |
-                                                                                |
- Staged changes (1)                                                             |
- unmerged   new-file                                                            |
-                                                                                |
- Recent commits                                                                 |
- ed5ed59 main modify new-file                                    Author Name __ |
- 46c81ca add new-file                                            Author Name __ |
- b66a0bf origin/main add initial-file                            Author Name __ |
+▌On branch main                                                                 |
+▌Your branch is ahead of 'origin/main' by 1 commit(s).                          |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +12,14 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 3058cb5941064968
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: fce184dd3ccf2427

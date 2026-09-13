@@ -47,6 +47,8 @@ pub(crate) enum ItemData {
         id: usize,
     },
     Header(SectionHeader),
+    /// The upstream of the current branch, and how far ahead of and behind it
+    /// the branch is.
     BranchStatus(String, u32, u32),
     Error(String),
     BlameHeader {

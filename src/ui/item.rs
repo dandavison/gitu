@@ -199,7 +199,13 @@ pub(crate) fn layout_item<'a>(
                 SectionHeader::Tags => "Tags".into(),
                 SectionHeader::Branches => "Branches".into(),
                 SectionHeader::NoBranch => "No branch".into(),
-                SectionHeader::OnBranch(branch) => format!("On branch {branch}").into(),
+                SectionHeader::OnBranch(branch) => {
+                    if config.general.verbose_branch_status {
+                        format!("On branch {branch}").into()
+                    } else {
+                        branch.as_str().into()
+                    }
+                }
                 SectionHeader::Rebase(head, onto) => format!("Rebasing {head} onto {onto}").into(),
                 SectionHeader::Merge(head) => format!("Merging {head}").into(),
                 SectionHeader::Revert(head) => format!("Reverting {head}").into(),
