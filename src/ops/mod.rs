@@ -5,6 +5,7 @@ use crate::{
     app::{App, State},
     item_data::{ItemData, Rev},
     menu::Menu,
+    rebase_todo::TodoAction,
     term::Term,
 };
 use std::{fmt::Display, rc::Rc};
@@ -23,6 +24,7 @@ pub(crate) mod merge;
 pub(crate) mod pull;
 pub(crate) mod push;
 pub(crate) mod rebase;
+pub(crate) mod rebase_todo;
 pub(crate) mod remote;
 pub(crate) mod reset;
 pub(crate) mod reverse;
@@ -92,6 +94,15 @@ pub(crate) enum Op {
     LogOther,
     RebaseAutosquash,
     RebaseInteractive,
+    RebaseTodoMoveUp,
+    RebaseTodoMoveDown,
+    RebaseTodoPick,
+    RebaseTodoReword,
+    RebaseTodoEdit,
+    RebaseTodoSquash,
+    RebaseTodoFixup,
+    RebaseTodoDrop,
+    RebaseTodoStart,
     ResetSoft,
     ResetMixed,
     ResetHard,
@@ -208,6 +219,15 @@ impl Op {
             Op::LogOther => Box::new(log::LogOther),
             Op::RebaseAutosquash => Box::new(rebase::RebaseAutosquash),
             Op::RebaseInteractive => Box::new(rebase::RebaseInteractive),
+            Op::RebaseTodoMoveUp => Box::new(rebase_todo::MoveEntry(-1)),
+            Op::RebaseTodoMoveDown => Box::new(rebase_todo::MoveEntry(1)),
+            Op::RebaseTodoPick => Box::new(rebase_todo::SetAction(TodoAction::Pick)),
+            Op::RebaseTodoReword => Box::new(rebase_todo::SetAction(TodoAction::Reword)),
+            Op::RebaseTodoEdit => Box::new(rebase_todo::SetAction(TodoAction::Edit)),
+            Op::RebaseTodoSquash => Box::new(rebase_todo::SetAction(TodoAction::Squash)),
+            Op::RebaseTodoFixup => Box::new(rebase_todo::SetAction(TodoAction::Fixup)),
+            Op::RebaseTodoDrop => Box::new(rebase_todo::SetAction(TodoAction::Drop)),
+            Op::RebaseTodoStart => Box::new(rebase_todo::Start),
             Op::ResetSoft => Box::new(reset::ResetSoft),
             Op::ResetMixed => Box::new(reset::ResetMixed),
             Op::ResetHard => Box::new(reset::ResetHard),
@@ -250,6 +270,7 @@ impl Display for Menu {
             Menu::Pull => "Pull",
             Menu::Push => "Push",
             Menu::Rebase => "Rebase",
+            Menu::RebaseTodo => "Rebase todo",
             Menu::Reset => "Reset",
             Menu::Revert => "Revert",
             Menu::CherryPick => "Cherry-pick",

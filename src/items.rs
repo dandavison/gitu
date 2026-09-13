@@ -5,11 +5,15 @@ use crate::git::diff::Diff;
 use crate::highlight;
 use crate::item_data::ItemData;
 use crate::item_data::Ref;
+use crate::rebase_todo::{RebaseTodo, TodoAction, TodoEntry};
+use crate::style::Modifier;
 use crate::style::Style;
 use git2::Oid;
 use git2::Repository;
 use regex::Regex;
+use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -489,7 +493,52 @@ pub(crate) fn rendered_log(
     rev: Option<Oid>,
     msg_regex: Option<&Regex>,
 ) -> Option<Vec<Item>> {
-    let command = log_command(config, limit, rev, msg_regex);
+    let mut args = Vec::new();
+    // "No limit" is `u32::MAX`, which git rejects as not an integer; leaving the
+    // option off is what an unrepresentable limit means anyway.
+    if let Ok(limit) = i32::try_from(limit) {
+        args.push(format!("-n{limit}"));
+    }
+    if let Some(regex) = msg_regex {
+        args.push("--extended-regexp".into());
+        args.push(format!("--grep={regex}"));
+    }
+    args.push(rev.map_or_else(|| "HEAD".to_string(), |oid| oid.to_string()));
+
+    let blocks = rendered_commits(config, repo, width, &args)?;
+    let references = commit_refs(repo).ok()?;
+    Some(
+        blocks
+            .iter()
+            .flat_map(|block| commit_block_items(repo, &references, block))
+            .collect(),
+    )
+}
+
+/// A run of rendered log rows belonging to one commit.
+pub(crate) struct RenderedCommit {
+    /// `None` for rows preceding the first commit the command printed.
+    oid: Option<String>,
+    rows: Vec<Rc<RenderedRow>>,
+}
+
+/// Run the configured log command with `args` appended, and group its rows per
+/// commit. `None` if the command fails or emits no commit records.
+fn rendered_commits(
+    config: &Config,
+    repo: &Repository,
+    width: usize,
+    args: &[String],
+) -> Option<Vec<RenderedCommit>> {
+    let command: Vec<String> = config
+        .general
+        .log_renderer
+        .command
+        .iter()
+        .map(|arg| arg.replace("{commit}", crate::diff_renderer::COMMIT_RECORD_FORMAT))
+        .chain(args.iter().cloned())
+        .collect();
+
     let dir = repo.workdir().unwrap_or_else(|| repo.path());
     let output = crate::diff_renderer::run(&command, None, width, Some(dir))?;
     let parsed = crate::diff_renderer::parse_ansi_lines(&output);
@@ -502,42 +551,39 @@ pub(crate) fn rendered_log(
         return None;
     }
 
-    let references = commit_refs(repo).ok()?;
     Some(
         blocks
             .iter()
-            .flat_map(|block| commit_block_items(repo, &references, block))
+            .map(|block| RenderedCommit {
+                oid: block.commit.map(String::from),
+                rows: block
+                    .rows
+                    .iter()
+                    .map(|row| Rc::new(rendered_spans(row)))
+                    .collect(),
+            })
             .collect(),
     )
 }
 
-/// The configured command with its `{commit}` token substituted, plus the log
-/// screen's own arguments (limit, message filter, rev).
-fn log_command(
+/// The log command's rows for each commit in `revs`, keyed by oid, for views
+/// that lay the commits out themselves (the interactive rebase todo). Empty when
+/// no log command is configured or it fails; the caller renders those commits.
+pub(crate) fn rendered_commit_rows(
     config: &Config,
-    limit: usize,
-    rev: Option<Oid>,
-    msg_regex: Option<&Regex>,
-) -> Vec<String> {
-    let mut command: Vec<String> = config
-        .general
-        .log_renderer
-        .command
-        .iter()
-        .map(|arg| arg.replace("{commit}", crate::diff_renderer::COMMIT_RECORD_FORMAT))
-        .collect();
+    repo: &Repository,
+    width: usize,
+    revs: &str,
+) -> HashMap<String, Vec<Rc<RenderedRow>>> {
+    if !config.general.log_renderer.enabled {
+        return HashMap::new();
+    }
 
-    // "No limit" is `u32::MAX`, which git rejects as not an integer; leaving the
-    // option off is what an unrepresentable limit means anyway.
-    if let Ok(limit) = i32::try_from(limit) {
-        command.push(format!("-n{limit}"));
-    }
-    if let Some(regex) = msg_regex {
-        command.push("--extended-regexp".into());
-        command.push(format!("--grep={regex}"));
-    }
-    command.push(rev.map_or_else(|| "HEAD".to_string(), |oid| oid.to_string()));
-    command
+    rendered_commits(config, repo, width, &[revs.to_string()])
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|block| Some((block.oid?, block.rows)))
+        .collect()
 }
 
 /// One commit's rendered rows as items: blank rows leading the block stay
@@ -546,50 +592,145 @@ fn log_command(
 fn commit_block_items(
     repo: &Repository,
     references: &[(git2::Commit, Ref)],
-    block: &crate::diff_renderer::CommitBlock,
+    block: &RenderedCommit,
 ) -> Vec<Item> {
     let commit = block
-        .commit
+        .oid
+        .as_ref()
         .and_then(|oid| Oid::from_str(oid).ok())
         .and_then(|oid| repo.find_commit(oid).ok());
 
     let Some(commit) = commit else {
         return block.rows.iter().map(|row| row_item(0, 1, row)).collect();
     };
-    let id = hash(commit.id());
 
-    let Some(anchor) = block
-        .rows
-        .iter()
-        .position(|row| !row.text.trim().is_empty())
-    else {
-        return block.rows.iter().map(|row| row_item(id, 1, row)).collect();
+    block_items(hash(commit.id()), &block.rows, |row| Item {
+        data: commit_data(&commit, references),
+        unselectable: false,
+        ..row_item(hash(commit.id()), 1, row)
+    })
+}
+
+/// Lay a block of rendered rows out under a selectable anchor row (the first
+/// non-blank one, built by `anchor`): rows before it are separators at the same
+/// depth, rows after it nest one deeper so folding the anchor hides them.
+fn block_items(
+    id: ItemId,
+    rows: &[Rc<RenderedRow>],
+    anchor: impl Fn(&Rc<RenderedRow>) -> Item,
+) -> Vec<Item> {
+    let Some(anchor_i) = rows.iter().position(|row| !is_blank(row)) else {
+        return rows.iter().map(|row| row_item(id, 1, row)).collect();
     };
 
-    block
-        .rows
-        .iter()
+    rows.iter()
         .enumerate()
-        .map(|(i, row)| match i.cmp(&anchor) {
+        .map(|(i, row)| match i.cmp(&anchor_i) {
             Ordering::Less => row_item(id, 1, row),
             Ordering::Greater => row_item(id, 2, row),
-            Ordering::Equal => Item {
-                data: commit_data(&commit, references),
-                unselectable: false,
-                ..row_item(id, 1, row)
-            },
+            Ordering::Equal => anchor(row),
         })
         .collect()
 }
 
-fn row_item(id: ItemId, depth: usize, row: &crate::diff_renderer::ParsedLine) -> Item {
+fn is_blank(row: &RenderedRow) -> bool {
+    row.iter().all(|(text, _)| text.trim().is_empty())
+}
+
+fn row_item(id: ItemId, depth: usize, row: &Rc<RenderedRow>) -> Item {
     Item {
         id,
         depth,
         unselectable: true,
-        rendered: Some(Rc::new(rendered_spans(row))),
+        rendered: Some(Rc::clone(row)),
         ..Default::default()
     }
+}
+
+/// Build the interactive rebase todo view: each entry's commit is drawn with the
+/// rows the log command gave it (so it looks like the log view), prefixed with
+/// the action git will take. Entries that aren't commits (`exec`, `break`, …)
+/// show their instruction verbatim.
+pub(crate) fn rebase_todo_items(
+    config: &Config,
+    repo: &Repository,
+    todo: &Rc<RefCell<RebaseTodo>>,
+    rows_by_commit: &HashMap<String, Vec<Rc<RenderedRow>>>,
+) -> Vec<Item> {
+    let mut items = Vec::new();
+
+    for (index, entry) in todo.borrow().entries.iter().enumerate() {
+        let data = ItemData::RebaseTodo {
+            todo: Rc::clone(todo),
+            index,
+        };
+        let (id, keyword, rows) = match entry {
+            TodoEntry::Commit { action, oid } => (
+                hash(oid),
+                Some(*action),
+                rows_by_commit
+                    .get(oid)
+                    .cloned()
+                    .unwrap_or_else(|| vec![Rc::new(commit_row(config, repo, oid))]),
+            ),
+            TodoEntry::Other(instruction) => (
+                hash(instruction),
+                None,
+                vec![Rc::new(vec![(instruction.clone(), Style::new())])],
+            ),
+        };
+
+        items.extend(block_items(id, &rows, |row| Item {
+            data: data.clone(),
+            unselectable: false,
+            ..row_item(id, 1, &Rc::new(action_prefixed(config, keyword, row)))
+        }));
+    }
+
+    items
+}
+
+/// The anchor row with the entry's action in front of it, so the instruction
+/// reads as part of the commit's own line.
+fn action_prefixed(
+    config: &Config,
+    action: Option<TodoAction>,
+    row: &Rc<RenderedRow>,
+) -> RenderedRow {
+    let Some(action) = action else {
+        return row.as_ref().clone();
+    };
+
+    let mut style = Style::from(&config.style.rebase_todo_action);
+    if action == TodoAction::Drop {
+        style.add_modifier.insert(Modifier::CROSSED_OUT);
+    }
+
+    iter::once((format!("{:<7}", action.keyword()), style))
+        .chain(row.iter().cloned())
+        .collect()
+}
+
+/// A commit as gitu would show it in the built-in log, for when no log command
+/// rendered it.
+fn commit_row(config: &Config, repo: &Repository, oid: &str) -> RenderedRow {
+    let commit = Oid::from_str(oid)
+        .ok()
+        .and_then(|oid| repo.find_commit(oid).ok());
+    let Some(commit) = commit else {
+        return vec![(oid.to_string(), Style::new())];
+    };
+
+    let short_id = commit
+        .as_object()
+        .short_id()
+        .map(|id| String::from_utf8_lossy(&id).to_string())
+        .unwrap_or_default();
+
+    vec![
+        (format!("{short_id} "), Style::from(&config.style.hash)),
+        (commit.summary().unwrap_or("").to_string(), Style::new()),
+    ]
 }
 
 fn commit_data(commit: &git2::Commit, references: &[(git2::Commit, Ref)]) -> ItemData {

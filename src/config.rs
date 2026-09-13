@@ -142,6 +142,9 @@ pub struct StyleConfig {
     pub search_match: StyleConfigEntry,
 
     pub hash: StyleConfigEntry,
+    /// The `pick`/`squash`/… keyword in the interactive rebase todo view.
+    #[serde(default)]
+    pub rebase_todo_action: StyleConfigEntry,
     pub branch: StyleConfigEntry,
     pub remote: StyleConfigEntry,
     pub tag: StyleConfigEntry,
