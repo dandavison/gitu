@@ -581,6 +581,53 @@ fn output_with_no_structure_is_still_rendered() {
     assert!(buffer.contains("rendered plain output"), "{buffer}");
 }
 
+/// `/` finds rendered text, and `n`/`N` repeat in either direction. Repeating
+/// past an end wraps, as it does in a pager.
+#[test]
+fn rendered_text_can_be_searched() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app_with_patch("start\nmatch one\nmiddle\nmatch two\n".to_owned());
+
+    ctx.update(&mut app, keys("/match<enter>"));
+    assert_eq!(selected_rendered_row(&app), "match one");
+
+    ctx.update(&mut app, keys("n"));
+    assert_eq!(selected_rendered_row(&app), "match two");
+
+    ctx.update(&mut app, keys("n"));
+    assert_eq!(selected_rendered_row(&app), "match one");
+
+    ctx.update(&mut app, keys("N"));
+    assert_eq!(selected_rendered_row(&app), "match two");
+}
+
+/// Search patterns are regular expressions over the renderer's visible text,
+/// not over its ANSI control sequences.
+#[test]
+fn search_is_a_regex_over_rendered_text() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app_with_patch(
+        "\x1b[31mfirst needle\x1b[0m\nsecond needle\nnot this\n".to_owned(),
+    );
+
+    ctx.update(&mut app, keys(r"/^second .*le$<enter>"));
+
+    assert_eq!(selected_rendered_row(&app), "second needle");
+}
+
+fn selected_rendered_row(app: &App) -> String {
+    app.screen()
+        .get_selected_item()
+        .rendered
+        .as_ref()
+        .map(|row| {
+            row.iter()
+                .map(|(text, _)| crate::ui::display_text(text))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// And rendering it is what makes a log a log: git hands its pager an unmarked
 /// wall of text, and the renderer is what says where each commit begins. So
 /// gitu needs no pipeline in front of it, only its own renderer.
