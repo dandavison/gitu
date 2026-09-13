@@ -117,33 +117,45 @@ fn rebase_elsewhere(
 pub(crate) struct RebaseInteractive;
 impl OpTrait for RebaseInteractive {
     fn get_action(&self, target: &ItemData) -> Option<Action> {
-        let action = match target {
-            ItemData::Commit { oid, .. }
-            | ItemData::Reference {
-                kind: Ref::Tag(oid),
-                ..
-            }
-            | ItemData::Reference {
-                kind: Ref::Head(oid),
-                ..
-            } => {
-                let rev = OsString::from(oid);
-                Rc::new(move |app: &mut App, _term: &mut Term| {
-                    let args = app.state.pending_menu.as_ref().unwrap().args();
-                    open_todo_screen(app, &parent(&rev), &args)
-                })
-            }
-            _ => return None,
-        };
+        // Rebasing starts at the commit under the cursor; with nothing to point
+        // at (a status view, a file) the log view asks which one.
+        let selected = commit_rev(target);
 
-        Some(action)
-    }
-    fn is_target_op(&self) -> bool {
-        true
+        Some(Rc::new(move |app: &mut App, term: &mut Term| {
+            let args = app.state.pending_menu.as_ref().unwrap().args();
+            let Some(rev) = rev_or_pick(selected.clone(), app, term)? else {
+                return Ok(());
+            };
+            open_todo_screen(app, &parent(&rev), &args)
+        }))
     }
 
     fn display(&self, _state: &State) -> String {
         "interactively".into()
+    }
+}
+
+/// The rev to rebase from: the one the target names, or one chosen in the log.
+fn rev_or_pick(
+    selected: Option<OsString>,
+    app: &mut App,
+    term: &mut Term,
+) -> Res<Option<OsString>> {
+    match selected {
+        Some(rev) => Ok(Some(rev)),
+        None => Ok(app.pick_commit(term)?.map(OsString::from)),
+    }
+}
+
+/// The rev a target names, if it names one.
+fn commit_rev(target: &ItemData) -> Option<OsString> {
+    match target {
+        ItemData::Commit { oid, .. }
+        | ItemData::Reference {
+            kind: Ref::Tag(oid) | Ref::Head(oid),
+            ..
+        } => Some(OsString::from(oid)),
+        _ => None,
     }
 }
 
@@ -156,11 +168,11 @@ fn open_todo_screen(app: &mut App, base: &OsStr, args: &[OsString]) -> Res<()> {
         return Ok(());
     }
 
-    let size = app.screen().size;
+    let params = app.render_params(app.screen().size);
     app.state.screens.push(screen::rebase_todo::create(
         Arc::clone(&app.state.config),
         Rc::clone(&app.state.repo),
-        size,
+        params,
         Rc::new(RefCell::new(todo)),
     )?);
     Ok(())

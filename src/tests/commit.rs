@@ -78,3 +78,15 @@ fn commit_extend() {
 
     snapshot!(ctx, "ce");
 }
+
+#[test]
+fn commit_fixup_picker_keeps_the_cursor_visible() {
+    // Moving past the last row the keymap panel leaves visible scrolls the log,
+    // rather than putting the cursor behind the panel.
+    let ctx = setup_clone!();
+    for i in 1..=10 {
+        commit(&ctx.dir, &format!("file-{i}"), "");
+    }
+
+    snapshot!(ctx, "cfjjjjjjjj");
+}

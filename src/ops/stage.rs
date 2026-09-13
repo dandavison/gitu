@@ -2,7 +2,7 @@ use super::OpTrait;
 use crate::{
     Action,
     app::{App, State},
-    git::diff::{Diff, PatchMode},
+    git::diff::{Diff, DiffType, PatchMode},
     gitu_diff::Status,
     item_data::ItemData,
     term::Term,
@@ -13,6 +13,15 @@ pub(crate) struct Stage;
 impl OpTrait for Stage {
     fn get_action(&self, target: &ItemData) -> Option<Action> {
         let action = match target {
+            // Staging part of a patch git never took from the working tree is
+            // either a no-op or a cherry-pick, so it is not on offer.
+            ItemData::Delta { diff, .. }
+            | ItemData::Hunk { diff, .. }
+            | ItemData::HunkLine { diff, .. }
+                if !matches!(diff.diff_type, DiffType::WorkdirToIndex) =>
+            {
+                return None;
+            }
             ItemData::AllUnstaged(_) => stage_unstaged(),
             ItemData::AllUntracked(untracked) => stage_untracked(untracked.clone()),
             ItemData::Untracked(u) => stage_file(u.into()),

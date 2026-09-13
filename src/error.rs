@@ -12,6 +12,9 @@ pub enum Error {
     Bindings { bad_key_bindings: Vec<String> },
     FileWatcher(notify::Error),
     ReadRebaseStatusFile(io::Error),
+    ReadRebaseTodo(io::Error),
+    ReadPipedInput(io::Error),
+    PagerWithoutInput,
     WriteRebaseTodo(io::Error),
     ReadBranchName(io::Error),
     BranchNameUtf8(Utf8Error),
@@ -52,6 +55,8 @@ pub enum Error {
     ListGitReferences(git2::Error),
     OpenLogFile(io::Error),
     PromptAborted,
+    ReadPromptHistory(io::Error),
+    WritePromptHistory(io::Error),
     NoMoreEvents,
     CannotSpinoffCurrentBranch,
     SpinoffBranchExists(String),
@@ -63,6 +68,10 @@ pub enum Error {
     NoSearchMatch(String),
     NoPreviousSearch,
     InvalidSearchRegex(regex::Error),
+    EditedCommandQuotes,
+    EditedCommandFixed,
+    EditedCommandWrites(String),
+    GitRefusedTheCommand(String),
 }
 
 impl std::error::Error for Error {}
@@ -72,6 +81,15 @@ impl Display for Error {
         match self {
             Error::StashList(e) => f.write_fmt(format_args!("Couldn't list stash: {e}")),
             Error::ReadLog(e) => f.write_fmt(format_args!("Couldn't read log: {e}")),
+            Error::ReadPipedInput(e) => {
+                f.write_fmt(format_args!("Couldn't read the piped input: {e}"))
+            }
+            Error::PagerWithoutInput => {
+                f.write_str("--pager expects a patch on stdin, e.g. `git show | gitu --pager`")
+            }
+            Error::ReadRebaseTodo(e) => {
+                f.write_fmt(format_args!("Couldn't read the rebase todo list: {e}"))
+            }
             Error::WriteRebaseTodo(e) => {
                 f.write_fmt(format_args!("Couldn't write the rebase todo list: {e}"))
             }
@@ -159,6 +177,12 @@ impl Display for Error {
             }
             Error::OpenLogFile(e) => f.write_fmt(format_args!("Couldn't open log file: {e}")),
             Error::PromptAborted => f.write_str("Aborted"),
+            Error::ReadPromptHistory(e) => {
+                f.write_fmt(format_args!("Couldn't read prompt history: {e}"))
+            }
+            Error::WritePromptHistory(e) => {
+                f.write_fmt(format_args!("Couldn't write prompt history: {e}"))
+            }
             Error::NoMoreEvents => unimplemented!(),
             Error::CannotSpinoffCurrentBranch => f.write_str("Cannot spin-off current branch"),
             Error::SpinoffBranchExists(new_branch_name) => f.write_fmt(format_args!(
@@ -176,6 +200,14 @@ impl Display for Error {
             Error::NoSearchMatch(query) => f.write_fmt(format_args!("No match: {query}")),
             Error::NoPreviousSearch => f.write_str("No previous search"),
             Error::InvalidSearchRegex(e) => f.write_fmt(format_args!("Invalid search: {e}")),
+            Error::EditedCommandQuotes => f.write_str("Unbalanced quotes"),
+            Error::EditedCommandFixed => f.write_str(
+                "Only git's arguments can be edited, not the program or git's own options",
+            ),
+            Error::EditedCommandWrites(subcommand) => f.write_fmt(format_args!(
+                "gitu re-runs this command on every refresh, so it must only report: {subcommand}"
+            )),
+            Error::GitRefusedTheCommand(stderr) => f.write_str(stderr),
         }
     }
 }

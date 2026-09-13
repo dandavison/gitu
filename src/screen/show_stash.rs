@@ -1,3 +1,4 @@
+use crate::items::RenderParams;
 use std::{iter, rc::Rc, sync::Arc};
 
 use crate::{
@@ -14,13 +15,13 @@ use super::Screen;
 pub(crate) fn create(
     config: Arc<Config>,
     repo: Rc<Repository>,
-    size: (u16, u16),
+    params: RenderParams,
     stash_ref: String,
 ) -> Res<Screen> {
     Screen::new(
         Arc::clone(&config),
-        size,
-        Box::new(move |size: (u16, u16)| {
+        params,
+        Box::new(move |params: RenderParams| {
             let commit = git::show_summary(repo.as_ref(), &stash_ref)?;
             let details = commit.details.lines();
 
@@ -57,12 +58,7 @@ pub(crate) fn create(
                     },
                 ]);
                 out.extend(items::create_diff_items(
-                    &config,
-                    (size.0 as usize).saturating_sub(2),
-                    &diff,
-                    1,
-                    false,
-                    None,
+                    &config, &params, &diff, 1, false, None,
                 ));
             };
 

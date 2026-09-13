@@ -1,3 +1,4 @@
+use crate::items::RenderParams;
 use std::{
     collections::{BTreeMap, btree_map::Entry},
     iter,
@@ -15,11 +16,15 @@ use crate::{
 };
 use git2::{Reference, Repository};
 
-pub(crate) fn create(config: Arc<Config>, repo: Rc<Repository>, size: (u16, u16)) -> Res<Screen> {
+pub(crate) fn create(
+    config: Arc<Config>,
+    repo: Rc<Repository>,
+    params: RenderParams,
+) -> Res<Screen> {
     Screen::new(
         Arc::clone(&config),
-        size,
-        Box::new(move |_size: (u16, u16)| {
+        params,
+        Box::new(move |_params: RenderParams| {
             Ok(iter::once(Item {
                 id: hash("local_branches"),
                 data: ItemData::Header(SectionHeader::Branches),

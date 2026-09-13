@@ -1,3 +1,4 @@
+use crate::items::RenderParams;
 use std::{rc::Rc, sync::Arc};
 
 use crate::{
@@ -14,15 +15,15 @@ use super::Screen;
 pub(crate) fn create(
     config: Arc<Config>,
     repo: Rc<Repository>,
-    size: (u16, u16),
+    params: RenderParams,
     file_path: String,
     commit: Option<String>,
     target_line: Option<u32>,
 ) -> Res<Screen> {
     let mut screen = Screen::new(
         Arc::clone(&config),
-        size,
-        Box::new(move |_size: (u16, u16)| {
+        params,
+        Box::new(move |_params: RenderParams| {
             let commit_display = commit.as_deref().unwrap_or("HEAD").to_string();
             let blame_lines = git::blame(repo.as_ref(), &file_path, commit.as_deref())?;
 

@@ -4,9 +4,12 @@ use crate::search::RunText;
 use crate::style::Style;
 use crate::ui::layout::{LayoutTree, opts};
 use crate::ui::{UiTree, layout_span};
+use crate::{
+    Res,
+    config::Config,
+    items::{ItemId, RenderParams, hash},
+};
 use crate::{item_data::ItemData, ui};
-
-use crate::{Res, config::Config, items::hash};
 
 use super::Item;
 use regex::{Regex, RegexBuilder};
@@ -14,10 +17,13 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::iter::successors;
+use std::ops::RangeInclusive;
+use std::rc::Rc;
 use std::sync::Arc;
 
 pub(crate) mod blame;
 pub(crate) mod log;
+pub(crate) mod pager;
 pub(crate) mod rebase_todo;
 pub(crate) mod show;
 pub(crate) mod show_refs;
@@ -85,18 +91,34 @@ fn has_uppercase(query: &str) -> bool {
     false
 }
 
-/// Builds a screen's items, given the viewport it will be drawn into. A screen
-/// that renders through an external command needs the width to ask for.
-pub(crate) type RefreshItems = Box<dyn Fn((u16, u16)) -> Res<Vec<Item>>>;
+/// Builds a screen's items, given what to render them with: the viewport to
+/// fill, and the renderer features and context chosen in-session.
+pub(crate) type RefreshItems = Box<dyn Fn(RenderParams) -> Res<Vec<Item>>>;
 
 pub(crate) struct Screen {
     pub(crate) size: (u16, u16),
     /// The keymap this screen imposes while it is on top, if it isn't the
     /// ordinary one (the interactive rebase todo has its own single-key actions).
     pub(crate) menu: Option<crate::menu::Menu>,
+    /// Whether that keymap is listed on screen. It stays up as long as the
+    /// screen does, so it starts out of the way.
+    pub(crate) show_menu: bool,
     cursor: usize,
+    /// Where a multi-line selection was started, if one is being made. The
+    /// selection runs from here to the cursor, inclusive.
+    anchor: Option<usize>,
     scroll: Scroll,
     config: Arc<Config>,
+    /// The renderer features to rebuild with, as chosen in-session. Pushed down
+    /// from the app so a screen always renders with the current selection.
+    pub(crate) features: Rc<[String]>,
+    /// How much context to ask git for, pushed down from the app as the
+    /// features are.
+    pub(crate) context: Option<Rc<str>>,
+    /// The command this screen is showing the output of, where it is one gitu
+    /// can put again. Shared with the closure that rebuilds the screen, so that
+    /// editing it is what the next rebuild asks.
+    pub(crate) git_command: Option<Rc<RefCell<crate::calling_process::GitCommand>>>,
     refresh_items: RefreshItems,
     items: Vec<Item>,
     /// Memoized `item_height`, indexed like `items`. Dropped by `invalidate`.
@@ -108,7 +130,7 @@ pub(crate) struct Screen {
 impl Screen {
     pub(crate) fn new(
         config: Arc<Config>,
-        size: (u16, u16),
+        params: RenderParams,
         refresh_items: RefreshItems,
     ) -> Res<Self> {
         let collapsed = config
@@ -121,10 +143,15 @@ impl Screen {
 
         let mut screen = Self {
             cursor: 0,
+            anchor: None,
             menu: None,
+            show_menu: false,
             scroll: Scroll::default(),
-            size,
+            size: params.size,
             config,
+            features: params.features,
+            context: params.context,
+            git_command: None,
             refresh_items,
             items: vec![],
             item_heights: RefCell::new(vec![]),
@@ -132,7 +159,7 @@ impl Screen {
             search: None,
         };
 
-        screen.items = (screen.refresh_items)(screen.size)?;
+        screen.items = fill_empty((screen.refresh_items)(screen.params())?);
 
         // TODO Maybe this should be done on update. Better keep track of toggled sections rather than collapsed then.
         screen.collapsed.extend(
@@ -154,11 +181,24 @@ impl Screen {
         Ok(screen)
     }
 
+    fn params(&self) -> RenderParams {
+        RenderParams {
+            size: self.size,
+            features: Rc::clone(&self.features),
+            context: self.context.clone(),
+        }
+    }
+
     fn find_first_hunk(&mut self) -> Option<usize> {
         self.find_item(|item| !item.unselectable && matches!(item.data, ItemData::Hunk { .. }))
     }
 
     pub(crate) fn select_next(&mut self, nav_mode: NavMode) {
+        self.anchor = None;
+        self.move_next(nav_mode);
+    }
+
+    fn move_next(&mut self, nav_mode: NavMode) {
         self.cursor = self.find_next(nav_mode);
         self.scroll_fit_end();
         self.scroll_fit_start();
@@ -248,8 +288,82 @@ impl Screen {
     }
 
     pub(crate) fn select_previous(&mut self, nav_mode: NavMode) {
+        self.anchor = None;
+        self.move_previous(nav_mode);
+    }
+
+    fn move_previous(&mut self, nav_mode: NavMode) {
         self.cursor = self.find_previous(nav_mode);
         self.scroll_fit_start();
+    }
+
+    /// Grow (or shrink) the selection by one line, so that a run of lines can be
+    /// staged, discarded or reversed as one patch. It stays inside a single hunk,
+    /// which is as far as one patch reaches.
+    pub(crate) fn extend_selection(&mut self, forwards: bool) {
+        let anchor = self.anchor.unwrap_or(self.cursor);
+        let next = if forwards {
+            self.find_next(NavMode::IncludeSubLines)
+        } else {
+            self.find_previous(NavMode::IncludeSubLines)
+        };
+
+        if !same_hunk(&self.items[anchor].data, &self.items[next].data) {
+            return;
+        }
+
+        self.anchor = Some(anchor);
+        self.cursor = next;
+        self.scroll_fit_end();
+        self.scroll_fit_start();
+    }
+
+    /// The lines the selection spans; just the cursor's line when none is being
+    /// made.
+    fn selection(&self) -> RangeInclusive<usize> {
+        let anchor = self.anchor.unwrap_or(self.cursor);
+        anchor.min(self.cursor)..=anchor.max(self.cursor)
+    }
+
+    /// What an op acts on. A multi-line selection reads as the line under the
+    /// cursor widened to cover every line selected, so that ops staging a
+    /// `HunkLine` take them all in a single patch without knowing about
+    /// selections.
+    pub(crate) fn selected_target(&self) -> ItemData {
+        let ItemData::HunkLine {
+            diff,
+            file_i,
+            hunk_i,
+            line_i,
+            line_range,
+            ..
+        } = &self.get_selected_item().data
+        else {
+            return self.get_selected_item().data.clone();
+        };
+
+        // Context lines within the selection contribute nothing: a patch leaves
+        // them be whether or not they are named.
+        let mut line_indices = self
+            .selection()
+            .filter_map(|line| match &self.items[line].data {
+                ItemData::HunkLine { line_indices, .. } => Some(line_indices),
+                _ => None,
+            })
+            .flatten()
+            .copied()
+            .collect::<Vec<_>>();
+        line_indices.sort_unstable();
+        line_indices.dedup();
+
+        ItemData::HunkLine {
+            diff: Rc::clone(diff),
+            file_i: *file_i,
+            hunk_i: *hunk_i,
+            line_i: *line_i,
+            line_range: line_range.clone(),
+            line_indices,
+        }
     }
 
     fn find_previous(&mut self, nav_mode: NavMode) -> usize {
@@ -258,14 +372,64 @@ impl Screen {
             .unwrap_or(self.cursor)
     }
 
-    pub(crate) fn scroll_view_half_page_up(&mut self) {
-        let half_screen = self.size.1 as usize / 2;
-        self.scroll_view_up(half_screen);
+    pub(crate) fn half_page_up(&mut self) {
+        self.turn_page(self.size.1 as usize / 2, false);
     }
 
-    pub(crate) fn scroll_view_half_page_down(&mut self) {
-        let half_screen = self.size.1 as usize / 2;
-        self.scroll_view_down(half_screen);
+    pub(crate) fn half_page_down(&mut self) {
+        self.turn_page(self.size.1 as usize / 2, true);
+    }
+
+    /// A page is a whole viewport, which is two half pages.
+    pub(crate) fn full_page_up(&mut self) {
+        self.turn_page(self.size.1 as usize, false);
+    }
+
+    pub(crate) fn full_page_down(&mut self) {
+        self.turn_page(self.size.1 as usize, true);
+    }
+
+    /// Move the view by `lines`, taking the cursor with it. Once the view has
+    /// nowhere further to go the cursor finishes the journey on its own, so a
+    /// run of rows with nothing to select on it — a commit message taller than
+    /// the screen — can still be turned past.
+    fn turn_page(&mut self, lines: usize, forwards: bool) {
+        self.anchor = None;
+        let row = self.cursor_row();
+        let before = self.scroll;
+
+        if forwards {
+            self.scroll_view_down(lines);
+        } else {
+            self.scroll_view_up(lines);
+        }
+
+        if self.scroll == before {
+            if forwards {
+                self.move_cursor_to_bottom();
+            } else {
+                self.move_cursor_to_top();
+            }
+            return;
+        }
+
+        // The cursor keeps its row, so turning the page back arrives where it
+        // started. Fitting it would scroll back to the page it came from, so
+        // the view is put back where the page left it.
+        let scroll = self.scroll;
+        if let Some(row) = row {
+            self.move_cursor_to_screen_line(row);
+        }
+        let nav_mode = self.selected_item_nav_mode();
+        self.move_from_unselectable(nav_mode);
+        self.scroll = scroll;
+    }
+
+    /// Which row of the viewport the cursor is drawn on, when it is on screen.
+    fn cursor_row(&self) -> Option<usize> {
+        self.screen_rows()
+            .find(|&(item_i, _)| item_i == self.cursor)
+            .map(|(_, row)| row)
     }
 
     pub(crate) fn scroll_view_up(&mut self, lines: usize) {
@@ -277,7 +441,35 @@ impl Screen {
         self.clamp_scroll();
     }
 
+    /// Fold the view down to its outermost headings, or open all of it when
+    /// they are already folded. Only the outermost are folded, and everything
+    /// within them is opened, so that opening one shows what is inside it
+    /// rather than another folded thing. The cursor can end up inside what was
+    /// folded away, so it is re-placed afterwards.
+    pub(crate) fn toggle_all_sections(&mut self) {
+        self.anchor = None;
+
+        let sections = || self.items.iter().filter(|item| item.data.is_section());
+        let Some(outermost) = sections().map(|item| item.depth).min() else {
+            return;
+        };
+        let headings: Vec<ItemId> = sections()
+            .filter(|item| item.depth == outermost)
+            .map(|item| item.id)
+            .collect();
+
+        let folded = headings.iter().all(|id| self.collapsed.contains(id));
+        self.collapsed.clear();
+        if !folded {
+            self.collapsed.extend(headings);
+        }
+
+        self.invalidate();
+        self.update_cursor();
+    }
+
     pub(crate) fn toggle_section(&mut self) -> Res<()> {
+        self.anchor = None;
         let selected = &self.items[self.cursor];
 
         if selected.data.is_section() {
@@ -300,16 +492,47 @@ impl Screen {
     }
 
     pub(crate) fn refresh(&mut self) -> Res<()> {
-        self.items = (self.refresh_items)(self.size)?;
+        // The rebuilt items are a different diff; the lines that were selected
+        // are no longer the same lines.
+        self.anchor = None;
+        self.items = fill_empty((self.refresh_items)(self.params())?);
+
         self.invalidate();
         self.update_cursor();
         Ok(())
     }
 
     pub(crate) fn resize(&mut self, w: u16, h: u16) -> Res<()> {
+        self.fit_to(w, h);
+        self.update_cursor();
+        Ok(())
+    }
+
+    /// Take the rows the screen has been given, which is what the panels below
+    /// it leave. Measured item heights hold at an unchanged size, and every
+    /// frame asks for this one. The cursor is left where it is: this is not the
+    /// user moving it.
+    pub(crate) fn fit_to(&mut self, w: u16, h: u16) {
+        if self.size == (w, h) {
+            return;
+        }
+
         self.size = (w, h);
         self.invalidate();
-        self.update_cursor();
+    }
+
+    /// Rebuild, keeping the cursor on whatever it was on. [`Self::refresh`]
+    /// keeps its place in the list, which is the same place only while the rows
+    /// are; a re-render that lays the same diff out differently moves them.
+    /// What does not move is where a row sits in the patch, so that is what is
+    /// restored.
+    pub(crate) fn refresh_keeping_position(&mut self) -> Res<()> {
+        let was_on = diff_position(&self.get_selected_item().data);
+        self.refresh()?;
+
+        if let Some(position) = was_on {
+            self.select_matching_in_view(|data| diff_position(data) == Some(position));
+        }
         Ok(())
     }
 
@@ -471,6 +694,7 @@ impl Screen {
         let view = ItemView {
             item_index: item_i,
             highlighted: false,
+            selected: false,
         };
         layout_item(&mut layout, self, false, view);
 
@@ -662,10 +886,10 @@ impl Screen {
 
     fn move_from_unselectable(&mut self, nav_mode: NavMode) {
         if !self.is_selectable(self.cursor, nav_mode) {
-            self.select_previous(nav_mode);
+            self.move_previous(nav_mode);
         }
         if !self.is_selectable(self.cursor, nav_mode) {
-            self.select_next(nav_mode);
+            self.move_next(nav_mode);
         }
     }
 
@@ -678,6 +902,7 @@ impl Screen {
         }
 
         let old_cursor = self.cursor;
+        self.anchor = None;
         self.cursor = new_cursor;
 
         let nav_mode = self.selected_item_nav_mode();
@@ -693,6 +918,7 @@ impl Screen {
     }
 
     pub(crate) fn move_cursor_to_top(&mut self) {
+        self.anchor = None;
         if let Some(first) = self.find_item(|item| !item.unselectable) {
             self.cursor = first;
             self.scroll = Scroll::default();
@@ -700,6 +926,7 @@ impl Screen {
     }
 
     pub(crate) fn move_cursor_to_bottom(&mut self) {
+        self.anchor = None;
         if let Some(last) = self.rfind_item(|item| !item.unselectable) {
             self.cursor = last;
             self.scroll_fit_end();
@@ -708,6 +935,16 @@ impl Screen {
 
     pub(crate) fn is_collapsed(&self, item: &Item) -> bool {
         self.collapsed.contains(&item.id)
+    }
+
+    /// The text of each row, for asserting on what a screen shows.
+    #[cfg(test)]
+    pub(crate) fn row_texts(&self) -> Vec<String> {
+        self.items
+            .iter()
+            .filter_map(|item| item.rendered.as_ref())
+            .map(|row| row.iter().map(|(text, _)| text.as_str()).collect())
+            .collect()
     }
 
     pub(crate) fn get_selected_item(&self) -> &Item {
@@ -774,6 +1011,26 @@ impl Screen {
         } else {
             Err(Error::NoSearchMatch(query.to_string()))
         }
+    }
+
+    /// As [`Self::select_matching`], but the rows stay where they are on screen:
+    /// the view scrolls only as far as it takes to bring the cursor into it.
+    pub(crate) fn select_matching_in_view<F: Fn(&ItemData) -> bool>(
+        &mut self,
+        predicate: F,
+    ) -> bool {
+        let Some(item_i) = self.find_matching(predicate) else {
+            return false;
+        };
+
+        self.cursor = item_i;
+        self.scroll_fit_end();
+        self.scroll_fit_start();
+        true
+    }
+
+    fn find_matching<F: Fn(&ItemData) -> bool>(&self, predicate: F) -> Option<usize> {
+        self.find_item(|item| !item.unselectable && predicate(&item.data))
     }
 
     /// Repeats the last search. `reverse` flips its direction, as `N` does in vim.
@@ -845,6 +1102,7 @@ impl Screen {
         let view = ItemView {
             item_index: item_i,
             highlighted: false,
+            selected: false,
         };
         layout_item(&mut layout, self, false, view);
 
@@ -889,48 +1147,106 @@ impl Screen {
         self.nav_filter(target_item_i, NavMode::IncludeSubLines)
     }
 
-    /// Whether `item_i` is the cursor or sits within the subtree it heads, and
-    /// so draws highlighted.
+    /// Whether `item_i` is within the selection or sits in the subtree its last
+    /// line heads, and so draws highlighted.
     fn is_selected(&self, item_i: usize) -> bool {
-        let Some(depth) = self.items.get(self.cursor).map(|item| item.depth) else {
+        let selection = self.selection();
+        let Some(depth) = self.items.get(*selection.start()).map(|item| item.depth) else {
             return false;
         };
 
-        item_i == self.cursor
-            || (item_i > self.cursor
-                && self.items[self.cursor + 1..=item_i]
+        selection.contains(&item_i)
+            || (item_i > *selection.end()
+                && self.items[*selection.end() + 1..=item_i]
                     .iter()
                     .rev()
                     .all(|item| item.depth > depth))
     }
 
     fn item_views(&self) -> impl Iterator<Item = ItemView> {
-        let cursor_depth = self.items.get(self.cursor).map(|item| item.depth);
+        let selection = self.selection();
+        let selection_depth = self.items.get(*selection.start()).map(|item| item.depth);
 
-        // The cursor may be above the viewport with the subtree it highlights
-        // reaching into it, so the first item on screen has to say for itself
-        // whether it is selected. The rest follow from it.
+        // The selection may start above the viewport with the subtree it
+        // highlights reaching into it, so the first item on screen has to say
+        // for itself whether it is selected. The rest follow from it.
         self.screen_rows().scan(
             self.is_selected(self.scroll.item_anchor),
             move |highlighted, (item_index, _)| {
-                if item_index == self.cursor {
+                if selection.contains(&item_index) {
                     *highlighted = true;
-                } else if cursor_depth.is_some_and(|depth| self.items[item_index].depth <= depth) {
+                } else if selection_depth.is_some_and(|depth| self.items[item_index].depth <= depth)
+                {
                     *highlighted = false;
                 }
 
                 Some(ItemView {
                     item_index,
                     highlighted: *highlighted,
+                    selected: selection.contains(&item_index),
                 })
             },
         )
     }
 }
 
+/// A view is legitimately empty — nothing staged, the last hunk staged away, a
+/// branch with no commits — and a screen still has to answer what is selected.
+/// So it gets a row, which nothing can act on.
+fn fill_empty(mut items: Vec<Item>) -> Vec<Item> {
+    if items.is_empty() {
+        items.push(Item {
+            unselectable: true,
+            ..Default::default()
+        });
+    }
+    items
+}
+
+/// Whether two rows are content lines of one hunk, and so can be selected
+/// together: a patch reaches no further than that.
+fn same_hunk(a: &ItemData, b: &ItemData) -> bool {
+    match (a, b) {
+        (
+            ItemData::HunkLine {
+                diff,
+                file_i,
+                hunk_i,
+                ..
+            },
+            ItemData::HunkLine {
+                diff: b_diff,
+                file_i: b_file_i,
+                hunk_i: b_hunk_i,
+                ..
+            },
+        ) => Rc::ptr_eq(diff, b_diff) && file_i == b_file_i && hunk_i == b_hunk_i,
+        _ => false,
+    }
+}
+
+/// Where a row sits in the patch, for the rows that sit anywhere in one: a
+/// file, a hunk within it, and for a content row the line within that. Two rows
+/// of one wrapped line share a position, which is right — they are one line.
+fn diff_position(data: &ItemData) -> Option<(usize, Option<usize>, Option<usize>)> {
+    match data {
+        ItemData::Delta { file_i, .. } => Some((*file_i, None, None)),
+        ItemData::Hunk { file_i, hunk_i, .. } => Some((*file_i, Some(*hunk_i), None)),
+        ItemData::HunkLine {
+            file_i,
+            hunk_i,
+            line_i,
+            ..
+        } => Some((*file_i, Some(*hunk_i), Some(*line_i))),
+        _ => None,
+    }
+}
+
 struct ItemView {
     item_index: usize,
     highlighted: bool,
+    /// Drawn as the cursor line is: the selection may span several of these.
+    selected: bool,
 }
 
 pub(crate) fn layout_screen<'a>(layout: &mut UiTree<'a>, screen: &'a Screen, hide_cursor: bool) {
@@ -943,7 +1259,7 @@ pub(crate) fn layout_screen<'a>(layout: &mut UiTree<'a>, screen: &'a Screen, hid
 
 fn layout_item<'a>(layout: &mut UiTree<'a>, screen: &'a Screen, hide_cursor: bool, line: ItemView) {
     let style = &screen.config.style;
-    let is_line_sel = screen.cursor == line.item_index;
+    let is_line_sel = line.selected;
 
     let area_sel = area_selection_highlight(style, &line);
     let line_sel = line_selection_highlight(style, &line, is_line_sel);
@@ -956,7 +1272,9 @@ fn layout_item<'a>(layout: &mut UiTree<'a>, screen: &'a Screen, hide_cursor: boo
             (" ".into(), Style::new())
         };
 
-        layout_span(layout, gutter_char);
+        // In a container of its own, so that it is not part of the row's text:
+        // a search is over what the row says, not over its cursor bar.
+        layout.row(opts(), |layout| layout_span(layout, gutter_char));
 
         let item = &screen.items[line.item_index];
         ui::item::layout_item(layout, item, &screen.config, bg);
@@ -1013,8 +1331,12 @@ mod tests {
 
         Screen::new(
             config,
-            size,
-            Box::new(move |_size| {
+            RenderParams {
+                size,
+                features: Rc::from([]),
+                context: None,
+            },
+            Box::new(move |_params| {
                 Ok((0..item_count)
                     .map(|i| Item {
                         id: i as u64,
@@ -1035,8 +1357,12 @@ mod tests {
 
         Screen::new(
             config,
-            size,
-            Box::new(move |_size| {
+            RenderParams {
+                size,
+                features: Rc::from([]),
+                context: None,
+            },
+            Box::new(move |_params| {
                 Ok(spec
                     .iter()
                     .enumerate()
@@ -1163,5 +1489,151 @@ mod tests {
         screen.refresh().unwrap();
 
         assert_eq!(2, screen.cursor);
+    }
+
+    use crate::git::diff::{Diff, DiffType};
+    use crate::items::RenderedRow;
+
+    const DIFF: &str = "diff --git a/f.rs b/f.rs\n\
+                        index 1..2 100644\n\
+                        --- a/f.rs\n\
+                        +++ b/f.rs\n\
+                        @@ -1,3 +1,3 @@\n\
+                        \x20keep\n\
+                        -gone\n\
+                        +added\n";
+
+    /// A screen whose diff renders one row per content line, or two when the
+    /// `wide` feature is on — standing in for a renderer laying the same diff
+    /// out differently.
+    fn rendered_screen(rows_per_line: &'static str) -> Screen {
+        rendered_screen_of_lines(rows_per_line, 3, 40)
+    }
+
+    fn rendered_screen_of_lines(rows_per_line: &'static str, lines: usize, height: u16) -> Screen {
+        let diff = Rc::new(Diff {
+            text: DIFF.to_string(),
+            diff_type: DiffType::WorkdirToIndex,
+            file_diffs: crate::gitu_diff::Parser::new(DIFF).parse_diff().unwrap(),
+            commit: None,
+        });
+
+        Screen::new(
+            Arc::new(init_test_config().unwrap()),
+            RenderParams {
+                size: (80, height),
+                features: Rc::from([]),
+                context: None,
+            },
+            Box::new(move |params: RenderParams| {
+                let rows = if params.features.iter().any(|f| f == rows_per_line) {
+                    2
+                } else {
+                    1
+                };
+                Ok(diff_items(&diff, rows, lines))
+            }),
+        )
+        .unwrap()
+    }
+
+    /// Items for the diff: a file, a hunk, then each content line drawn over
+    /// `rows` rows (the extra ones nesting, as wrapped rows do).
+    fn diff_items(diff: &Rc<Diff>, rows: usize, lines: usize) -> Vec<Item> {
+        let mut items = vec![
+            Item {
+                depth: 0,
+                data: ItemData::Delta {
+                    diff: Rc::clone(diff),
+                    file_i: 0,
+                    commit: None,
+                },
+                ..Default::default()
+            },
+            Item {
+                depth: 1,
+                data: ItemData::Hunk {
+                    diff: Rc::clone(diff),
+                    file_i: 0,
+                    hunk_i: 0,
+                },
+                ..Default::default()
+            },
+        ];
+
+        for line_i in 0..lines {
+            for row in 0..rows {
+                let rendered: RenderedRow =
+                    vec![(format!("line {line_i} row {row}"), Style::new())];
+                items.push(Item {
+                    depth: if row == 0 { 2 } else { 3 },
+                    unselectable: row > 0,
+                    data: if row == 0 {
+                        ItemData::HunkLine {
+                            diff: Rc::clone(diff),
+                            file_i: 0,
+                            hunk_i: 0,
+                            line_i,
+                            line_range: 0..0,
+                            line_indices: vec![line_i],
+                        }
+                    } else {
+                        ItemData::default()
+                    },
+                    rendered: Some(Rc::new(rendered)),
+                    ..Default::default()
+                });
+            }
+        }
+        items
+    }
+
+    fn selected_line(screen: &Screen) -> Option<usize> {
+        match screen.get_selected_item().data {
+            ItemData::HunkLine { line_i, .. } => Some(line_i),
+            _ => None,
+        }
+    }
+
+    /// The view stops once the last page is on screen, but the cursor does not:
+    /// it goes on to the end of the content, so holding the page key arrives at
+    /// the last line rather than at whichever one it was on when the view ran
+    /// out of room.
+    #[test]
+    fn paging_on_past_the_last_page_reaches_the_last_line() {
+        let mut screen = rendered_screen_of_lines("wide", 50, 20);
+
+        for _ in 0..10 {
+            screen.full_page_down();
+        }
+
+        assert_eq!(selected_line(&screen), Some(49));
+    }
+
+    #[test]
+    fn a_rerender_keeps_the_cursor_on_the_same_diff_line() {
+        let mut screen = rendered_screen("wide");
+        screen.select_matching(|data| matches!(data, ItemData::HunkLine { line_i: 2, .. }));
+        assert_eq!(selected_line(&screen), Some(2));
+
+        // Every row below the first now has a second row above where the cursor
+        // was, so keeping its line number would land somewhere else entirely.
+        screen.features = Rc::from(["wide".to_string()]);
+        screen.refresh_keeping_position().unwrap();
+
+        assert_eq!(selected_line(&screen), Some(2));
+    }
+
+    #[test]
+    fn a_plain_refresh_keeps_only_the_place_in_the_list() {
+        // The contrast: `refresh` is right for a changed diff, but it is the
+        // place in the list that it holds on to, not the diff line.
+        let mut screen = rendered_screen("wide");
+        screen.select_matching(|data| matches!(data, ItemData::HunkLine { line_i: 2, .. }));
+
+        screen.features = Rc::from(["wide".to_string()]);
+        screen.refresh().unwrap();
+
+        assert_ne!(selected_line(&screen), Some(2));
     }
 }

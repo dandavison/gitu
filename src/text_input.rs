@@ -21,6 +21,14 @@ impl TextInput {
     /// Splits the value around the char the cursor is on, so it can be drawn
     /// as a cursor rather than the cursor taking up a column of its own. That
     /// char is empty with the cursor at the end of the value.
+    pub(crate) fn position(&self) -> usize {
+        self.position.min(self.len())
+    }
+
+    pub(crate) fn move_to(&mut self, position: usize) {
+        self.position = position.min(self.len());
+    }
+
     pub(crate) fn split_at_cursor(&self) -> (&str, &str, &str) {
         let byte_at = |position| {
             self.value

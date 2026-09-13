@@ -1,11 +1,15 @@
 use super::{Action, OpTrait};
 use crate::{
+    Res,
     app::{App, PromptParams, State},
+    error::Error,
     item_data::ItemData,
     menu::PendingMenu,
+    picker::{PickerData, PickerItem, PickerState},
     screen::NavMode,
     term::Term,
 };
+use std::cell::RefCell;
 use std::rc::Rc;
 
 pub(crate) struct Quit;
@@ -112,6 +116,8 @@ impl OpTrait for ToggleArg {
                         prompt: display,
                         create_default_value: Box::new(move |_| default.clone()),
                         hide_menu: false,
+                        prefill: false,
+                        history: None,
                     },
                 )?;
 
@@ -153,6 +159,308 @@ impl OpTrait for ToggleSection {
             "Fold".into()
         }
     }
+}
+
+/// Ask git for a different amount of the file around each change: a number of
+/// lines, or the whole enclosing function.
+pub(crate) struct DiffContext;
+impl OpTrait for DiffContext {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app: &mut App, term: &mut Term| {
+            let current = app.state.context.clone();
+            let answer = app.prompt(
+                term,
+                &PromptParams {
+                    prompt: "",
+                    create_default_value: Box::new(move |_| {
+                        Some(match current.as_deref() {
+                            Some("-W") => "W".to_owned(),
+                            Some(flag) => flag.trim_start_matches("-U").to_owned(),
+                            None => DEFAULT_LINES.to_owned(),
+                        })
+                    }),
+                    hide_menu: false,
+                    prefill: false,
+                    history: None,
+                },
+            )?;
+
+            let Some(flag) = context_flag(&answer) else {
+                app.display_error(format!("Not a number of lines, nor W: {answer}"));
+                return Ok(());
+            };
+
+            app.state.context = flag;
+            app.rerender_screens()
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Diff context".into()
+    }
+}
+
+/// Edit the question git is being asked. Everything a view is — the revs, what
+/// is compared with what, which paths, how much context — is in that command,
+/// so this is the general case of which [`DiffContext`] is one canned edit.
+pub(crate) struct EditGitCommand;
+impl OpTrait for EditGitCommand {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app: &mut App, term: &mut Term| {
+            let Some(git) = app.screen().git_command.clone() else {
+                app.display_error(NOT_ASKED_FOR);
+                return Ok(());
+            };
+
+            let line = git.borrow().line(app.state.context.as_deref());
+            let answer = app.prompt(
+                term,
+                &PromptParams {
+                    prompt: "",
+                    create_default_value: Box::new(move |_| Some(line.clone())),
+                    prefill: true,
+                    history: Some(crate::prompt::HistoryKind::GitCommand),
+                    ..Default::default()
+                },
+            )?;
+
+            let edited = git.borrow().edited(&answer);
+            match edited {
+                Ok(edited) => *git.borrow_mut() = edited,
+                Err(err) => {
+                    app.display_error(err.to_string());
+                    return Ok(());
+                }
+            }
+
+            // The edit said what context it wants, in the line it was given.
+            app.state.context = None;
+            app.rerender_screens()
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Edit git command".into()
+    }
+}
+
+/// Limit the view to some of the files it covers, or drop some of them. Both
+/// are edits of the same command, and so of the same kind as [`EditGitCommand`]
+/// — this only saves writing the pathspec magic out.
+pub(crate) struct FilePatterns;
+impl OpTrait for FilePatterns {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app: &mut App, term: &mut Term| {
+            let Some(git) = app.screen().git_command.clone() else {
+                app.display_error(NOT_ASKED_FOR);
+                return Ok(());
+            };
+
+            let patterns = git.borrow().file_patterns().join(" ");
+            let answer = app.prompt(
+                term,
+                &PromptParams {
+                    prompt: "Files",
+                    create_default_value: Box::new(move |_| Some(patterns.clone())),
+                    prefill: true,
+                    history: Some(crate::prompt::HistoryKind::FilePatterns),
+                    ..Default::default()
+                },
+            )?;
+
+            let patterns = match shell_words::split(&answer) {
+                Ok(patterns) => patterns,
+                Err(_) => {
+                    app.display_error(Error::EditedCommandQuotes.to_string());
+                    return Ok(());
+                }
+            };
+
+            ask_for(app, &git, &patterns)
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Files".into()
+    }
+}
+
+/// Drop the file under the cursor from the view, as if it were not in the
+/// patch. The frequent case, and the one worth a keystroke: the noise is in
+/// front of you and it goes away.
+pub(crate) struct HideFile;
+impl OpTrait for HideFile {
+    fn get_action(&self, target: &ItemData) -> Option<Action> {
+        let path = file_of(target)?;
+
+        Some(Rc::new(move |app: &mut App, _term: &mut Term| {
+            let Some(git) = app.screen().git_command.clone() else {
+                app.display_error(NOT_ASKED_FOR);
+                return Ok(());
+            };
+
+            let mut patterns = git.borrow().file_patterns();
+            patterns.push(crate::calling_process::excluding(&path));
+
+            ask_for(app, &git, &patterns)
+        }))
+    }
+
+    fn is_target_op(&self) -> bool {
+        true
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Hide file".into()
+    }
+}
+
+const NOT_ASKED_FOR: &str = "This view is not something gitu asked git for";
+
+/// Put the held command again, for these paths.
+fn ask_for(
+    app: &mut App,
+    git: &Rc<RefCell<crate::calling_process::GitCommand>>,
+    patterns: &[String],
+) -> Res<()> {
+    let asking_for = git.borrow().asking_for(patterns);
+    *git.borrow_mut() = asking_for;
+    app.rerender_screens()
+}
+
+/// The file a row belongs to, where it belongs to one.
+fn file_of(target: &ItemData) -> Option<String> {
+    let (diff, file_i) = match target {
+        ItemData::Delta { diff, file_i, .. }
+        | ItemData::Hunk { diff, file_i, .. }
+        | ItemData::HunkLine { diff, file_i, .. } => (diff, file_i),
+        _ => return None,
+    };
+
+    let header = &diff.file_diffs[*file_i].header;
+    let path = match header.status {
+        crate::gitu_diff::Status::Deleted => &header.old_file,
+        _ => &header.new_file,
+    };
+
+    Some(path.fmt(&diff.text).into_owned())
+}
+
+/// What git gives without being asked, so asking for it is asking for nothing.
+const DEFAULT_LINES: &str = "3";
+
+/// The git flag an answer asks for: `None` for the default, which is to pass
+/// no flag at all. An answer that is neither a count nor the whole function
+/// isn't one, since a flag that leaves no hunks leaves nothing to act on.
+fn context_flag(answer: &str) -> Option<Option<Rc<str>>> {
+    match answer {
+        "W" | "w" => Some(Some(Rc::from("-W"))),
+        DEFAULT_LINES => Some(None),
+        lines if !lines.is_empty() && lines.chars().all(|c| c.is_ascii_digit()) => {
+            Some(Some(Rc::from(format!("-U{lines}").as_str())))
+        }
+        _ => None,
+    }
+}
+
+/// Fold the whole view down to its headings, or open all of it.
+pub(crate) struct ToggleAllSections;
+impl OpTrait for ToggleAllSections {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app, _term| {
+            app.screen_mut().toggle_all_sections();
+            Ok(())
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Fold all".into()
+    }
+}
+
+/// Show or hide the list of what a screen's own keymap does.
+pub(crate) struct ToggleMenu;
+impl OpTrait for ToggleMenu {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app: &mut App, _term: &mut Term| {
+            let screen = app.screen_mut();
+            screen.show_menu = !screen.show_menu;
+            Ok(())
+        }))
+    }
+
+    fn display(&self, state: &State) -> String {
+        if state.screens.last().unwrap().show_menu {
+            "Hide keys".into()
+        } else {
+            "Show keys".into()
+        }
+    }
+}
+
+/// Turn one of the configured renderer features on or off, re-rendering with
+/// it. The diff is what changes, not the position in it: a row's identity is
+/// its place in the patch, which no amount of re-rendering moves.
+pub(crate) struct RendererFeatures;
+impl OpTrait for RendererFeatures {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app: &mut App, term: &mut Term| {
+            let offered = crate::diff_renderer::offered_features(
+                &app.state.config.general.diff_renderer.features,
+                &app.state.repo.config().map_err(Error::ReadGitConfig)?,
+            )?;
+            if offered.is_empty() {
+                app.display_error("No renderer features are configured");
+                return Ok(());
+            }
+
+            let items = offered
+                .iter()
+                .map(|feature| {
+                    let mark = if app.state.features.contains(feature) {
+                        "● "
+                    } else {
+                        "  "
+                    };
+                    PickerItem::new(
+                        format!("{mark}{feature}"),
+                        PickerData::Item(feature.clone()),
+                    )
+                })
+                .collect();
+
+            let picked = app.pick(term, PickerState::new("Renderer feature", items, false))?;
+            let Some(picked) = picked else {
+                return Ok(());
+            };
+
+            app.state.features = toggled(&app.state.features, picked.display());
+            app.rerender_screens()
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Renderer features".into()
+    }
+}
+
+/// `features` with `feature` removed if present and appended if not. Order is
+/// otherwise kept, since delta resolves a conflict between two features in
+/// favour of the later one.
+fn toggled(features: &[String], feature: &str) -> Rc<[String]> {
+    if features.iter().any(|held| held == feature) {
+        return features
+            .iter()
+            .filter(|held| *held != feature)
+            .cloned()
+            .collect();
+    }
+
+    features
+        .iter()
+        .cloned()
+        .chain([feature.to_owned()])
+        .collect()
 }
 
 /// Name the commit under the cursor as the one [`App::pick_commit`] was after.
@@ -235,6 +543,27 @@ impl OpTrait for MoveUpLine {
     }
 }
 
+/// Reach the selection out over another line, towards the end of the hunk or
+/// back towards its start.
+pub(crate) struct ExtendSelection(pub bool);
+impl OpTrait for ExtendSelection {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        let forwards = self.0;
+        Some(Rc::new(move |app: &mut App, _term: &mut Term| {
+            app.screen_mut().extend_selection(forwards);
+            Ok(())
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        if self.0 {
+            "Select down".into()
+        } else {
+            "Select up".into()
+        }
+    }
+}
+
 pub(crate) struct MoveToScreenLine(pub usize);
 impl OpTrait for MoveToScreenLine {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {
@@ -301,7 +630,7 @@ pub(crate) struct HalfPageUp;
 impl OpTrait for HalfPageUp {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {
         Some(Rc::new(|app, _term| {
-            app.screen_mut().scroll_view_half_page_up();
+            app.screen_mut().half_page_up();
             Ok(())
         }))
     }
@@ -315,13 +644,41 @@ pub(crate) struct HalfPageDown;
 impl OpTrait for HalfPageDown {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {
         Some(Rc::new(|app, _term| {
-            app.screen_mut().scroll_view_half_page_down();
+            app.screen_mut().half_page_down();
             Ok(())
         }))
     }
 
     fn display(&self, _state: &State) -> String {
         "Scroll half page down".into()
+    }
+}
+
+pub(crate) struct FullPageUp;
+impl OpTrait for FullPageUp {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app, _term| {
+            app.screen_mut().full_page_up();
+            Ok(())
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Scroll page up".into()
+    }
+}
+
+pub(crate) struct FullPageDown;
+impl OpTrait for FullPageDown {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app, _term| {
+            app.screen_mut().full_page_down();
+            Ok(())
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Scroll page down".into()
     }
 }
 

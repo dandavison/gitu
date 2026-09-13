@@ -23,6 +23,11 @@ pub struct Args {
     #[clap(long, action)]
     pub print: bool,
 
+    /// Read a patch on stdin and browse it, for use as git's pager:
+    ///     GIT_PAGER='gitu --pager' git show
+    #[clap(long, action, verbatim_doc_comment)]
+    pub pager: bool,
+
     /// Enable logging to 'gitu.log'
     #[clap(long, action)]
     pub log: bool,
@@ -40,6 +45,16 @@ pub struct Args {
 pub enum Commands {
     Show {
         reference: String,
+    },
+    /// Interactively rebase onto <upstream>, editing the instruction list in Gitu.
+    Rebase {
+        upstream: String,
+    },
+    /// Edit a `git rebase -i` instruction list, for use as GIT_SEQUENCE_EDITOR:
+    ///     GIT_SEQUENCE_EDITOR='gitu sequence-editor' git rebase -i <upstream>
+    #[clap(verbatim_doc_comment)]
+    SequenceEditor {
+        file: PathBuf,
     },
     Blame {
         file: String,

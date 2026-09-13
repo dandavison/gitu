@@ -12,7 +12,7 @@
 use std::fs;
 
 #[macro_use]
-mod helpers;
+pub(crate) mod helpers;
 mod arg;
 mod blame;
 mod branch;
@@ -25,6 +25,7 @@ mod fetch;
 mod keys;
 mod log;
 mod merge;
+mod pager;
 mod pull;
 mod push;
 mod quit;

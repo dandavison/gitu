@@ -31,8 +31,10 @@ pub(crate) struct Span<'a>(pub(crate) Cow<'a, str>, pub(crate) Style);
 pub(crate) type UiTree<'a> = LayoutTree<Span<'a>, Style>;
 
 impl Span<'_> {
+    /// What the span says, which is not what it prints: an OSC-8 link prints
+    /// its target too, and that takes up no columns.
     pub(crate) fn text(&self) -> &str {
-        self.0.as_ref()
+        display_text(self.0.as_ref())
     }
 }
 
@@ -40,12 +42,19 @@ impl Measure for Span<'_> {
     type Unit = u16;
 
     fn measure(&self) -> [u16; 2] {
-        [UnicodeWidthStr::width(self.0.as_ref()) as u16, 1]
+        [UnicodeWidthStr::width(self.text()) as u16, 1]
     }
 }
 
 pub(crate) fn ui(term: &mut TermBackend, state: &mut State) -> Res<()> {
     let size = term.size().unwrap();
+
+    // The screen gets what the panels below it leave, and has to know before it
+    // is laid out: it scrolls to keep its cursor within the rows it is given,
+    // and a menu, prompt or picker closing hands it back several.
+    let rows = size.1.saturating_sub(panels_height(state, size));
+    state.screens.last_mut().unwrap().fit_to(size.0, rows);
+
     let mut layout = UiTree::new();
 
     let mut screen_leaves = 0..0;
@@ -58,26 +67,7 @@ pub(crate) fn ui(term: &mut TermBackend, state: &mut State) -> Res<()> {
             screen_leaves = start..layout.node_count();
         });
 
-        layout.col(opts(), |layout| {
-            menu::layout_menu(layout, state, size.0 as usize);
-            cmd_log::layout_cmd_log(
-                layout,
-                &state.current_cmd_log,
-                &state.config,
-                size.0 as usize,
-            );
-            layout_prompt(layout, state, size.0 as usize);
-            layout_picker(layout, state, size.0 as usize);
-            if !state.pending_keys.is_empty() {
-                let keys = &state
-                    .pending_keys
-                    .iter()
-                    .map(|(_, k)| k.to_string())
-                    .collect::<String>();
-
-                layout_span(layout, (("    ".to_string() + keys).into(), Style::new()));
-            }
-        });
+        layout.col(opts(), |layout| layout_panels(layout, state, size));
     });
 
     let highlight = Highlight {
@@ -93,9 +83,43 @@ pub(crate) fn ui(term: &mut TermBackend, state: &mut State) -> Res<()> {
     print_spans(term, size, items, &highlight)?;
 
     term.flush().map_err(Error::Term)?;
-    state.screens.last_mut().unwrap().size = size;
 
     Ok(())
+}
+
+/// The menu, command log, prompt and picker, which sit below the screen.
+fn layout_panels<'a>(layout: &mut UiTree<'a>, state: &'a State, size: (u16, u16)) {
+    menu::layout_menu(layout, state, size.0 as usize);
+    cmd_log::layout_cmd_log(
+        layout,
+        &state.current_cmd_log,
+        &state.config,
+        size.0 as usize,
+    );
+    layout_prompt(layout, state, size.0 as usize);
+    layout_picker(layout, state, size.0 as usize);
+    if !state.pending_keys.is_empty() {
+        let keys = &state
+            .pending_keys
+            .iter()
+            .map(|(_, k)| k.to_string())
+            .collect::<String>();
+
+        layout_span(layout, (("    ".to_string() + keys).into(), Style::new()));
+    }
+}
+
+/// How many rows the panels take, by laying them out on their own.
+fn panels_height(state: &State, size: (u16, u16)) -> u16 {
+    let mut layout = UiTree::new();
+    layout.col(opts(), |layout| layout_panels(layout, state, size));
+
+    layout
+        .compute([size.0, size.1])
+        .iter()
+        .map(|item| item.pos[1] + item.size[1])
+        .max()
+        .unwrap_or(0)
 }
 
 fn search_matches(
@@ -168,22 +192,25 @@ fn layout_prompt<'a>(layout: &mut UiTree<'a>, state: &'a State, width: usize) {
 
     repeat_chars(layout, width, DASHES, separator_style);
     layout.row(opts(), |layout| {
-        layout_span(
-            layout,
-            (
-                symbol.into(),
-                Style {
-                    fg: Some(symbol_color),
-                    ..Style::new()
-                },
-            ),
-        );
-        layout_span(layout, (" ".into(), Style::new()));
-        layout_span(
-            layout,
-            (prompt_data.prompt_text.as_ref().into(), prompt_style),
-        );
-        layout_span(layout, (" › ".into(), prompt_style));
+        // A prompt that says nothing is drawn as nothing but the line typed on.
+        if !prompt_data.prompt_text.is_empty() {
+            layout_span(
+                layout,
+                (
+                    symbol.into(),
+                    Style {
+                        fg: Some(symbol_color),
+                        ..Style::new()
+                    },
+                ),
+            );
+            layout_span(layout, (" ".into(), Style::new()));
+            layout_span(
+                layout,
+                (prompt_data.prompt_text.as_ref().into(), prompt_style),
+            );
+            layout_span(layout, (" › ".into(), prompt_style));
+        }
         let (before, at_cursor, after) = state.prompt.state.split_at_cursor();
         layout_span(layout, (before.into(), Style::new()));
         layout_cursor(layout, at_cursor);
@@ -224,6 +251,13 @@ pub(crate) fn layout_line<'a>(layout: &mut UiTree<'a>, content: Cow<'a, str>, st
 }
 
 pub(crate) fn layout_span<'a>(layout: &mut UiTree<'a>, span: (Cow<'a, str>, Style)) {
+    // A link is one thing: splitting it would put its escape sequences in
+    // separate spans, which would print them rather than follow them.
+    if osc8_parts(&span.0).is_some() {
+        layout.leaf(Span(span.0, span.1));
+        return;
+    }
+
     match span.0 {
         Cow::Borrowed(s) => {
             for word in words(s) {
@@ -244,6 +278,19 @@ pub(crate) fn layout_span<'a>(layout: &mut UiTree<'a>, span: (Cow<'a, str>, Styl
 fn words(text: &str) -> impl Iterator<Item = &str> {
     text.split_word_bounds()
         .filter(|word| !word.bytes().all(|byte| byte == b'\n' || byte == b'\r'))
+}
+
+pub(crate) fn display_text(text: &str) -> &str {
+    osc8_parts(text).map_or(text, |(_, text)| text)
+}
+
+pub(crate) fn osc8_hyperlink(text: &str, uri: &str) -> String {
+    format!("\x1b]8;;{uri}\x1b\\{text}\x1b]8;;\x1b\\")
+}
+
+fn osc8_parts(text: &str) -> Option<(&str, &str)> {
+    let (uri, text) = text.strip_prefix("\x1b]8;;")?.split_once("\x1b\\")?;
+    Some((uri, text.strip_suffix("\x1b]8;;\x1b\\")?))
 }
 
 pub(crate) fn repeat_chars(layout: &mut UiTree, count: usize, chars: &'static str, style: Style) {
@@ -309,12 +356,19 @@ fn print_spans(
 
 fn print_span(
     term: &mut TermBackend,
-    Span(text, style): &Span,
+    span: &Span,
     matches: impl Iterator<Item = Range<usize>>,
     match_style: Style,
 ) -> Result<(), Error> {
-    let mut at = 0;
+    let Span(whole, style) = span;
+    let link = osc8_parts(whole).map(|(uri, _)| uri);
+    let text = span.text();
 
+    if let Some(uri) = link {
+        term.queue_link(Some(uri))?;
+    }
+
+    let mut at = 0;
     for matched in matches {
         if at < matched.start {
             term.queue_print(&text[at..matched.start], style)?;
@@ -326,6 +380,10 @@ fn print_span(
 
     if at < text.len() {
         term.queue_print(&text[at..], style)?;
+    }
+
+    if link.is_some() {
+        term.queue_link(None)?;
     }
 
     Ok(())

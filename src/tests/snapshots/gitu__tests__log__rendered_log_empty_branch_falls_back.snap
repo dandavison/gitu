@@ -2,6 +2,7 @@
 source: src/tests/log.rs
 expression: ctx.redact_buffer()
 ---
+▌                                                                               |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -21,5 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-                                                                                |
-styles_hash: 278229390e566dff
+styles_hash: fd361eadad4094c9

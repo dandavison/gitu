@@ -90,7 +90,7 @@ fn goto_show_screen(r: String, target: Option<(String, u32)>) -> Option<Action> 
             screen::show::create(
                 Arc::clone(&app.state.config),
                 Rc::clone(&app.state.repo),
-                term.size().map_err(Error::Term)?,
+                app.render_params(term.size().map_err(Error::Term)?),
                 r.clone(),
                 target.clone(),
             )
@@ -106,7 +106,7 @@ fn goto_show_stash_screen(stash_ref: String) -> Option<Action> {
             screen::show_stash::create(
                 Arc::clone(&app.state.config),
                 Rc::clone(&app.state.repo),
-                term.size().map_err(Error::Term)?,
+                app.render_params(term.size().map_err(Error::Term)?),
                 stash_ref.clone(),
             )
             .expect("Couldn't create stash screen"),

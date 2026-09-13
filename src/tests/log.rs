@@ -1,4 +1,5 @@
 use super::*;
+use crate::item_data::ItemData;
 
 fn setup(ctx: TestContext) -> TestContext {
     commit(&ctx.dir, "third commit", "");
@@ -221,4 +222,70 @@ fn rendered_log_empty_branch_falls_back() {
     let mut app = ctx.init_app();
     ctx.update(&mut app, keys("ll"));
     insta::assert_snapshot!(ctx.redact_buffer());
+}
+
+/// A renderer that draws a rule above each commit, as delta does with
+/// `commit-decoration-style = ol`.
+const DECORATED_FORMAT: &str = "{commit}%n\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}%n\u{25b8} %h %s";
+
+#[test]
+fn rendered_log_divider_is_not_the_cursor_line() {
+    snapshot!(
+        with_log_renderer(setup(setup_clone!()), &[], DECORATED_FORMAT),
+        "llj"
+    );
+}
+
+#[test]
+fn rendered_log_keeps_the_first_commit_when_the_renderer_greets_on_its_line() {
+    // A renderer emits its OSC-1717 handshake as its first output, which shares
+    // a line with the marker a format puts at the very start (delta does this).
+    // The newest commit must still be a commit: selectable, cursor on it.
+    let mut ctx = setup(setup_clone!());
+    ctx.config().general.log_renderer.enabled = true;
+    ctx.config().general.log_renderer.command = [
+        "sh",
+        "-c",
+        r#"printf '\033]1717;1\033\\'; git log --format="{commit}%n───%n▸ %h %s" "$@""#,
+        "gitu",
+    ]
+    .map(String::from)
+    .to_vec();
+
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("ll"));
+    insta::assert_snapshot!(ctx.redact_buffer());
+}
+
+/// Turning the page takes the cursor with it: the commit selected afterwards is
+/// one of those now on screen, so the next op acts on what is being looked at.
+#[test]
+fn paging_lands_on_a_commit_of_the_new_page() {
+    let mut ctx = setup_clone!();
+    for i in 1..=40 {
+        commit(&ctx.dir, &format!("file-{i:02}"), "");
+    }
+
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("ll"));
+    let top = selected_summary(&app);
+
+    ctx.update(&mut app, keys("<pagedown>"));
+    let paged = selected_summary(&app);
+    assert_ne!(top, paged, "the cursor stayed on the first commit");
+    assert!(
+        ctx.redact_buffer().contains(&paged),
+        "selected {paged} is off screen:\n{}",
+        ctx.redact_buffer()
+    );
+
+    ctx.update(&mut app, keys("<pageup>"));
+    assert_eq!(top, selected_summary(&app), "paging back missed the commit");
+}
+
+fn selected_summary(app: &crate::app::App) -> String {
+    match &app.state.screens.last().unwrap().get_selected_item().data {
+        ItemData::Commit { summary, .. } => summary.clone(),
+        data => panic!("not a commit: {data:?}"),
+    }
 }

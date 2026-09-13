@@ -1,5 +1,6 @@
 pub mod app;
 mod bindings;
+mod calling_process;
 pub mod cli;
 mod cmd_log;
 pub mod config;
@@ -34,6 +35,7 @@ use git2::Repository;
 use items::Item;
 use ops::Action;
 use std::{
+    io::{self, IsTerminal},
     path::{Path, PathBuf},
     process::Command,
     rc::Rc,
@@ -43,6 +45,7 @@ use std::{
 use term::Term;
 
 use crate::config::Config;
+use crate::screen::pager::Paged;
 
 pub const LOG_FILE_NAME: &str = "gitu.log";
 
@@ -85,9 +88,19 @@ pub const LOG_FILE_NAME: &str = "gitu.log";
 
 pub type Res<T> = Result<T, Error>;
 
-pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<()> {
+/// Run gitu, returning the status to exit with.
+pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
+    // Before anything slower, and before reading the input: the git process on
+    // the other end of a pipe exits as soon as its output fits in the pipe, and
+    // cannot be found once it has. Reading to EOF is always too late — EOF is
+    // git closing the pipe.
+    let git_argv = args.pager.then(calling_process::paging_for).flatten();
+    log::debug!("Paging the output of {git_argv:?}");
+
     let dir = find_git_dir()?;
     let repo = open_repo(&dir)?;
+
+    let piped = args.pager.then(|| read_piped_input(git_argv)).transpose()?;
 
     let mut app = app::App::create(
         Rc::new(repo),
@@ -95,6 +108,7 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<()> {
         args,
         config,
         true,
+        piped,
     )?;
 
     if let Some(keys_string) = &args.keys {
@@ -110,12 +124,26 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<()> {
     app.redraw_now(term)?;
 
     if args.print {
-        return Ok(());
+        return Ok(app.state.exit_code);
     }
 
     app.run(term, Duration::from_millis(100))?;
 
-    Ok(())
+    Ok(app.state.exit_code)
+}
+
+/// What git piped to us as its pager, alongside the command already found to
+/// have produced it. Reading the terminal instead would wait for input that is
+/// never coming, so that is refused outright.
+fn read_piped_input(git_argv: Option<Vec<String>>) -> Res<Paged> {
+    if io::stdin().is_terminal() {
+        return Err(Error::PagerWithoutInput);
+    }
+
+    Ok(Paged {
+        text: io::read_to_string(io::stdin()).map_err(Error::ReadPipedInput)?,
+        git_argv,
+    })
 }
 
 fn open_repo(dir: &Path) -> Res<Repository> {

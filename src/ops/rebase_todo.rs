@@ -44,7 +44,11 @@ impl OpTrait for SetAction {
         Some(Rc::new(move |app: &mut App, _term: &mut Term| {
             todo.borrow_mut().set_action(index, action);
             app.screen_mut().refresh()?;
-            select_entry(app, index);
+            // Marking works down the list, so the cursor moves on to the next
+            // entry, staying put on the last one.
+            if !select_entry(app, index + 1) {
+                select_entry(app, index);
+            }
             Ok(())
         }))
     }
@@ -68,7 +72,13 @@ impl OpTrait for Start {
         let todo = Rc::clone(todo);
 
         Some(Rc::new(move |app: &mut App, term: &mut Term| {
-            let cmd = todo.borrow().apply_cmd()?;
+            let Some(cmd) = todo.borrow().start()? else {
+                // Editing git's own list: it is written, and git takes it from
+                // here as soon as we exit.
+                app.state.quit = true;
+                return Ok(());
+            };
+
             app.state.screens.pop();
             let result = app.run_cmd_interactive(term, cmd);
             todo.borrow().discard_file();
@@ -85,9 +95,39 @@ impl OpTrait for Start {
     }
 }
 
-/// Put the cursor back on an entry after the list has been rebuilt.
-fn select_entry(app: &mut App, index: usize) {
-    app.screen_mut().select_matching(
+/// Call off a rebase git has already started. git only takes "no" from a
+/// sequence editor that fails, so this exits non-zero and git says as much;
+/// leaving instead lets git carry on with the list it wrote.
+pub(crate) struct Abort;
+impl OpTrait for Abort {
+    fn get_action(&self, target: &ItemData) -> Option<Action> {
+        let ItemData::RebaseTodo { todo, .. } = target else {
+            return None;
+        };
+        if !todo.borrow().is_editing() {
+            return None;
+        }
+
+        Some(Rc::new(move |app: &mut App, _term: &mut Term| {
+            app.state.exit_code = 1;
+            app.state.quit = true;
+            Ok(())
+        }))
+    }
+
+    fn is_target_op(&self) -> bool {
+        true
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Call off the rebase".into()
+    }
+}
+
+/// Put the cursor on an entry after the list has been rebuilt, leaving the rows
+/// where they are on screen.
+fn select_entry(app: &mut App, index: usize) -> bool {
+    app.screen_mut().select_matching_in_view(
         |data| matches!(data, ItemData::RebaseTodo { index: at, .. } if *at == index),
-    );
+    )
 }

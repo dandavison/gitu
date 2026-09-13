@@ -3,23 +3,23 @@ source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
 ────────────────────────────────────────────────────────────────────────────────|
- Help                                     Submenu           On branch main      |
- Y                Show Refs               b   Branch        tab Fold            |
- k/up             Up                      c   Commit                            |
- j/down           Down                    f   Fetch                             |
- ctrl+k/ctrl+up   Up line                 h/? Help                              |
- ctrl+j/ctrl+down Down line               l   Log                               |
- alt+k/alt+up     Prev section            m   Merge                             |
- alt+j/alt+down   Next section            M   Remote                            |
- alt+h/alt+left   Parent section          F   Pull                              |
- g+g              Top                     P   Push                              |
- G                Bottom                  r   Rebase                            |
- ctrl+u           Scroll half page up     X   Reset                             |
- ctrl+d           Scroll half page down   V   Revert                            |
- ctrl+y           Scroll view up          A   Cherry-pick                       |
- ctrl+e           Scroll view down        z   Stash                             |
- /                Search                                                        |
- n                Next match                                                    |
- N                Previous match                                                |
- g+r              Refresh                                                       |
-styles_hash: 8e4b0994d480981d
+ Help                                   Submenu           On branch main        |
+ Y                Show Refs             b   Branch        tab Fold              |
+ |                Renderer features     c   Commit                              |
+ backtab          Fold all              f   Fetch                               |
+ U                Diff context          h/? Help                                |
+ :                Edit git command      l   Log                                 |
+ _                Files                 m   Merge                               |
+ k/up             Up                    M   Remote                              |
+ j/down           Down                  F   Pull                                |
+ ctrl+k/ctrl+up   Up line               P   Push                                |
+ ctrl+j/ctrl+down Down line             r   Rebase                              |
+ shift+up         Select up             X   Reset                               |
+ shift+down       Select down           V   Revert                              |
+ alt+k/alt+up     Prev section          A   Cherry-pick                         |
+ alt+j/alt+down   Next section          z   Stash                               |
+ alt+h/alt+left   Parent section                                                |
+ g+g              Top                                                           |
+ G                Bottom                                                        |
+ ctrl+u           Scroll half page up                                           |
+styles_hash: 21dcc481acad9e34

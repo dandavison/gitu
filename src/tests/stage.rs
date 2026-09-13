@@ -63,6 +63,126 @@ fn stage_deleted_file() {
     snapshot!(ctx, "jjs");
 }
 
+/// Extending the selection over several lines stages all of them, as one patch.
+#[test]
+fn stage_selected_lines() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
+
+    let mut app = ctx.init_app();
+    ctx.update(
+        &mut app,
+        keys("jj<tab><ctrl+j><ctrl+j><ctrl+j><ctrl+j><shift+down>s"),
+    );
+
+    assert_eq!(
+        run(&ctx.dir, &["git", "show", ":firstfile"]),
+        "testing\ntesttest\nweehooo\nblrergh\n"
+    );
+}
+
+/// The lines the selection covers are marked, so it is plain what `s` will take.
+#[test]
+fn selected_lines_are_marked() {
+    let ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
+    snapshot!(ctx, "jj<tab><ctrl+j><ctrl+j><ctrl+j><ctrl+j><shift+down>");
+}
+
+/// Every line of the selection is marked, not just the cursor's: the selection
+/// reaches back to where it was started from, and has to show it.
+#[test]
+fn the_whole_selection_is_marked() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
+
+    let mut app = ctx.init_app();
+    ctx.update(
+        &mut app,
+        keys("jj<tab><ctrl+j><ctrl+j><ctrl+j><ctrl+j><shift+down>"),
+    );
+
+    let buffer = ctx.redact_buffer();
+    for line in ["+weehooo", "+blrergh"] {
+        assert!(
+            buffer
+                .lines()
+                .any(|row| row.starts_with(&format!("▌{line}"))),
+            "{line} is not marked as selected:\n{buffer}"
+        );
+    }
+}
+
+/// Moving away without shift drops the selection, leaving just the cursor line.
+#[test]
+fn moving_on_drops_the_selection() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
+
+    let mut app = ctx.init_app();
+    ctx.update(
+        &mut app,
+        keys("jj<tab><ctrl+j><ctrl+j><ctrl+j><shift+down><ctrl+j>s"),
+    );
+
+    assert_eq!(
+        run(&ctx.dir, &["git", "show", ":firstfile"]),
+        "testing\ntesttest\nblrergh\n"
+    );
+}
+
+/// Taking the removed line and the added one together stages a changed line
+/// whole, which is what staging one line usually means.
+#[test]
+fn stage_a_changed_line() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", &numbered_lines());
+    fs::write(ctx.dir.join("firstfile"), changed_lines()).unwrap();
+
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("jj<tab><ctrl+j><ctrl+j><shift+down>s"));
+
+    assert_eq!(
+        run(&ctx.dir, &["git", "show", ":firstfile"]),
+        numbered_lines().replace("line 2\n", "changed 2\n")
+    );
+}
+
+/// A patch reaches no further than a hunk, so neither does the selection: it
+/// leaves the change further down the file alone however far it is reached out.
+#[test]
+fn selection_stops_at_the_end_of_the_hunk() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", &numbered_lines());
+    fs::write(ctx.dir.join("firstfile"), changed_lines()).unwrap();
+
+    let mut app = ctx.init_app();
+    ctx.update(
+        &mut app,
+        keys("jj<tab><ctrl+j><ctrl+j><shift+down><shift+down><shift+down><shift+down>s"),
+    );
+
+    assert_eq!(
+        run(&ctx.dir, &["git", "show", ":firstfile"]),
+        numbered_lines().replace("line 2\n", "changed 2\n")
+    );
+}
+
+/// Twenty lines, so that changing the second and the eighteenth gives two hunks.
+fn numbered_lines() -> String {
+    (1..=20).map(|i| format!("line {i}\n")).collect()
+}
+
+fn changed_lines() -> String {
+    numbered_lines()
+        .replace("line 2\n", "changed 2\n")
+        .replace("line 18\n", "changed 18\n")
+}
+
 #[test]
 #[cfg(not(target_os = "windows"))]
 fn stage_deleted_executable_file() {

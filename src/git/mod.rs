@@ -153,11 +153,12 @@ fn branch_name_lossy(dir: &Path, hash: &str) -> Res<Option<String>> {
         .map(|line| line.split(' ').nth(1).unwrap().to_string()))
 }
 
-pub(crate) fn diff_unstaged(repo: &Repository) -> Res<Diff> {
+pub(crate) fn diff_unstaged(repo: &Repository, context: Option<&str>) -> Res<Diff> {
     let text = String::from_utf8_lossy(
         &Command::new("git")
             .current_dir(repo.workdir().expect("Bare repos unhandled"))
             .args(["diff", "--no-ext-diff"])
+            .args(context)
             .output()
             .map_err(Error::GitDiff)?
             .stdout,
@@ -172,11 +173,12 @@ pub(crate) fn diff_unstaged(repo: &Repository) -> Res<Diff> {
     })
 }
 
-pub(crate) fn diff_staged(repo: &Repository) -> Res<Diff> {
+pub(crate) fn diff_staged(repo: &Repository, context: Option<&str>) -> Res<Diff> {
     let text = String::from_utf8_lossy(
         &Command::new("git")
             .current_dir(repo.workdir().expect("Bare repos unhandled"))
             .args(["diff", "--no-ext-diff", "--staged"])
+            .args(context)
             .output()
             .map_err(Error::GitDiff)?
             .stdout,
@@ -205,11 +207,13 @@ pub(crate) fn status(dir: &Path) -> Res<status::Status> {
     Ok(status::Status::from_str(&text).unwrap())
 }
 
-pub(crate) fn show(repo: &Repository, reference: &str) -> Res<Diff> {
+pub(crate) fn show(repo: &Repository, reference: &str, context: Option<&str>) -> Res<Diff> {
     let text = String::from_utf8_lossy(
         &Command::new("git")
             .current_dir(repo.workdir().expect("Bare repos unhandled"))
-            .args(["show", reference])
+            .arg("show")
+            .args(context)
+            .arg(reference)
             .output()
             .map_err(Error::GitShow)?
             .stdout,
