@@ -86,12 +86,13 @@ fn highlights_from_renderer(
     hunk_index: usize,
 ) -> Option<HunkHighlights> {
     let patch = diff.format_hunk_patch(file_index, hunk_index);
-    // The `--color-only` path preserves structure and does not reflow, so width
-    // is irrelevant here (0 = no `{width}`/COLUMNS effect for a structural command).
+    // Default params: this path maps the renderer's output 1:1 onto the hunk's
+    // lines, so it neither reflows (width is irrelevant) nor tolerates a feature
+    // that would restructure the diff out of that correspondence.
     let output = crate::diff_renderer::run(
         &config.general.diff_renderer.command,
         Some(&patch),
-        0,
+        &Default::default(),
         None,
     )?;
     highlights_from_output(diff, file_index, hunk_index, &output)

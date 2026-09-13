@@ -6,7 +6,7 @@ expression: ctx.redact_buffer()
  ─────                                                                          |
  ▸ 8bb5532 add first commit                                                     |
                                                                                 |
-▌─────                                                                          |
+ ─────                                                                          |
 ▌▸ 6c08cf7 add second commit                                                    |
                                                                                 |
  ─────                                                                          |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: e96c53b4cfc2f187
+styles_hash: 509b29fa6a0b2e3d

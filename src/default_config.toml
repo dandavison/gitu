@@ -18,6 +18,18 @@ mouse_scroll_lines = 3
 # The branch section is git's wording: 'On branch {name}' over a line placing
 # the branch relative to its upstream. Off, it is the branch name alone.
 verbose_branch_status = true
+
+# Files to drop from a paged view (`gitu --pager`), as if the patch never had
+# them. The wildcards are git's: `*.pb.go` matches at any depth, and naming a
+# directory hides its subtree. `_` says which files to show while reading, and
+# `:` shows the pathspecs these became. e.g.:
+#   hide = ["*.pb.go", "*_test.go", "vendor"]
+hide = []
+
+# Stop the cursor on a diff's unchanged lines too. Nothing can be staged there,
+# so they are skipped by default; reading a patch line by line wants them.
+visit_context_lines = false
+
 # Render diffs with an external command (e.g. delta) instead of Gitu's
 # built-in syntax/diff highlighting. The command receives a unified diff on
 # stdin and emits ANSI-colored output.
@@ -37,6 +49,18 @@ verbose_branch_status = true
 #   diff_renderer.command = ["delta", "--side-by-side", "--width", "{width}"]
 diff_renderer.enabled = false
 diff_renderer.command = ["delta", "--color-only", "--true-color", "always"]
+
+# Renderer features that `renderer_features` offers, to turn on and off while
+# viewing a diff. They are passed to the renderer as DELTA_FEATURES=+<names>,
+# which delta adds to the features your own git config already sets: your
+# configuration stays the base and this is only an overlay on it, held for the
+# session and never written to disk.
+#
+# Any feature you have defined in git config as `[delta "name"]` can be named
+# here alongside delta's built-in ones. A feature is free to restructure the
+# diff however it likes: Gitu maps each rendered row back to its patch line from
+# the metadata the renderer emits, not from how the row looks.
+diff_renderer.features = ["side-by-side", "line-numbers", "hyperlinks"]
 
 # Render the log view with a command of your own instead of Gitu's built-in
 # one-line-per-commit list. The command is run in the repository and its
@@ -143,7 +167,15 @@ selection_line = { mods = "BOLD" }
 selection_area = {}
 
 hash = { fg = "yellow" }
-rebase_todo_action = { fg = "cyan" }
+
+# What the interactive rebase will do with each commit, where that isn't just
+# picking it.
+rebase_todo.reword = { fg = "blue", mods = "BOLD" }
+rebase_todo.edit = { fg = "magenta", mods = "BOLD" }
+rebase_todo.squash = { fg = "cyan", mods = "BOLD" }
+rebase_todo.fixup = { fg = "yellow", mods = "BOLD" }
+rebase_todo.drop = { fg = "red", mods = "BOLD" }
+
 branch = { fg = "green" }
 remote = { fg = "red" }
 tag = { fg = "yellow" }
@@ -157,15 +189,30 @@ blame.code_line = { mods = "DIM" }
 root.quit = ["q", "esc"]
 root.refresh = ["g+r"]
 root.toggle_section = ["tab"]
+root.toggle_all_sections = ["backtab"]
+root.diff_context = ["U"]
+# Edit the git command the view is the output of, and ask it again.
+root.edit_git_command = [":"]
+# Drop the file under the cursor from the view, or say which files to show at
+# all: `src !*_test.go` limits the view to src and hides its tests.
+root.hide_file = ["-"]
+root.file_patterns = ["_"]
 root.move_up = ["k", "up"]
 root.move_down = ["j", "down"]
 root.move_up_line = ["ctrl+k", "ctrl+up"]
 root.move_down_line = ["ctrl+j", "ctrl+down"]
+# Reach the selection over a run of diff lines, to stage / unstage / discard /
+# reverse them together. It stays within one hunk, which is as far as a single
+# patch reaches. Any other movement drops the selection.
+root.extend_selection_up = ["shift+up"]
+root.extend_selection_down = ["shift+down"]
 root.move_prev_section = ["alt+k", "alt+up"]
 root.move_next_section = ["alt+j", "alt+down"]
 root.move_parent_section = ["alt+h", "alt+left"]
 root.half_page_up = ["ctrl+u"]
 root.half_page_down = ["ctrl+d"]
+root.full_page_up = ["pageup", "backspace"]
+root.full_page_down = ["pagedown", "space"]
 root.move_top = ["g+g"]
 root.move_bottom = ["G"]
 root.scroll_view_up = ["ctrl+y"]
@@ -175,7 +222,7 @@ root.search_backward = []
 root.search_next = ["n"]
 root.search_previous = ["N"]
 root.show_refs = ["Y"]
-root.show = ["enter"]
+root.show = ["enter", "right"]
 root.discard = ["K"]
 root.stage = ["s"]
 root.unstage = ["u"]
@@ -183,6 +230,8 @@ root.apply = ["a"]
 root.reverse = ["v"]
 root.copy_hash = ["y"]
 root.blame = ["B"]
+# Turn a renderer feature (side-by-side, line numbers, ...) on or off in place.
+root.renderer_features = ["|"]
 
 picker.next = ["down", "ctrl+n", "tab"]
 picker.previous = ["up", "ctrl+p", "backtab"]
@@ -228,6 +277,7 @@ commit_picker.half_page_down = ["ctrl+d"]
 commit_picker.scroll_view_up = ["ctrl+y"]
 commit_picker.scroll_view_down = ["ctrl+e"]
 commit_picker.toggle_section = ["tab"]
+commit_picker.toggle_menu = ["h", "?"]
 commit_picker.quit = ["q", "esc"]
 
 root.fetch_menu = ["f"]
@@ -298,6 +348,9 @@ rebase_todo.rebase_todo_drop = ["d"]
 rebase_todo.rebase_todo_move_up = ["alt+k", "alt+up"]
 rebase_todo.rebase_todo_move_down = ["alt+j", "alt+down"]
 rebase_todo.rebase_todo_start = ["enter"]
+# Only when git is waiting on gitu as its sequence editor: leaving (`quit`)
+# lets git carry on with the list it wrote, this stops the rebase instead.
+rebase_todo.rebase_todo_abort = ["Q"]
 rebase_todo.move_up = ["k", "up"]
 rebase_todo.move_down = ["j", "down"]
 rebase_todo.move_top = ["g+g"]
@@ -307,6 +360,7 @@ rebase_todo.half_page_down = ["ctrl+d"]
 rebase_todo.scroll_view_up = ["ctrl+y"]
 rebase_todo.scroll_view_down = ["ctrl+e"]
 rebase_todo.toggle_section = ["tab"]
+rebase_todo.toggle_menu = ["h", "?"]
 rebase_todo.quit = ["q", "esc"]
 
 root.remote_menu=["M"]

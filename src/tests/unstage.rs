@@ -53,3 +53,21 @@ fn unstage_added_file_with_spaces_in_name() {
     run(&ctx.dir, &["git", "add", "file with space.txt"]);
     snapshot!(ctx, "jju");
 }
+
+/// A selection unstages as one patch too, the reverse of staging one.
+#[test]
+fn unstage_selected_lines() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
+    run(&ctx.dir, &["git", "add", "."]);
+
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("jj<tab><ctrl+j><ctrl+j><shift+down>u"));
+
+    // Both removals are put back, leaving only the two additions staged.
+    assert_eq!(
+        run(&ctx.dir, &["git", "show", ":firstfile"]),
+        "testing\ntesttest\nweehooo\nblrergh\n"
+    );
+}

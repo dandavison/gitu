@@ -1,0 +1,25 @@
+---
+source: src/tests/rebase.rs
+expression: ctx.redact_buffer()
+---
+▌       132f122 add third-file                                                  |
+        bc73029 add second-file                                                 |
+        f5149db add first-file                                                  |
+                                                                                |
+                                                                                |
+                                                                                |
+────────────────────────────────────────────────────────────────────────────────|
+ Rebase todo                           132f122 add third-file                   |
+ h/?    Hide keys               alt+k    Move up                                |
+ k/up   Up                      alt+up   Move up                                |
+ j/down Down                    alt+j    Move down                              |
+ g+g    Top                     alt+down Move down                              |
+ G      Bottom                  p        pick                                   |
+ ctrl+u Scroll half page up     r        reword                                 |
+ ctrl+d Scroll half page down   e        edit                                   |
+ ctrl+y Scroll view up          s        squash                                 |
+ ctrl+e Scroll view down        f        fixup                                  |
+ q/esc  Quit/Close              d        drop                                   |
+                                enter    Start rebase                           |
+                                tab      Fold                                   |
+styles_hash: e6cdf8d28ed4934a

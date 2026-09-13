@@ -8,7 +8,7 @@ pub(crate) struct Diff {
     pub commit: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DiffType {
     WorkdirToIndex, // i.e. Unstaged
     IndexToTree,    // i.e. Staged

@@ -1,8 +1,9 @@
 ---
-source: src/tests/log.rs
+source: src/tests/rebase.rs
 expression: ctx.redact_buffer()
 ---
-▌                                                                               |
+▌       132f122 add third-file                                                  |
+        bc73029 add second-file                                                 |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -21,5 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-                                                                                |
-styles_hash: fd361eadad4094c9
+styles_hash: fe4a3ead9f66e792

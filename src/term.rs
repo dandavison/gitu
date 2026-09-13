@@ -33,6 +33,8 @@ pub enum TermBackend {
 #[derive(Clone, PartialEq)]
 pub struct TestCell {
     pub symbol: String,
+    /// The OSC-8 link the cell was printed inside, if any.
+    pub link: Option<String>,
     pub fg: Color,
     pub bg: Color,
     pub modifier: Modifier,
@@ -42,6 +44,7 @@ impl Default for TestCell {
     fn default() -> Self {
         TestCell {
             symbol: " ".to_string(),
+            link: None,
             fg: Color::Reset,
             bg: Color::Reset,
             modifier: Modifier::empty(),
@@ -70,6 +73,8 @@ pub struct TestBuffer {
     pub width: u16,
     pub height: u16,
     cursor: (u16, u16),
+    /// The link printing is currently inside, if any.
+    link: Option<String>,
 }
 
 impl TestBuffer {
@@ -79,6 +84,7 @@ impl TestBuffer {
             width,
             height,
             cursor: (0, 0),
+            link: None,
         }
     }
 
@@ -104,9 +110,11 @@ impl TestBuffer {
                 continue;
             }
 
+            let link = self.link.clone();
             if let Some(cell) = self.cell_mut(x, y) {
                 *cell = TestCell::default();
                 cell.set(grapheme, style);
+                cell.link = link;
             }
             x += 1;
 
@@ -132,6 +140,22 @@ impl TermBackend {
             TermBackend::Crossterm(t) => crossterm::queue!(t, MoveTo(x, y)).map_err(Error::Term),
             TermBackend::Test { buffer, .. } => {
                 buffer.cursor = (x, y);
+                Ok(())
+            }
+        }
+    }
+
+    /// Open or close an OSC-8 hyperlink around what is printed next. The
+    /// sequence takes up no columns, so the test terminal records only that the
+    /// link is open.
+    pub(crate) fn queue_link(&mut self, uri: Option<&str>) -> Res<()> {
+        match self {
+            TermBackend::Crossterm(t) => {
+                let uri = uri.unwrap_or("");
+                crossterm::queue!(t, Print(format!("\x1b]8;;{uri}\x1b\\"))).map_err(Error::Term)
+            }
+            TermBackend::Test { buffer, .. } => {
+                buffer.link = uri.map(str::to_owned);
                 Ok(())
             }
         }

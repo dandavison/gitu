@@ -1,4 +1,6 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
+use std::ffi::OsStr;
 use std::io::Read;
 use std::io::Write;
 use std::ops::DerefMut;
@@ -27,14 +29,17 @@ use crate::config::Config;
 use crate::error::Error;
 use crate::file_watcher::FileWatcher;
 use crate::item_data::Rev;
+use crate::items::RenderParams;
 use crate::menu::Menu;
 use crate::menu::PendingMenu;
 use crate::ops::Op;
 use crate::picker::PickerData;
 use crate::picker::PickerState;
 use crate::prompt;
+use crate::rebase_todo::RebaseTodo;
 use crate::screen;
 use crate::screen::Screen;
+use crate::screen::pager::Paged;
 use crate::term::Term;
 use crate::text_input;
 use crate::ui;
@@ -46,6 +51,9 @@ pub(crate) struct State {
     pub config: Arc<Config>,
     pub pending_keys: Vec<(KeyModifiers, KeyCode)>,
     pub quit: bool,
+    /// What gitu exits with. Non-zero only to tell git, which is waiting on
+    /// gitu as its sequence editor, to call the rebase off.
+    pub exit_code: i32,
     pub screens: Vec<Screen>,
     pub pending_menu: Option<PendingMenu>,
     pending_cmd: Option<(Child, Arc<RwLock<CmdLogEntry>>)>,
@@ -55,6 +63,12 @@ pub(crate) struct State {
     pub picker: Option<PickerState>,
     /// The commit `select_commit` named, read by [`App::pick_commit`].
     pub picked_commit: Option<String>,
+    /// Renderer features chosen in-session, overlaying the user's own
+    /// configuration. Never written to disk: quitting returns them to it.
+    pub features: Rc<[String]>,
+    /// How much of a file to ask git for around each change (`-U8`, `-W`),
+    /// chosen in-session. `None` is git's own default.
+    pub context: Option<Rc<str>>,
     pub clipboard: Option<Clipboard>,
     needs_redraw: bool,
     file_watcher: Option<FileWatcher>,
@@ -72,13 +86,28 @@ impl App {
         args: &cli::Args,
         config: Arc<Config>,
         enable_async_cmds: bool,
+        piped: Option<Paged>,
     ) -> Res<Self> {
+        let params = RenderParams {
+            size,
+            features: Rc::from([]),
+            context: None,
+        };
         let screens = match args.command {
+            // `--pager`: git's output is already in hand, with the command it ran.
+            _ if let Some(paged) = piped => {
+                vec![screen::pager::create(
+                    Arc::clone(&config),
+                    Rc::clone(&repo),
+                    params,
+                    paged,
+                )?]
+            }
             Some(cli::Commands::Show { ref reference }) => {
                 vec![screen::show::create(
                     Arc::clone(&config),
                     Rc::clone(&repo),
-                    size,
+                    params.clone(),
                     reference.clone(),
                     None,
                 )?]
@@ -87,11 +116,19 @@ impl App {
                 vec![screen::blame::create(
                     Arc::clone(&config),
                     Rc::clone(&repo),
-                    size,
+                    params.clone(),
                     file.clone(),
                     rev.clone(),
                     None,
                 )?]
+            }
+            Some(cli::Commands::Rebase { ref upstream }) => {
+                let todo = RebaseTodo::capture(&repo, OsStr::new(upstream), &[])?;
+                vec![rebase_todo_screen(&config, &repo, params.clone(), todo)?]
+            }
+            Some(cli::Commands::SequenceEditor { ref file }) => {
+                let todo = RebaseTodo::read(&repo, file)?;
+                vec![rebase_todo_screen(&config, &repo, params.clone(), todo)?]
             }
             // `completion` prints its script and exits in `main`, before the app is ever built.
             Some(cli::Commands::Completion { .. }) => {
@@ -100,15 +137,14 @@ impl App {
             None => vec![screen::status::create(
                 Arc::clone(&config),
                 Rc::clone(&repo),
-                size,
+                params,
             )?],
         };
-
-        let pending_menu = root_menu(&config).map(PendingMenu::init);
 
         let clipboard = Clipboard::new()
             .inspect_err(|e| log::warn!("Couldn't initialize clipboard: {e}"))
             .ok();
+        let prompt = prompt::Prompt::with_history(repo.path().join("gitu"));
 
         let mut app = Self {
             state: State {
@@ -117,13 +153,16 @@ impl App {
                 pending_keys: vec![],
                 enable_async_cmds,
                 quit: false,
+                exit_code: 0,
                 screens,
                 pending_cmd: None,
-                pending_menu,
+                pending_menu: None,
                 current_cmd_log: CmdLog::new(),
-                prompt: prompt::Prompt::new(),
+                prompt,
                 picker: None,
                 picked_commit: None,
+                features: Rc::from([]),
+                context: None,
                 clipboard,
                 file_watcher: None,
                 needs_redraw: true,
@@ -131,6 +170,9 @@ impl App {
             },
         };
 
+        // The menu a screen imposes is in force from the first key on, not from
+        // the first key that closes a menu.
+        app.close_menu();
         app.state.file_watcher = app.init_file_watcher()?;
         Ok(app)
     }
@@ -200,8 +242,23 @@ impl App {
     }
 
     pub fn update_screens(&mut self) -> Res<()> {
+        self.rebuild_screens(Screen::refresh)
+    }
+
+    /// Rebuild every screen, leaving each cursor where it was in the diff rather
+    /// than on the line number it happened to occupy. For a re-render of the
+    /// same content (a renderer feature turned on or off), the rows move but the
+    /// place in the patch does not.
+    pub fn rerender_screens(&mut self) -> Res<()> {
+        self.rebuild_screens(Screen::refresh_keeping_position)
+    }
+
+    fn rebuild_screens(&mut self, rebuild: impl Fn(&mut Screen) -> Res<()>) -> Res<()> {
+        let features = Rc::clone(&self.state.features);
         for screen in &mut self.state.screens {
-            screen.refresh()?;
+            screen.features = Rc::clone(&features);
+            screen.context = self.state.context.clone();
+            rebuild(screen)?;
         }
 
         self.stage_redraw();
@@ -235,14 +292,18 @@ impl App {
                     self.state.current_cmd_log.clear();
                 }
 
-                // The character received in the KeyEvent changes as shift is pressed,
-                // e.g. '/' becomes '?' on a US keyboard. So just ignore SHIFT.
-                key.modifiers = key.modifiers.difference(KeyModifiers::SHIFT);
+                // The key received changes as shift is pressed: '/' becomes '?'
+                // on a US keyboard, and tab becomes backtab. The modifier is
+                // redundant there, and on the other keys it is the only sign
+                // shift was held.
+                if matches!(key.code, KeyCode::Char(_) | KeyCode::BackTab) {
+                    key.modifiers = key.modifiers.difference(KeyModifiers::SHIFT);
+                }
 
                 if self.state.picker.is_some() {
                     self.handle_picker_input(key);
                 } else if self.state.prompt.state.focused {
-                    self.state.prompt.state.handle_key_event(key);
+                    self.state.prompt.handle_key(key);
                 } else {
                     self.handle_key_input(term, key)?;
                 }
@@ -348,11 +409,10 @@ impl App {
     }
 
     pub(crate) fn handle_op(&mut self, op: Op, term: &mut Term) -> Res<()> {
-        let screen_ref = self.screen();
-        let item_data = &screen_ref.get_selected_item().data;
+        let item_data = self.screen().selected_target();
         let implementation = op.clone().implementation();
 
-        if let Some(mut action) = implementation.get_action(item_data) {
+        if let Some(mut action) = implementation.get_action(&item_data) {
             let result = Rc::get_mut(&mut action).unwrap()(self, term);
             self.handle_result(result)?;
             if !self.state.inhibit_close_menu {
@@ -379,8 +439,22 @@ impl App {
         }
     }
 
+    /// What a screen opened now should render with: the viewport it will get,
+    /// and the features currently selected.
+    pub(crate) fn render_params(&self, size: (u16, u16)) -> RenderParams {
+        RenderParams {
+            size,
+            features: Rc::clone(&self.state.features),
+            context: self.state.context.clone(),
+        }
+    }
+
     pub fn close_menu(&mut self) {
-        self.state.pending_menu = self.base_menu().map(PendingMenu::init)
+        let hide = self.screen().menu.is_some() && !self.screen().show_menu;
+        self.state.pending_menu = self.base_menu().map(|menu| PendingMenu {
+            is_hidden: hide,
+            ..PendingMenu::init(menu)
+        });
     }
 
     /// The menu to fall back to once a pending one closes: a screen with its own
@@ -573,10 +647,18 @@ impl App {
     }
 
     pub(crate) fn prompt(&mut self, term: &mut Term, params: &PromptParams) -> Res<String> {
-        let prompt_text = if let Some(default) = (params.create_default_value)(self) {
-            format!("{} (default {}):", params.prompt, default).into()
-        } else {
-            format!("{}:", params.prompt).into()
+        let default = (params.create_default_value)(self);
+
+        // A prompt with nothing to say says nothing: the key that opened it
+        // already said what is being answered. Prefilled, the default is the
+        // answer being edited rather than the one an empty answer falls back
+        // to — it is on the line, so naming it again says nothing either.
+        let prompt_text = match (params.prompt, &default) {
+            ("", _) => Cow::Borrowed(""),
+            (prompt, Some(default)) if !params.prefill => {
+                format!("{prompt} (default {default}):").into()
+            }
+            (prompt, _) => format!("{prompt}:").into(),
         };
 
         if params.hide_menu {
@@ -584,6 +666,15 @@ impl App {
         }
 
         self.state.prompt.set(prompt::PromptData { prompt_text });
+
+        if params.prefill
+            && let Some(default) = default
+        {
+            self.state.prompt.state.value = default;
+            self.state.prompt.state.move_to(usize::MAX);
+        }
+        self.state.prompt.start_history(params.history)?;
+
         let result = self.handle_prompt(term, params);
 
         self.unhide_menu();
@@ -600,7 +691,9 @@ impl App {
             self.handle_event(term, event)?;
 
             if self.state.prompt.state.status == text_input::Status::Done {
-                return get_prompt_result(params, self);
+                let value = get_prompt_result(params, self)?;
+                self.state.prompt.remember(&value)?;
+                return Ok(value);
             } else if self.state.prompt.state.status == text_input::Status::Aborted {
                 return Err(Error::PromptAborted);
             }
@@ -685,7 +778,7 @@ impl App {
     /// its own keymap, and the loop runs until `select_commit` names one or the
     /// screen is closed.
     pub fn pick_commit(&mut self, term: &mut Term) -> Res<Option<String>> {
-        let size = self.screen().size;
+        let params = self.render_params(self.screen().size);
         let selected = match &self.screen().get_selected_item().data {
             crate::item_data::ItemData::Commit { oid, .. } => Some(oid.clone()),
             _ => None,
@@ -693,7 +786,7 @@ impl App {
         self.state.screens.push(screen::log::create(
             Arc::clone(&self.state.config),
             Rc::clone(&self.state.repo),
-            size,
+            params,
             COMMIT_PICK_LIMIT,
             None,
             None,
@@ -777,6 +870,10 @@ impl App {
 
 fn get_prompt_result(params: &PromptParams, app: &mut App) -> Res<String> {
     let input = app.state.prompt.state.value.as_str();
+    if params.prefill {
+        return Ok(input.to_owned());
+    }
+
     let default_value = (params.create_default_value)(app);
 
     let value = match (input, &default_value) {
@@ -808,6 +905,20 @@ fn tee(maybe_input: Option<&mut impl Read>, outputs: &mut [&mut dyn Write]) -> s
     }
 
     Ok(())
+}
+
+fn rebase_todo_screen(
+    config: &Arc<Config>,
+    repo: &Rc<Repository>,
+    params: RenderParams,
+    todo: RebaseTodo,
+) -> Res<Screen> {
+    screen::rebase_todo::create(
+        Arc::clone(config),
+        Rc::clone(repo),
+        params,
+        Rc::new(RefCell::new(todo)),
+    )
 }
 
 /// How far back [`App::pick_commit`] lists commits.
@@ -867,6 +978,10 @@ pub(crate) struct PromptParams {
     pub prompt: &'static str,
     pub create_default_value: DefaultFn,
     pub hide_menu: bool,
+    /// Put the default value in the prompt for the user to edit, rather than
+    /// keeping it as what an empty answer means.
+    pub prefill: bool,
+    pub history: Option<prompt::HistoryKind>,
 }
 
 impl Default for PromptParams {
@@ -875,6 +990,8 @@ impl Default for PromptParams {
             prompt: "",
             create_default_value: Box::new(|_| None),
             hide_menu: true,
+            prefill: false,
+            history: None,
         }
     }
 }

@@ -63,6 +63,16 @@ pub struct GeneralConfig {
     /// Whether the branch section uses git's wording - 'On branch {name}' over
     /// a line placing it relative to its upstream - or the branch name alone.
     pub verbose_branch_status: bool,
+    /// Globs whose files are dropped from a paged view, as if the patch never
+    /// had them. Generated code and fixtures recur, so hiding them is worth
+    /// saying once rather than per session.
+    #[serde(default)]
+    pub hide: Vec<String>,
+    /// Whether the cursor stops on a diff's unchanged lines. Nothing can be
+    /// staged there, so they are skipped by default; reading a patch line by
+    /// line wants them.
+    #[serde(default)]
+    pub visit_context_lines: bool,
     #[serde(default)]
     pub diff_renderer: DiffRendererConfig,
     #[serde(default)]
@@ -77,6 +87,10 @@ pub struct DiffRendererConfig {
     /// on stdin and must emit ANSI-colored output that preserves line structure.
     #[serde(default)]
     pub command: Vec<String>,
+    /// Named renderer features offered by `renderer_features`, to turn on and
+    /// off while viewing a diff.
+    #[serde(default)]
+    pub features: Vec<String>,
 }
 
 #[derive(Default, Debug, Deserialize)]
@@ -142,9 +156,9 @@ pub struct StyleConfig {
     pub search_match: StyleConfigEntry,
 
     pub hash: StyleConfigEntry,
-    /// The `pick`/`squash`/… keyword in the interactive rebase todo view.
+    /// The instruction keywords in the interactive rebase todo view.
     #[serde(default)]
-    pub rebase_todo_action: StyleConfigEntry,
+    pub rebase_todo: RebaseTodoStyleConfig,
     pub branch: StyleConfigEntry,
     pub remote: StyleConfigEntry,
     pub tag: StyleConfigEntry,
@@ -153,6 +167,20 @@ pub struct StyleConfig {
 
     #[serde(default)]
     pub blame: BlameStyleConfig,
+}
+
+#[derive(Default, Debug, Deserialize)]
+pub struct RebaseTodoStyleConfig {
+    #[serde(default)]
+    pub reword: StyleConfigEntry,
+    #[serde(default)]
+    pub edit: StyleConfigEntry,
+    #[serde(default)]
+    pub squash: StyleConfigEntry,
+    #[serde(default)]
+    pub fixup: StyleConfigEntry,
+    #[serde(default)]
+    pub drop: StyleConfigEntry,
 }
 
 #[derive(Default, Debug, Deserialize)]

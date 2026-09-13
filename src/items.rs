@@ -6,7 +6,6 @@ use crate::highlight;
 use crate::item_data::ItemData;
 use crate::item_data::Ref;
 use crate::rebase_todo::{RebaseTodo, TodoAction, TodoEntry};
-use crate::style::Modifier;
 use crate::style::Style;
 use git2::Oid;
 use git2::Repository;
@@ -26,6 +25,29 @@ pub type ItemId = u64;
 /// A pre-rendered line as owned styled spans (e.g. one row of a renderer's output).
 pub(crate) type RenderedRow = Vec<(String, Style)>;
 
+/// Everything a screen's rows depend on besides the repository: the viewport
+/// they must fit, and the renderer features in force.
+#[derive(Default, Clone)]
+pub(crate) struct RenderParams {
+    pub size: (u16, u16),
+    /// Named renderer features overlaying the user's own configuration, chosen
+    /// in-session. Empty means their configuration alone.
+    pub features: Rc<[String]>,
+    /// How much of a file to ask git for around each change (`-U8`, `-W`),
+    /// chosen in-session. `None` is git's own default.
+    pub context: Option<Rc<str>>,
+}
+
+impl RenderParams {
+    /// Columns to render a row into: the viewport width less the 1-char gutter,
+    /// and one more so a renderer that pads rows to full width (delta
+    /// side-by-side) doesn't reach the edge, where the overflow guard would clip
+    /// it.
+    pub(crate) fn width(&self) -> usize {
+        (self.size.0 as usize).saturating_sub(2)
+    }
+}
+
 #[derive(Default, Clone, Debug)]
 pub(crate) struct Item {
     pub(crate) id: ItemId,
@@ -44,7 +66,7 @@ pub(crate) struct Item {
 /// (styled per-hunk by [`highlight`], including a `--color-only` renderer).
 pub(crate) fn create_diff_items(
     config: &Config,
-    width: usize,
+    params: &RenderParams,
     diff: &Rc<Diff>,
     depth: usize,
     default_collapsed: bool,
@@ -53,7 +75,7 @@ pub(crate) fn create_diff_items(
     if config.general.diff_renderer.enabled
         && let Some(items) = create_rendered_diff_items(
             config,
-            width,
+            params,
             diff,
             depth,
             default_collapsed,
@@ -62,7 +84,14 @@ pub(crate) fn create_diff_items(
     {
         return items;
     }
-    create_builtin_diff_items(diff, depth, default_collapsed, commit).collect()
+    create_builtin_diff_items(
+        diff,
+        depth,
+        default_collapsed,
+        commit,
+        config.general.visit_context_lines,
+    )
+    .collect()
 }
 
 /// Render the diff through the OSC-1717 renderer and lay its rows out under
@@ -73,23 +102,54 @@ pub(crate) fn create_diff_items(
 /// protocol.
 fn create_rendered_diff_items(
     config: &Config,
-    width: usize,
+    params: &RenderParams,
     diff: &Rc<Diff>,
     depth: usize,
     default_collapsed: bool,
     commit: Option<String>,
 ) -> Option<Vec<Item>> {
-    use std::collections::HashMap;
-
     let output = crate::diff_renderer::run(
         &config.general.diff_renderer.command,
         Some(&diff.text),
-        width,
+        params,
         None,
     )?;
     let parsed = crate::diff_renderer::parse_ansi_lines(&output);
     parsed.protocol_version?; // Not an OSC-1717 renderer: fall back to built-in.
 
+    // The handshake says the renderer speaks the protocol, not that it said
+    // anything with it: without content records there is nothing to lay out.
+    let has_hunks = diff.file_diffs.iter().any(|file| !file.hunks.is_empty());
+    let annotated_a_line = parsed
+        .lines
+        .iter()
+        .flat_map(|line| &line.records)
+        .any(|record| record.kind.is_content());
+    if has_hunks && !annotated_a_line {
+        return None;
+    }
+
+    Some(rendered_diff_items(
+        diff,
+        &parsed.lines,
+        depth,
+        default_collapsed,
+        commit,
+        config.general.visit_context_lines,
+    ))
+}
+
+/// Lay the renderer's rows out under gitu's file/hunk structure. Split from
+/// [`create_rendered_diff_items`] so the mapping can be exercised on rows
+/// without running a renderer.
+fn rendered_diff_items(
+    diff: &Rc<Diff>,
+    lines: &[crate::diff_renderer::ParsedLine],
+    depth: usize,
+    default_collapsed: bool,
+    commit: Option<String>,
+    visit_context_lines: bool,
+) -> Vec<Item> {
     use crate::diff_renderer::LineKind;
 
     // Per hunk: the renderer's own hunk-header rows (`h`) to display in place of
@@ -97,14 +157,20 @@ fn create_rendered_diff_items(
     // draws its own file header — as are the renderer's blank spacer rows.
     let mut headers_by_hunk: HashMap<(usize, usize), Vec<RenderedRow>> = HashMap::new();
     let mut content_by_hunk: HashMap<(usize, usize), Vec<Item>> = HashMap::new();
+    // The content line the previous row belonged to; a row repeating it is a
+    // wrapped continuation of it. Cleared by every other kind of row, so only a
+    // consecutive run counts as one line.
+    let mut last_content: Option<(usize, usize, usize)> = None;
 
-    for line in &parsed.lines {
+    for line in lines {
         let Some(first) = line.records.first() else {
+            last_content = None;
             continue; // Un-annotated decoration (dividers): dropped.
         };
         match first.kind {
-            LineKind::FileHeader | LineKind::Commit => {}
+            LineKind::FileHeader | LineKind::Commit => last_content = None,
             LineKind::HunkHeader => {
+                last_content = None;
                 if line.text.trim().is_empty() {
                     continue;
                 }
@@ -131,28 +197,44 @@ fn create_rendered_diff_items(
                     .map(|(_, _, li)| li)
                     .collect();
                 let hunk_hash = hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]);
+                let rows = content_by_hunk.entry((file_i, hunk_i)).or_default();
+
+                // A renderer that wraps a long line emits a row per screen line,
+                // re-emitting the same record on each. They are one diff line, so
+                // the first takes the cursor and the rest nest under it.
+                let continues_previous = last_content
+                    .replace((file_i, hunk_i, line_i))
+                    .is_some_and(|previous| previous == (file_i, hunk_i, line_i));
+                if continues_previous {
+                    rows.push(Item {
+                        id: hunk_hash,
+                        depth: depth + 3,
+                        unselectable: true,
+                        rendered: Some(Rc::new(rendered_spans(line))),
+                        ..Default::default()
+                    });
+                    continue;
+                }
+
                 let line_range = highlight::line_range_iterator(diff.hunk_content(file_i, hunk_i))
                     .nth(line_i)
                     .map(|(range, _)| range)
                     .unwrap_or_default();
-                content_by_hunk
-                    .entry((file_i, hunk_i))
-                    .or_default()
-                    .push(Item {
-                        id: hunk_hash,
-                        depth: depth + 2,
-                        unselectable: matches!(first.kind, LineKind::Context),
-                        data: ItemData::HunkLine {
-                            diff: Rc::clone(diff),
-                            file_i,
-                            hunk_i,
-                            line_i,
-                            line_range,
-                            line_indices,
-                        },
-                        rendered: Some(Rc::new(rendered_spans(line))),
-                        ..Default::default()
-                    });
+                rows.push(Item {
+                    id: hunk_hash,
+                    depth: depth + 2,
+                    unselectable: !visit_context_lines && matches!(first.kind, LineKind::Context),
+                    data: ItemData::HunkLine {
+                        diff: Rc::clone(diff),
+                        file_i,
+                        hunk_i,
+                        line_i,
+                        line_range,
+                        line_indices,
+                    },
+                    rendered: Some(Rc::new(rendered_spans(line))),
+                    ..Default::default()
+                });
             }
         }
     }
@@ -206,7 +288,24 @@ fn create_rendered_diff_items(
             }
         }
     }
-    Some(items)
+    items
+}
+
+/// Colored text as one row per line, keeping the colors it arrived with. For
+/// output that offers no structure to navigate — a grep, a blame, a plain
+/// `diff -u`, anything that isn't a git patch — this is all there is to show.
+pub(crate) fn plain_rows(text: &str) -> Vec<Item> {
+    rows_of(crate::diff_renderer::parse_ansi_lines(text).lines.iter())
+}
+
+fn rows_of<'a>(lines: impl Iterator<Item = &'a crate::diff_renderer::ParsedLine>) -> Vec<Item> {
+    lines
+        .map(|line| Item {
+            depth: 0,
+            rendered: Some(Rc::new(rendered_spans(line))),
+            ..Default::default()
+        })
+        .collect()
 }
 
 /// The renderer's styled runs for a line, as owned `(text, style)` spans with
@@ -214,7 +313,19 @@ fn create_rendered_diff_items(
 fn rendered_spans(line: &crate::diff_renderer::ParsedLine) -> RenderedRow {
     line.runs
         .iter()
-        .map(|(range, style)| (line.text[range.clone()].replace('\t', "    "), *style))
+        .map(|(range, style)| {
+            let text = line.text[range.clone()].replace('\t', "    ");
+            let text = if let Some(link) = line
+                .hyperlinks
+                .iter()
+                .find(|link| link.range.contains(&range.start))
+            {
+                crate::ui::osc8_hyperlink(&text, &link.uri)
+            } else {
+                text
+            };
+            (text, *style)
+        })
         .collect()
 }
 
@@ -223,6 +334,7 @@ fn create_builtin_diff_items(
     depth: usize,
     default_collapsed: bool,
     commit: Option<String>,
+    visit_context_lines: bool,
 ) -> impl Iterator<Item = Item> + '_ {
     diff.file_diffs
         .iter()
@@ -241,7 +353,13 @@ fn create_builtin_diff_items(
             })
             .chain(file_diff.hunks.iter().cloned().enumerate().flat_map(
                 move |(hunk_i, _hunk)| {
-                    create_hunk_items(Rc::clone(diff), file_i, hunk_i, depth + 1)
+                    create_hunk_items(
+                        Rc::clone(diff),
+                        file_i,
+                        hunk_i,
+                        depth + 1,
+                        visit_context_lines,
+                    )
                 },
             ))
         })
@@ -252,6 +370,7 @@ fn create_hunk_items(
     file_i: usize,
     hunk_i: usize,
     depth: usize,
+    visit_context_lines: bool,
 ) -> impl Iterator<Item = Item> {
     let hunk_hash = hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]);
     iter::once(Item {
@@ -270,6 +389,7 @@ fn create_hunk_items(
         hunk_i,
         depth + 1,
         hunk_hash,
+        visit_context_lines,
     ))
 }
 
@@ -279,27 +399,25 @@ fn format_diff_hunk_items(
     hunk_i: usize,
     depth: usize,
     hunk_hash: u64,
+    visit_context_lines: bool,
 ) -> Vec<Item> {
     let hunk_content = diff.hunk_content(file_i, hunk_i);
 
     highlight::line_range_iterator(hunk_content)
         .enumerate()
-        .map(|(line_index, (line_range, line))| {
-            Item {
-                id: hunk_hash,
-                // line is marked unselectable if it starts with a space character
-                unselectable: line.starts_with(' '),
-                depth,
-                data: ItemData::HunkLine {
-                    diff: Rc::clone(&diff),
-                    file_i,
-                    hunk_i,
-                    line_i: line_index,
-                    line_range,
-                    line_indices: vec![line_index],
-                },
-                ..Default::default()
-            }
+        .map(|(line_index, (line_range, line))| Item {
+            id: hunk_hash,
+            unselectable: !visit_context_lines && line.starts_with(' '),
+            depth,
+            data: ItemData::HunkLine {
+                diff: Rc::clone(&diff),
+                file_i,
+                hunk_i,
+                line_i: line_index,
+                line_range,
+                line_indices: vec![line_index],
+            },
+            ..Default::default()
         })
         .collect()
 }
@@ -488,7 +606,7 @@ fn commit_refs(repo: &Repository) -> Res<Vec<(git2::Commit<'_>, Ref)>> {
 pub(crate) fn rendered_log(
     config: &Config,
     repo: &Repository,
-    width: usize,
+    params: &RenderParams,
     limit: usize,
     rev: Option<Oid>,
     msg_regex: Option<&Regex>,
@@ -505,14 +623,25 @@ pub(crate) fn rendered_log(
     }
     args.push(rev.map_or_else(|| "HEAD".to_string(), |oid| oid.to_string()));
 
-    let blocks = rendered_commits(config, repo, width, &args)?;
-    let references = commit_refs(repo).ok()?;
-    Some(
-        blocks
-            .iter()
-            .flat_map(|block| commit_block_items(repo, &references, block))
-            .collect(),
-    )
+    let blocks = rendered_commits(config, repo, params, &args)?;
+    Some(log_items(repo, &blocks))
+}
+
+/// Log items from rendered rows that gitu did not run the command for: as git's
+/// pager it is handed the renderer's output, and the commit records in it say
+/// where each commit begins just as well.
+pub(crate) fn rendered_log_items(repo: &Repository, rendered: &str) -> Option<Vec<Item>> {
+    Some(log_items(repo, &commits_in(rendered)?))
+}
+
+/// Refs a commit carries only decorate it, so failing to list them costs the
+/// decorations rather than the log.
+fn log_items(repo: &Repository, blocks: &[RenderedCommit]) -> Vec<Item> {
+    let references = commit_refs(repo).unwrap_or_default();
+    blocks
+        .iter()
+        .flat_map(|block| commit_block_items(repo, &references, block))
+        .collect()
 }
 
 /// A run of rendered log rows belonging to one commit.
@@ -527,7 +656,7 @@ pub(crate) struct RenderedCommit {
 fn rendered_commits(
     config: &Config,
     repo: &Repository,
-    width: usize,
+    params: &RenderParams,
     args: &[String],
 ) -> Option<Vec<RenderedCommit>> {
     let command: Vec<String> = config
@@ -540,14 +669,23 @@ fn rendered_commits(
         .collect();
 
     let dir = repo.workdir().unwrap_or_else(|| repo.path());
-    let output = crate::diff_renderer::run(&command, None, width, Some(dir))?;
-    let parsed = crate::diff_renderer::parse_ansi_lines(&output);
-    let blocks = crate::diff_renderer::commit_blocks(&parsed.lines);
-
-    if blocks.iter().all(|block| block.commit.is_none()) {
+    let output = crate::diff_renderer::run(&command, None, params, Some(dir))?;
+    commits_in(&output).or_else(|| {
         log::warn!(
             "log command emitted no commit records; is the '{{commit}}' token in its format?"
         );
+        None
+    })
+}
+
+/// Group rendered rows per commit, as the commit records in them say. `None`
+/// when there are no such records, which is how "these rows are not a log" is
+/// said.
+fn commits_in(rendered: &str) -> Option<Vec<RenderedCommit>> {
+    let parsed = crate::diff_renderer::parse_ansi_lines(rendered);
+    let blocks = crate::diff_renderer::commit_blocks(&parsed.lines);
+
+    if blocks.iter().all(|block| block.commit.is_none()) {
         return None;
     }
 
@@ -572,14 +710,14 @@ fn rendered_commits(
 pub(crate) fn rendered_commit_rows(
     config: &Config,
     repo: &Repository,
-    width: usize,
-    revs: &str,
+    params: &RenderParams,
+    revs: &[String],
 ) -> HashMap<String, Vec<Rc<RenderedRow>>> {
-    if !config.general.log_renderer.enabled {
+    if !config.general.log_renderer.enabled || revs.is_empty() {
         return HashMap::new();
     }
 
-    rendered_commits(config, repo, width, &[revs.to_string()])
+    rendered_commits(config, repo, params, revs)
         .unwrap_or_default()
         .into_iter()
         .filter_map(|block| Some((block.oid?, block.rows)))
@@ -594,11 +732,13 @@ fn commit_block_items(
     references: &[(git2::Commit, Ref)],
     block: &RenderedCommit,
 ) -> Vec<Item> {
+    // A renderer states the commit as git printed it, which is abbreviated in
+    // most log formats, so it is resolved rather than parsed.
     let commit = block
         .oid
         .as_ref()
-        .and_then(|oid| Oid::from_str(oid).ok())
-        .and_then(|oid| repo.find_commit(oid).ok());
+        .and_then(|oid| repo.revparse_single(oid).ok())
+        .and_then(|object| object.peel_to_commit().ok());
 
     let Some(commit) = commit else {
         return block.rows.iter().map(|row| row_item(0, 1, row)).collect();
@@ -612,14 +752,16 @@ fn commit_block_items(
 }
 
 /// Lay a block of rendered rows out under a selectable anchor row (the first
-/// non-blank one, built by `anchor`): rows before it are separators at the same
-/// depth, rows after it nest one deeper so folding the anchor hides them.
+/// one that isn't blank or a divider, built by `anchor`): rows before it are
+/// separators at the same depth, so a rule the renderer drew above the commit
+/// keeps separating commits rather than becoming one's cursor line. Rows after
+/// it nest one deeper, so folding the anchor hides them.
 fn block_items(
     id: ItemId,
     rows: &[Rc<RenderedRow>],
     anchor: impl Fn(&Rc<RenderedRow>) -> Item,
 ) -> Vec<Item> {
-    let Some(anchor_i) = rows.iter().position(|row| !is_blank(row)) else {
+    let Some(anchor_i) = rows.iter().position(|row| !is_decoration(row)) else {
         return rows.iter().map(|row| row_item(id, 1, row)).collect();
     };
 
@@ -633,9 +775,15 @@ fn block_items(
         .collect()
 }
 
-fn is_blank(row: &RenderedRow) -> bool {
-    row.iter().all(|(text, _)| text.trim().is_empty())
+/// Whether a row has nothing to put a cursor on: blank, or a rule the renderer
+/// drew between commits (delta's `ol`/`ul`/`box` commit decorations).
+fn is_decoration(row: &RenderedRow) -> bool {
+    row.iter()
+        .flat_map(|(text, _)| text.chars())
+        .all(|c| c.is_whitespace() || BOX_DRAWING.contains(&c))
 }
+
+const BOX_DRAWING: std::ops::RangeInclusive<char> = '\u{2500}'..='\u{257f}';
 
 fn row_item(id: ItemId, depth: usize, row: &Rc<RenderedRow>) -> Item {
     Item {
@@ -701,12 +849,25 @@ fn action_prefixed(
         return row.as_ref().clone();
     };
 
-    let mut style = Style::from(&config.style.rebase_todo_action);
-    if action == TodoAction::Drop {
-        style.add_modifier.insert(Modifier::CROSSED_OUT);
-    }
+    // `pick` is what a rebase does with a commit anyway, so only the departures
+    // from that are named — in a column, so the commits still line up.
+    let styles = &config.style.rebase_todo;
+    let style = Style::from(match action {
+        TodoAction::Pick => return blank_prefixed(row),
+        TodoAction::Reword => &styles.reword,
+        TodoAction::Edit => &styles.edit,
+        TodoAction::Squash => &styles.squash,
+        TodoAction::Fixup => &styles.fixup,
+        TodoAction::Drop => &styles.drop,
+    });
 
     iter::once((format!("{:<7}", action.keyword()), style))
+        .chain(row.iter().cloned())
+        .collect()
+}
+
+fn blank_prefixed(row: &Rc<RenderedRow>) -> RenderedRow {
+    iter::once((" ".repeat(7), Style::new()))
         .chain(row.iter().cloned())
         .collect()
 }
@@ -766,4 +927,131 @@ pub(crate) fn hash<T: Hash>(x: T) -> ItemId {
     let mut hasher = DefaultHasher::new();
     x.hash(&mut hasher);
     hasher.finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::diff_renderer::parse_ansi_lines;
+    use crate::git::diff::{Diff, DiffType};
+
+    const DIFF: &str = "diff --git a/f.rs b/f.rs\n\
+                        index 1..2 100644\n\
+                        --- a/f.rs\n\
+                        +++ b/f.rs\n\
+                        @@ -1,2 +1,2 @@\n\
+                        \x20keep\n\
+                        +added\n";
+
+    fn diff_from(text: &str) -> Rc<Diff> {
+        Rc::new(Diff {
+            text: text.to_string(),
+            diff_type: DiffType::WorkdirToIndex,
+            file_diffs: crate::gitu_diff::Parser::new(text).parse_diff().unwrap(),
+            commit: None,
+        })
+    }
+
+    fn hunk_line_rows(items: &[Item]) -> Vec<(usize, bool)> {
+        items
+            .iter()
+            .skip_while(|item| !matches!(item.data, ItemData::HunkLine { .. }))
+            .map(|item| (item.depth, item.unselectable))
+            .collect()
+    }
+
+    #[test]
+    fn rendered_spans_keep_hyperlinks() {
+        let line = &parse_ansi_lines(
+            "plain \x1b]8;;file:///tmp/a.rs:12\x1b\\linked\x1b]8;;\x1b\\ plain\n",
+        )
+        .lines[0];
+
+        assert_eq!(
+            rendered_spans(line)[1].0,
+            "\x1b]8;;file:///tmp/a.rs:12\x1b\\linked\x1b]8;;\x1b\\"
+        );
+    }
+
+    /// A renderer that wraps a long line emits several rows for it, re-emitting
+    /// the same record on each (OSC-1717 §6.3). Those continuation rows are one
+    /// diff line, so only the first takes the cursor; the rest nest under it, as
+    /// a hunk's extra header rows do.
+    #[test]
+    fn wrapped_row_continuations_nest_under_their_line() {
+        let diff = diff_from(DIFF);
+        let lines = parse_ansi_lines(
+            "\x1b]1717;1\x1b\\\n\
+             \x1b]1717;1;a;2;;f.rs\x1b\\+added the first part of a long line\n\
+             \x1b]1717;1;a;2;;f.rs\x1b\\ and its wrapped remainder\n",
+        )
+        .lines;
+
+        let items = rendered_diff_items(&diff, &lines, 0, false, None, false);
+
+        assert_eq!(
+            hunk_line_rows(&items),
+            vec![(2, false), (3, true)],
+            "the wrapped remainder is not a second selectable diff line"
+        );
+    }
+
+    /// The handshake says a renderer speaks the protocol, not that it said
+    /// anything with it. One that greets and then annotates no row at all would
+    /// leave a diff of headers with no content, which is worse than the built-in
+    /// rendering it displaced — so the built-in rendering stands.
+    #[test]
+    fn a_render_carrying_no_content_records_falls_back_to_the_built_in_one() {
+        let diff = diff_from(DIFF);
+        let mut config = crate::config::init_test_config().unwrap();
+        config.general.diff_renderer.enabled = true;
+        config.general.diff_renderer.command = ["sh", "-c", r"printf '\033]1717;1\033\\\n'"]
+            .map(String::from)
+            .to_vec();
+
+        let items = create_diff_items(&config, &Default::default(), &diff, 0, false, None);
+
+        assert_eq!(
+            items
+                .iter()
+                .filter(|item| matches!(item.data, ItemData::HunkLine { .. }))
+                .count(),
+            2,
+            "both content lines of the diff are still there"
+        );
+    }
+
+    /// However many rows a line wraps to, they are still one line: each is a
+    /// continuation of the line, not of the row above it.
+    #[test]
+    fn a_line_wrapping_to_several_rows_stays_one_line() {
+        let diff = diff_from(DIFF);
+        let row = "\x1b]1717;1;a;2;;f.rs\x1b\\part\n";
+        let lines = parse_ansi_lines(&format!("\x1b]1717;1\x1b\\\n{}", row.repeat(3))).lines;
+
+        let items = rendered_diff_items(&diff, &lines, 0, false, None, false);
+
+        assert_eq!(
+            hunk_line_rows(&items),
+            vec![(2, false), (3, true), (3, true)]
+        );
+    }
+
+    /// Distinct lines that happen to be adjacent are not continuations.
+    #[test]
+    fn consecutive_rows_for_different_lines_are_both_selectable() {
+        let diff = diff_from(DIFF);
+        let lines = parse_ansi_lines(
+            "\x1b]1717;1\x1b\\\n\
+             \x1b]1717;1;a;2;;f.rs\x1b\\+added\n\
+             \x1b]1717;1;c;1;;f.rs\x1b\\ keep\n",
+        )
+        .lines;
+
+        let items = rendered_diff_items(&diff, &lines, 0, false, None, false);
+
+        // The context row is unselectable for its own reason, but sits at the
+        // same depth: it is a diff line, not a continuation.
+        assert_eq!(hunk_line_rows(&items), vec![(2, false), (2, true)]);
+    }
 }

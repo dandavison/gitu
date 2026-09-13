@@ -1,9 +1,11 @@
+use crate::style::Modifier;
 use crate::{
     app::App,
     cli::Args,
     config::{self, Config, TEST_SEARCH_HIGHLIGHT_BG},
     error::Error,
     key_parser::parse_test_keys,
+    screen::pager::Paged,
     term::{Term, TermBackend, TestBuffer},
     tests::helpers::RepoTestContext,
 };
@@ -81,12 +83,62 @@ impl TestContext {
     }
 
     pub fn init_app_at_path(&mut self, path: PathBuf) -> App {
+        self.init_app_with_args(path, Args::default())
+    }
+
+    /// Start gitu as git's pager would (`[pager] diff = gitu --pager`), on the
+    /// output of `cmd` and knowing that `cmd` is what produced it.
+    pub fn init_app_as_pager_of(&mut self, cmd: &[&str]) -> App {
+        self.init_app_as_pager_of_at(self.dir.clone(), cmd)
+    }
+
+    pub fn init_app_as_pager_of_at(&mut self, path: PathBuf, cmd: &[&str]) -> App {
+        let text = crate::tests::helpers::run(&path, cmd);
+        self.init_app_paged_at(
+            path,
+            Paged {
+                text,
+                git_argv: Some(cmd.iter().map(|arg| (*arg).to_owned()).collect()),
+            },
+        )
+    }
+
+    /// Start gitu on piped text no command of git's is known to have produced.
+    pub fn init_app_with_patch(&mut self, patch: String) -> App {
+        self.init_app_paged(Paged {
+            text: patch,
+            git_argv: None,
+        })
+    }
+
+    fn init_app_paged(&mut self, paged: Paged) -> App {
+        self.init_app_paged_at(self.dir.clone(), paged)
+    }
+
+    fn init_app_paged_at(&mut self, path: PathBuf, paged: Paged) -> App {
+        self.init_app_inner(
+            path,
+            Args {
+                pager: true,
+                ..Default::default()
+            },
+            Some(paged),
+        )
+    }
+
+    /// Start gitu as one of its subcommands would (`gitu sequence-editor …`).
+    pub fn init_app_with_args(&mut self, path: PathBuf, args: Args) -> App {
+        self.init_app_inner(path, args, None)
+    }
+
+    fn init_app_inner(&mut self, path: PathBuf, args: Args, paged: Option<Paged>) -> App {
         let mut app = App::create(
             Rc::new(Repository::open(path).unwrap()),
             self.size,
-            &Args::default(),
+            &args,
             Arc::clone(&self.config),
             false,
+            paged,
         )
         .unwrap();
 
@@ -132,6 +184,32 @@ impl TestContext {
         marked
     }
 
+    /// The line being typed, with `|` where the cursor is drawn: what the user
+    /// can see of where their next character will land.
+    pub fn prompt_line(&self) -> String {
+        let TermBackend::Test { buffer, .. } = &self.term else {
+            unreachable!();
+        };
+        let row = buffer.height - 1;
+
+        let mut line = String::new();
+        for column in 0..buffer.width {
+            let cell = &buffer.cells[row as usize * buffer.width as usize + column as usize];
+            // The block standing on its own is the cursor; a reversed cell is
+            // the cursor standing on a character.
+            if cell.symbol == "\u{2588}" {
+                line.push('|');
+                continue;
+            }
+            if cell.modifier.contains(Modifier::REVERSED) {
+                line.push('|');
+            }
+            line.push_str(&cell.symbol);
+        }
+
+        line.trim_end().to_owned()
+    }
+
     pub fn redact_buffer(&self) -> String {
         let TermBackend::Test { buffer, .. } = &self.term else {
             unreachable!();
@@ -145,6 +223,24 @@ impl TestContext {
         redact_all(&mut debug_output, r"(\d+[mhdwMy]) \|");
 
         debug_output
+    }
+
+    /// Every row as it stands on the terminal, links and all.
+    pub fn physical_screen(&self) -> String {
+        let TermBackend::Test { buffer, .. } = &self.term else {
+            unreachable!();
+        };
+
+        buffer
+            .cells
+            .chunks(buffer.width as usize)
+            .map(|row| {
+                row.iter()
+                    .map(|cell| cell.symbol.as_str())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
 

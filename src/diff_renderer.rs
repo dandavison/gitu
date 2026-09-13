@@ -14,6 +14,8 @@
 //!   We advertise the protocol via the `OSC1717_METADATA` env var and attach each
 //!   record to the line that follows it.
 
+use crate::Res;
+use crate::error::Error;
 use crate::git::diff::Diff;
 use crate::style::{Color, Modifier, Style};
 use anstyle_parse::{DefaultCharAccumulator, Params, Parser, Perform};
@@ -27,6 +29,11 @@ use std::thread;
 /// Protocol versions of the OSC-1717 diff-line-metadata spec we understand,
 /// advertised to the renderer via `OSC1717_METADATA` (a version set, `V`-prefixed).
 const OSC1717_METADATA_ADVERTISED: &str = "V1";
+
+/// Where delta reads named features from. A leading `+` means "in addition to
+/// the features already in git config", so what the user configured stays the
+/// base and gitu's selection is only an overlay on top of it.
+const FEATURES_VAR: &str = "DELTA_FEATURES";
 
 /// The git `--format` directives that emit a commit record: gitu substitutes
 /// them for the `{commit}` token in the configured log command, so git itself
@@ -48,6 +55,17 @@ pub(crate) enum LineKind {
     Commit,
 }
 
+impl LineKind {
+    /// Whether the row is a line of the diff itself, rather than one of the
+    /// renderer's own header or decoration rows.
+    pub(crate) fn is_content(self) -> bool {
+        matches!(
+            self,
+            LineKind::Context | LineKind::Added | LineKind::Deleted
+        )
+    }
+}
+
 /// A run of rendered log rows belonging to one commit, as split by the `C`
 /// records: a record starts a new block and the rows that follow it, up to the
 /// next record, are that commit's.
@@ -67,7 +85,15 @@ pub(crate) fn commit_blocks(lines: &[ParsedLine]) -> Vec<CommitBlock<'_>> {
             .iter()
             .find(|record| record.kind == LineKind::Commit)
         {
-            starts.push((i, Some(record.file.as_str())));
+            let commit = record.file.as_str();
+            let already_open = starts
+                .last()
+                .and_then(|&(_, open)| open)
+                .is_some_and(|open| names_same_commit(open, commit));
+
+            if !already_open {
+                starts.push((i, Some(commit)));
+            }
         } else if starts.is_empty() {
             starts.push((0, None));
         }
@@ -83,6 +109,13 @@ pub(crate) fn commit_blocks(lines: &[ParsedLine]) -> Vec<CommitBlock<'_>> {
         .collect()
 }
 
+/// Whether two ids name the same commit. The host names it as git gave it and
+/// a renderer names it as git printed it, which is usually abbreviated, so one
+/// being a prefix of the other is what "the same" means here.
+fn names_same_commit(one: &str, other: &str) -> bool {
+    !one.is_empty() && (one.starts_with(other) || other.starts_with(one))
+}
+
 /// The patch-space identity of a rendered line, recovered from its OSC-1717
 /// record. `old_line` is present only for deletions (see spec §4.2).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,6 +124,12 @@ pub(crate) struct LineMetadata {
     pub new_line: u32,
     pub old_line: Option<u32>,
     pub file: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Hyperlink {
+    pub range: Range<usize>,
+    pub uri: String,
 }
 
 /// A single line of renderer output: its plain text (ANSI stripped, newline
@@ -103,6 +142,7 @@ pub(crate) struct LineMetadata {
 pub(crate) struct ParsedLine {
     pub text: String,
     pub runs: Vec<(Range<usize>, Style)>,
+    pub hyperlinks: Vec<Hyperlink>,
     pub records: Vec<LineMetadata>,
 }
 
@@ -189,17 +229,21 @@ pub(crate) fn resolve_hunk(diff: &Diff, meta: &LineMetadata) -> Option<(usize, u
 /// log command takes none) and returning its stdout. `None` if the command can't
 /// be spawned or exits non-zero.
 ///
-/// `width` is the number of columns gitu will render the output into. A renderer
-/// that reflows (delta side-by-side/wrapping) can't detect this over a pipe and
+/// `params` supplies the width gitu will render the output into. A renderer that
+/// reflows (delta side-by-side/wrapping) can't detect this over a pipe and
 /// defaults too narrow, so we make it available two ways: a literal `{width}`
 /// token anywhere in the command is substituted (e.g. `delta --width {width}`),
 /// and `COLUMNS` is exported for renderers that read it.
+///
+/// `params.features` are named renderer features chosen in-session, passed as
+/// `DELTA_FEATURES` (see [`FEATURES_VAR`]).
 pub(crate) fn run(
     command: &[String],
     input: Option<&str>,
-    width: usize,
+    params: &crate::items::RenderParams,
     dir: Option<&Path>,
 ) -> Option<String> {
+    let width = params.width();
     let (program, args) = command.split_first()?;
     let args: Vec<String> = args
         .iter()
@@ -218,6 +262,10 @@ pub(crate) fn run(
         })
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
+
+    if let Some(features) = feature_overlay(&params.features) {
+        command.env(FEATURES_VAR, features);
+    }
 
     if let Some(dir) = dir {
         command.current_dir(dir);
@@ -248,6 +296,58 @@ pub(crate) fn run(
     Some(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
+/// The value to give [`FEATURES_VAR`] for `features`, or `None` to leave the
+/// variable unset so the user's configuration applies untouched. Feature names
+/// are space-separated and may not themselves contain whitespace.
+fn feature_overlay(features: &[String]) -> Option<String> {
+    if features.is_empty() {
+        return None;
+    }
+    Some(format!("+{}", features.join(" ")))
+}
+
+/// The renderer features to offer: those gitu is configured with, followed by
+/// every `[delta "name"]` section the user has defined, so a feature of their
+/// own is offered without their having to name it to gitu as well.
+pub(crate) fn offered_features(
+    configured: &[String],
+    git_config: &git2::Config,
+) -> Res<Vec<String>> {
+    let mut defined = Vec::new();
+    let mut entries = git_config.entries(None).map_err(Error::ReadGitConfig)?;
+    while let Some(entry) = entries.next() {
+        let entry = entry.map_err(Error::ReadGitConfig)?;
+        if let Some(name) = entry.name().and_then(feature_name)
+            && !configured.contains(&name)
+        {
+            defined.push(name);
+        }
+    }
+
+    defined.sort();
+    defined.dedup();
+    Ok(configured.iter().cloned().chain(defined).collect())
+}
+
+/// The feature a `delta.<name>.<key>` config entry belongs to. A subsection name
+/// may itself contain dots, so it is everything between the section and the key.
+fn feature_name(entry: &str) -> Option<String> {
+    let subsection_and_key = entry.strip_prefix("delta.")?;
+    let (name, _key) = subsection_and_key.rsplit_once('.')?;
+    Some(name.to_owned())
+}
+
+/// `text` with its escape sequences removed, as the plain text a parser needs.
+/// git colours what it writes to a pager, and a diff parser reads nothing
+/// through the escapes.
+pub(crate) fn strip_ansi(text: &str) -> String {
+    parse_ansi_lines(text)
+        .lines
+        .iter()
+        .flat_map(|line| [line.text.as_str(), "\n"])
+        .collect()
+}
+
 /// Parse ANSI-colored text into per-line styled runs, capturing any OSC-1717
 /// diff-line-metadata records the renderer emitted.
 pub(crate) fn parse_ansi_lines(output: &str) -> ParsedOutput {
@@ -267,25 +367,33 @@ struct Performer {
     runs: Vec<(Range<usize>, Style)>,
     /// Start offset and style of the run currently being accumulated.
     open: Option<(usize, Style)>,
+    hyperlink: Option<(usize, String)>,
+    hyperlinks: Vec<Hyperlink>,
     /// The OSC-1717 records seen on the current line, in emission order.
     records: Vec<LineMetadata>,
-    /// Set when the current line carries only the version-only handshake record,
-    /// so we drop that empty line rather than render it.
+    /// Set when the current line carries the version-only handshake record. Its
+    /// line is dropped, unless the renderer put content or another record on it.
     handshake_line: bool,
     protocol_version: Option<u32>,
 }
 
 impl Performer {
     fn end_line(&mut self) {
+        self.finish_hyperlink();
         if let Some((start, style)) = self.open.take() {
             self.runs.push((start..self.text.len(), style));
         }
-        let handshake_only = mem::take(&mut self.handshake_line) && self.text.is_empty();
+        let handshake_only =
+            mem::take(&mut self.handshake_line) && self.text.is_empty() && self.records.is_empty();
         let line = ParsedLine {
             text: mem::take(&mut self.text),
             runs: mem::take(&mut self.runs),
+            hyperlinks: mem::take(&mut self.hyperlinks),
             records: mem::take(&mut self.records),
         };
+        if let Some((start, _)) = &mut self.hyperlink {
+            *start = 0;
+        }
         if !handshake_only {
             self.lines.push(line);
         }
@@ -298,6 +406,32 @@ impl Performer {
         ParsedOutput {
             lines: self.lines,
             protocol_version: self.protocol_version,
+        }
+    }
+
+    fn set_hyperlink(&mut self, parts: &[&[u8]]) {
+        self.finish_hyperlink();
+        if let Some((start, style)) = self.open.take()
+            && start < self.text.len()
+        {
+            self.runs.push((start..self.text.len(), style));
+        }
+        let uri = parts
+            .iter()
+            .map(|part| String::from_utf8_lossy(part))
+            .collect::<Vec<_>>()
+            .join(";");
+        self.hyperlink = (!uri.is_empty()).then_some((self.text.len(), uri));
+    }
+
+    fn finish_hyperlink(&mut self) {
+        if let Some((start, uri)) = &self.hyperlink
+            && *start < self.text.len()
+        {
+            self.hyperlinks.push(Hyperlink {
+                range: *start..self.text.len(),
+                uri: uri.clone(),
+            });
         }
     }
 }
@@ -336,6 +470,10 @@ impl Perform for Performer {
     }
 
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
+        if let [b"8", _, uri @ ..] = params {
+            self.set_hyperlink(uri);
+            return;
+        }
         if params.first() != Some(&b"1717".as_slice()) {
             return;
         }
@@ -451,7 +589,89 @@ fn parse_extended_color(rest: &[u16]) -> Option<(Color, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::items::RenderParams;
     use crate::style::Color;
+
+    /// A renderer standing in for delta, reporting the features it was handed.
+    fn echo_features() -> Vec<String> {
+        ["sh", "-c", "printf '%s' \"$DELTA_FEATURES\""]
+            .map(String::from)
+            .to_vec()
+    }
+
+    fn params_with(features: &[&str]) -> RenderParams {
+        RenderParams {
+            features: features.iter().copied().map(String::from).collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn selected_features_reach_the_renderer_as_an_overlay() {
+        // The leading '+' is what makes it an overlay: delta adds these to the
+        // features already in the user's git config rather than replacing them.
+        assert_eq!(
+            run(
+                &echo_features(),
+                None,
+                &params_with(&["side-by-side"]),
+                None
+            ),
+            Some("+side-by-side".to_string())
+        );
+        assert_eq!(
+            run(&echo_features(), None, &params_with(&["a", "b"]), None),
+            Some("+a b".to_string())
+        );
+    }
+
+    #[test]
+    fn selecting_no_features_leaves_the_variable_unset() {
+        // Not "+": the user's configuration must apply entirely untouched.
+        assert_eq!(
+            run(&echo_features(), None, &params_with(&[]), None),
+            Some(String::new())
+        );
+    }
+
+    fn git_config_of(text: &str) -> (temp_dir::TempDir, git2::Config) {
+        let dir = temp_dir::TempDir::new().unwrap();
+        let path = dir.path().join("config");
+        std::fs::write(&path, text).unwrap();
+        let config = git2::Config::open(&path).unwrap();
+        (dir, config)
+    }
+
+    /// A feature the user defined as `[delta "name"]` is offered without their
+    /// having to name it in gitu's config as well.
+    #[test]
+    fn features_defined_in_git_config_are_offered() {
+        let (_dir, git_config) = git_config_of(
+            "[delta]\n\
+             \tnavigate = true\n\
+             [delta \"my-theme\"]\n\
+             \tline-numbers = true\n\
+             \tsyntax-theme = Nord\n\
+             [delta \"boxed\"]\n\
+             \thunk-header-style = box\n",
+        );
+
+        assert_eq!(
+            offered_features(&["side-by-side".into()], &git_config).unwrap(),
+            ["side-by-side", "boxed", "my-theme"]
+        );
+    }
+
+    /// A feature named in both places is one feature, kept where gitu put it.
+    #[test]
+    fn a_feature_named_in_both_places_is_offered_once() {
+        let (_dir, git_config) = git_config_of("[delta \"side-by-side\"]\n\twidth = 100\n");
+
+        assert_eq!(
+            offered_features(&["side-by-side".into(), "line-numbers".into()], &git_config).unwrap(),
+            ["side-by-side", "line-numbers"]
+        );
+    }
 
     #[test]
     fn parses_lines_tiling_text_with_colors() {
@@ -486,6 +706,23 @@ mod tests {
         let lines = parse_ansi_lines("\x1b[32m+\tlet x = 1;\x1b[0m\n").lines;
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0].text, "+\tlet x = 1;");
+    }
+
+    #[test]
+    fn parses_osc8_hyperlinks() {
+        let line = &parse_ansi_lines(
+            "plain \x1b]8;;file:///tmp/a.rs:12\x1b\\linked\x1b]8;;\x1b\\ plain\n",
+        )
+        .lines[0];
+
+        assert_eq!(line.text, "plain linked plain");
+        assert_eq!(
+            line.hyperlinks,
+            [Hyperlink {
+                range: 6..12,
+                uri: "file:///tmp/a.rs:12".into(),
+            }]
+        );
     }
 
     #[test]
@@ -560,6 +797,19 @@ mod tests {
     }
 
     #[test]
+    fn keeps_a_handshake_line_that_also_carries_a_record() {
+        // delta emits the handshake as its first output, so a marker the log
+        // format put at the very start shares that line; the commit it
+        // identifies must survive.
+        let out = parse_ansi_lines(&format!(
+            "\x1b]1717;1\x1b\\{}\n──\n▸ abc1234 summary\n",
+            commit_record("abc1234def")
+        ));
+        assert_eq!(out.protocol_version, Some(1));
+        assert_eq!(commit_blocks(&out.lines)[0].commit, Some("abc1234def"));
+    }
+
+    #[test]
     fn parses_commit_records() {
         let out = parse_ansi_lines(&format!(
             "{}▸ abc1234 summary\n",
@@ -596,6 +846,26 @@ mod tests {
         assert_eq!(rows(&blocks[1]), vec!["", "▸ aaa summary", "    body"]);
         assert_eq!(blocks[2].commit, Some("bbb"));
         assert_eq!(rows(&blocks[2]), vec!["", "▸ bbb summary"]);
+    }
+
+    /// The host names the commit of each row it asked git to mark, and the
+    /// renderer may name it again — abbreviated, as git prints it. Two names
+    /// for one commit are one commit, not two, or its rows are split between
+    /// them and whoever looks the commit up finds only part of it.
+    #[test]
+    fn a_commit_named_again_by_the_renderer_is_the_same_commit() {
+        let out = parse_ansi_lines(&format!(
+            "{}\n{}▸ aaa123 summary\n    body\n{}\n▸ bbb456 summary\n",
+            commit_record("aaa123def"),
+            commit_record("aaa123"),
+            commit_record("bbb456789"),
+        ));
+        let blocks = commit_blocks(&out.lines);
+
+        assert_eq!(blocks.len(), 2, "{blocks:?}");
+        assert_eq!(blocks[0].commit, Some("aaa123def"));
+        assert_eq!(rows(&blocks[0]), vec!["", "▸ aaa123 summary", "    body"]);
+        assert_eq!(blocks[1].commit, Some("bbb456789"));
     }
 
     #[test]
