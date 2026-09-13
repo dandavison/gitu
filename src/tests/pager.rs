@@ -606,13 +606,33 @@ fn rendered_text_can_be_searched() {
 #[test]
 fn search_is_a_regex_over_rendered_text() {
     let mut ctx = setup_clone!();
-    let mut app = ctx.init_app_with_patch(
-        "\x1b[31mfirst needle\x1b[0m\nsecond needle\nnot this\n".to_owned(),
-    );
+    let mut app = ctx
+        .init_app_with_patch("\x1b[31mfirst needle\x1b[0m\nsecond needle\nnot this\n".to_owned());
 
     ctx.update(&mut app, keys(r"/^second .*le$<enter>"));
 
     assert_eq!(selected_rendered_row(&app), "second needle");
+}
+
+/// Folding changes presentation, not what the buffer contains: searching for
+/// a hidden row opens its containing sections and lands on it.
+#[test]
+fn search_reveals_a_match_inside_a_fold() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "before\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\n").unwrap();
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+
+    ctx.update(&mut app, keys("<backtab>/changed<enter>"));
+
+    assert!(
+        matches!(
+            app.screen().get_selected_item().data,
+            crate::item_data::ItemData::HunkLine { .. }
+        ),
+        "search did not land on the changed line"
+    );
+    assert!(ctx.redact_buffer().contains("+changed"));
 }
 
 fn selected_rendered_row(app: &App) -> String {

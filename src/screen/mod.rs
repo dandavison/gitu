@@ -3,6 +3,7 @@ use crate::ui::layout::OPTS;
 use crate::ui::{UiTree, layout_span};
 use crate::{item_data::ItemData, ui};
 use ratatui::{layout::Size, style::Style, text::Line};
+use regex::Regex;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
@@ -65,6 +66,7 @@ pub(crate) struct Screen {
     items: Vec<Item>,
     line_index: Vec<usize>,
     collapsed: HashSet<u64>,
+    search: Option<Regex>,
 }
 
 impl Screen {
@@ -96,6 +98,7 @@ impl Screen {
             items: vec![],
             line_index: vec![],
             collapsed,
+            search: None,
         };
 
         screen.update()?;
@@ -583,6 +586,70 @@ impl Screen {
 
     fn find_last_selectable(&self) -> Option<usize> {
         (0..self.line_index.len()).rfind(|&line_i| !self.at_line(line_i).unselectable)
+    }
+
+    pub(crate) fn search_pattern(&self) -> Option<&str> {
+        self.search.as_ref().map(Regex::as_str)
+    }
+
+    pub(crate) fn search(&mut self, regex: Regex) -> bool {
+        self.search = Some(regex);
+        self.search_again(true)
+    }
+
+    pub(crate) fn search_again(&mut self, forwards: bool) -> bool {
+        let Some(regex) = &self.search else {
+            return false;
+        };
+        let len = self.items.len();
+        if len == 0 {
+            return false;
+        }
+
+        let current = self.line_index.get(self.cursor).copied().unwrap_or(0);
+        let found = (1..=len)
+            .map(|distance| {
+                if forwards {
+                    (current + distance) % len
+                } else {
+                    (current + len - distance % len) % len
+                }
+            })
+            .find(|&item_i| regex.is_match(&self.item_text(item_i)));
+        let Some(item_i) = found else {
+            return false;
+        };
+
+        self.reveal(item_i);
+        self.cursor = self
+            .line_index
+            .iter()
+            .position(|&visible_i| visible_i == item_i)
+            .expect("a revealed item is visible");
+        self.anchor = None;
+        self.scroll_fit_end();
+        self.scroll_fit_start();
+        true
+    }
+
+    fn item_text(&self, item_i: usize) -> String {
+        self.items[item_i]
+            .to_line(Arc::clone(&self.config))
+            .spans
+            .iter()
+            .map(|span| ui::display_text(&span.content))
+            .collect()
+    }
+
+    fn reveal(&mut self, item_i: usize) {
+        let mut depth = self.items[item_i].depth;
+        for item in self.items[..item_i].iter().rev() {
+            if item.data.is_section() && item.depth < depth {
+                self.collapsed.remove(&item.id);
+                depth = item.depth;
+            }
+        }
+        self.update_line_index();
     }
 
     pub(crate) fn is_collapsed(&self, item: &Item) -> bool {

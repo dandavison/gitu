@@ -12,6 +12,67 @@ use crate::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
+pub(crate) struct Search;
+impl OpTrait for Search {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app: &mut App, term: &mut Term| {
+            let previous = app.screen().search_pattern().map(str::to_owned);
+            let pattern = app.prompt(
+                term,
+                &PromptParams {
+                    prompt: "Search",
+                    create_default_value: Box::new(move |_| previous.clone()),
+                    ..Default::default()
+                },
+            )?;
+            if pattern.is_empty() {
+                return Ok(());
+            }
+
+            let regex = match regex::Regex::new(&pattern) {
+                Ok(regex) => regex,
+                Err(err) => {
+                    app.display_error(err.to_string());
+                    return Ok(());
+                }
+            };
+            if !app.screen_mut().search(regex) {
+                app.display_error(format!("Pattern not found: {pattern}"));
+            }
+            Ok(())
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Search".into()
+    }
+}
+
+pub(crate) struct SearchAgain(pub bool);
+impl OpTrait for SearchAgain {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        let forwards = self.0;
+        Some(Rc::new(move |app: &mut App, _term: &mut Term| {
+            let Some(pattern) = app.screen().search_pattern().map(str::to_owned) else {
+                app.display_error("No search pattern");
+                return Ok(());
+            };
+            if !app.screen_mut().search_again(forwards) {
+                app.display_error(format!("Pattern not found: {pattern}"));
+            }
+            Ok(())
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        if self.0 {
+            "Next match".into()
+        } else {
+            "Previous match".into()
+        }
+    }
+}
+
 pub(crate) struct Quit;
 impl OpTrait for Quit {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {

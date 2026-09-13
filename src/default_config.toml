@@ -178,6 +178,9 @@ root.refresh = ["g+r"]
 root.toggle_section = ["tab"]
 root.toggle_all_sections = ["backtab"]
 root.diff_context = ["U"]
+root.search = ["/"]
+root.search_next = ["n"]
+root.search_previous = ["N"]
 # Edit the git command the view is the output of, and ask it again.
 root.edit_git_command = [":"]
 # Drop the file under the cursor from the view, or say which files to show at

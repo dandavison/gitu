@@ -8,18 +8,18 @@ expression: ctx.redact_buffer()
  |                Renderer features       c   Commit                            |
  backtab          Fold all                f   Fetch                             |
  U                Diff context            h/? Help                              |
- :                Edit git command        l   Log                               |
- _                Files                   m   Merge                             |
- k/up             Up                      M   Remote                            |
- j/down           Down                    F   Pull                              |
- ctrl+k/ctrl+up   Up line                 P   Push                              |
- ctrl+j/ctrl+down Down line               r   Rebase                            |
- shift+up         Select up               X   Reset                             |
- shift+down       Select down             V   Revert                            |
- alt+k/alt+up     Prev section            A   Cherry-pick                       |
- alt+j/alt+down   Next section            z   Stash                             |
+ /                Search                  l   Log                               |
+ n                Next match              m   Merge                             |
+ N                Previous match          M   Remote                            |
+ :                Edit git command        F   Pull                              |
+ _                Files                   P   Push                              |
+ k/up             Up                      r   Rebase                            |
+ j/down           Down                    X   Reset                             |
+ ctrl+k/ctrl+up   Up line                 V   Revert                            |
+ ctrl+j/ctrl+down Down line               A   Cherry-pick                       |
+ shift+up         Select up               z   Stash                             |
+ shift+down       Select down                                                   |
+ alt+k/alt+up     Prev section                                                  |
+ alt+j/alt+down   Next section                                                  |
  alt+h/alt+left   Parent section                                                |
- g+g              Top                                                           |
- G                Bottom                                                        |
- ctrl+u           Scroll half page up                                           |
-styles_hash: 9740ebd5635e0f2d
+styles_hash: 8cb91cfff46b2d5e
