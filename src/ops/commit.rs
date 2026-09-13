@@ -1,5 +1,6 @@
 use super::{Action, OpTrait};
 use crate::{
+    Res,
     app::{App, State},
     item_data::ItemData,
     menu::arg::Arg,
@@ -81,22 +82,15 @@ impl OpTrait for CommitExtend {
 
 pub(crate) struct CommitFixup;
 impl OpTrait for CommitFixup {
-    fn get_action(&self, target: &ItemData) -> Option<Action> {
-        match target {
-            ItemData::Commit { oid, .. } => {
-                let rev = OsString::from(oid);
-
-                Some(Rc::new(move |app: &mut App, term: &mut Term| {
-                    let args = app.state.pending_menu.as_ref().unwrap().args();
-                    app.run_cmd_interactive(term, commit_fixup_cmd(&args, &rev))
-                }))
-            }
-            _ => None,
-        }
-    }
-
-    fn is_target_op(&self) -> bool {
-        true
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app: &mut App, term: &mut Term| {
+            // The menu (and its args) close with the picker, so read them first.
+            let args = app.state.pending_menu.as_ref().unwrap().args();
+            let Some(rev) = pick_fixup_commit(app, term)? else {
+                return Ok(());
+            };
+            app.run_cmd_interactive(term, commit_fixup_cmd(&args, &rev))
+        }))
     }
 
     fn display(&self, _state: &State) -> String {
@@ -114,28 +108,25 @@ fn commit_fixup_cmd(args: &[OsString], rev: &OsStr) -> Command {
 
 pub(crate) struct CommitInstantFixup;
 impl OpTrait for CommitInstantFixup {
-    fn get_action(&self, target: &ItemData) -> Option<Action> {
-        match target {
-            ItemData::Commit { oid, .. } => {
-                let rev = OsString::from(oid);
-
-                Some(Rc::new(move |app: &mut App, term: &mut Term| {
-                    let args = app.state.pending_menu.as_ref().unwrap().args();
-                    app.run_cmd(term, &[], commit_fixup_cmd(&args, &rev))?;
-                    app.run_cmd(term, &[], rebase_autosquash_cmd(&rev))
-                }))
-            }
-            _ => None,
-        }
-    }
-
-    fn is_target_op(&self) -> bool {
-        true
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app: &mut App, term: &mut Term| {
+            let args = app.state.pending_menu.as_ref().unwrap().args();
+            let Some(rev) = pick_fixup_commit(app, term)? else {
+                return Ok(());
+            };
+            app.run_cmd(term, &[], commit_fixup_cmd(&args, &rev))?;
+            app.run_cmd(term, &[], rebase_autosquash_cmd(&rev))
+        }))
     }
 
     fn display(&self, _state: &State) -> String {
         "instant fixup".into()
     }
+}
+
+/// Choose the commit to fix up in the log view.
+fn pick_fixup_commit(app: &mut App, term: &mut Term) -> Res<Option<OsString>> {
+    Ok(app.pick_commit(term)?.map(OsString::from))
 }
 
 fn rebase_autosquash_cmd(rev: &OsStr) -> Command {

@@ -155,6 +155,30 @@ impl OpTrait for ToggleSection {
     }
 }
 
+/// Name the commit under the cursor as the one [`App::pick_commit`] was after.
+pub(crate) struct SelectCommit;
+impl OpTrait for SelectCommit {
+    fn get_action(&self, target: &ItemData) -> Option<Action> {
+        let ItemData::Commit { oid, .. } = target else {
+            return None;
+        };
+        let oid = oid.clone();
+
+        Some(Rc::new(move |app: &mut App, _term: &mut Term| {
+            app.state.picked_commit = Some(oid.clone());
+            Ok(())
+        }))
+    }
+
+    fn is_target_op(&self) -> bool {
+        true
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Select".into()
+    }
+}
+
 pub(crate) struct MoveUp;
 impl OpTrait for MoveUp {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {
