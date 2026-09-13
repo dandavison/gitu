@@ -214,6 +214,22 @@ commit_menu.commit_fixup = ["f"]
 commit_menu.commit_instant_fixup = ["F"]
 commit_menu.quit = ["q", "esc"]
 
+# The log view opened to choose a commit (by `commit_menu.commit_fixup` and
+# `commit_menu.commit_instant_fixup`). Navigation is as in the log view.
+commit_picker.select_commit = ["enter"]
+commit_picker.move_up = ["k", "up"]
+commit_picker.move_down = ["j", "down"]
+commit_picker.move_prev_section = ["alt+k", "alt+up"]
+commit_picker.move_next_section = ["alt+j", "alt+down"]
+commit_picker.move_top = ["g+g"]
+commit_picker.move_bottom = ["G"]
+commit_picker.half_page_up = ["ctrl+u"]
+commit_picker.half_page_down = ["ctrl+d"]
+commit_picker.scroll_view_up = ["ctrl+y"]
+commit_picker.scroll_view_down = ["ctrl+e"]
+commit_picker.toggle_section = ["tab"]
+commit_picker.quit = ["q", "esc"]
+
 root.fetch_menu = ["f"]
 fetch_menu.--prune = ["-p"]
 fetch_menu.--tags = ["-t"]

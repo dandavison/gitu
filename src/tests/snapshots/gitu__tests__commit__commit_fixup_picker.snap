@@ -1,0 +1,25 @@
+---
+source: src/tests/commit.rs
+expression: ctx.redact_buffer()
+---
+▌56e4088 main add beta.txt                                       Author Name __ |
+ d5b0e9e add alpha.txt                                           Author Name __ |
+ b66a0bf origin/main add initial-file                            Author Name __ |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+────────────────────────────────────────────────────────────────────────────────|
+ Select commit                          56e4088 main add        Author Name 2y  |
+ k/up           Up                             beta.txt                         |
+ j/down         Down                    enter Select                            |
+ alt+k/alt+up   Prev section            tab   Fold                              |
+ alt+j/alt+down Next section                                                    |
+ g+g            Top                                                             |
+ G              Bottom                                                          |
+ ctrl+u         Scroll half page up                                             |
+ ctrl+d         Scroll half page down                                           |
+ ctrl+y         Scroll view up                                                  |
+ ctrl+e         Scroll view down                                                |
+ q/esc          Quit/Close                                                      |
+styles_hash: 56f77d3ae2890e6d

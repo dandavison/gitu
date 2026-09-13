@@ -1,0 +1,25 @@
+---
+source: src/tests/commit.rs
+expression: ctx.redact_buffer()
+---
+▌On branch main                                                                 |
+▌Your branch is ahead of 'origin/main' by 2 commit(s).                          |
+                                                                                |
+ Recent commits                                                                 |
+ dc3494a main add beta.txt                                       Author Name __ |
+ c870a9a add alpha.txt                                           Author Name __ |
+ b66a0bf origin/main add initial-file                            Author Name __ |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+────────────────────────────────────────────────────────────────────────────────|
+$ git commit --fixup d5b0e9e4d77bd304a7dbbf857cf10f6647cc903d                   |
+[main 3423524] fixup! add alpha.txt                                             |
+ Author: Author Name <author@email.com>                                         |
+ 1 file changed, 1 insertion(+), 1 deletion(-)                                  |
+$ git rebase -i -q --autostash --keep-empty --autosquash                        |
+d5b0e9e4d77bd304a7dbbf857cf10f6647cc903d^                                       |
+styles_hash: 27485b0270807e83

@@ -22,6 +22,9 @@ pub(crate) enum Menu {
     #[serde(rename = "commit_menu")]
     #[strum(serialize = "commit_menu")]
     Commit,
+    #[serde(rename = "commit_picker")]
+    #[strum(serialize = "commit_picker")]
+    CommitPicker,
     #[serde(rename = "fetch_menu")]
     #[strum(serialize = "fetch_menu")]
     Fetch,
@@ -77,6 +80,7 @@ impl PendingMenu {
                 Menu::Root => vec![],
                 Menu::Branch => ops::branch::init_args(),
                 Menu::Commit => ops::commit::init_args(),
+                Menu::CommitPicker => vec![],
                 Menu::Fetch => ops::fetch::init_args(),
                 Menu::Help => vec![],
                 Menu::Log => ops::log::init_args(),

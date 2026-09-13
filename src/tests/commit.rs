@@ -19,7 +19,7 @@ fn commit_instant_fixup() {
     commit(&ctx.dir, "instant_fixup.txt", "mistake\n");
     fs::write(ctx.dir.join("instant_fixup.txt"), "fixed\n").unwrap();
     run(&ctx.dir, &["git", "add", "."]);
-    ctx.update(&mut state, keys("grjjjjjcF"));
+    ctx.update(&mut state, keys("grjjjjjcF<enter>"));
 
     insta::assert_snapshot!(ctx.redact_buffer());
 }
@@ -38,9 +38,35 @@ fn commit_instant_fixup_stashes_changes_and_keeps_empty() {
     fs::write(ctx.dir.join("instant_fixup.txt"), "fixed\n").unwrap();
     run(&ctx.dir, &["git", "add", "."]);
     fs::write(ctx.dir.join("instant_fixup.txt"), "unstaged\n").unwrap();
-    ctx.update(&mut state, keys("grjjjjjjjjjcF"));
+    ctx.update(&mut state, keys("grjjjjjjjjjcF<enter>"));
 
     insta::assert_snapshot!(ctx.redact_buffer());
+}
+
+#[test]
+fn commit_instant_fixup_picks_commit() {
+    let mut ctx = setup_clone!();
+    let mut state = ctx.init_app();
+
+    commit(&ctx.dir, "alpha.txt", "a\n");
+    commit(&ctx.dir, "beta.txt", "b\n");
+    fs::write(ctx.dir.join("alpha.txt"), "a2\n").unwrap();
+    run(&ctx.dir, &["git", "add", "."]);
+    // With a staged file (not a commit) selected, move down to the "add
+    // alpha.txt" commit in the picker and instant-fixup onto it.
+    ctx.update(&mut state, keys("cFj<enter>"));
+
+    insta::assert_snapshot!(ctx.redact_buffer());
+}
+
+#[test]
+fn commit_fixup_picker() {
+    let ctx = setup_clone!();
+
+    commit(&ctx.dir, "alpha.txt", "a\n");
+    commit(&ctx.dir, "beta.txt", "b\n");
+
+    snapshot!(ctx, "cf");
 }
 
 #[test]
