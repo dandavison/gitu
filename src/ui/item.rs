@@ -7,6 +7,7 @@ use crate::gitu_diff::Status;
 use crate::highlight;
 use crate::item_data::{ItemData, Ref, SectionHeader};
 use crate::items::Item;
+use crate::rebase_todo::TodoEntry;
 use crate::ui::layout::opts;
 use crate::ui::{UiTree, layout_span};
 use unicode_segmentation::UnicodeSegmentation;
@@ -192,6 +193,16 @@ pub(crate) fn layout_item<'a>(
                 ),
             );
             layout_span(layout, (format!(" {message}").into(), base));
+        }
+        ItemData::RebaseTodo { todo, index } => {
+            // Only reached without pre-rendered rows, e.g. an emptied list.
+            let content = match todo.borrow().entries.get(*index) {
+                Some(TodoEntry::Commit { action, oid }) => format!("{} {oid}", action.keyword()),
+                Some(TodoEntry::Other(instruction)) => instruction.clone(),
+                None => String::new(),
+            };
+
+            layout_span(layout, (content.into(), base));
         }
         ItemData::Header(header) => {
             let content: Cow<str> = match header {

@@ -270,7 +270,7 @@ impl App {
         }
 
         let menu = match &self.state.pending_menu {
-            None => Menu::Root,
+            None => self.base_menu().unwrap_or(Menu::Root),
             Some(menu) if menu.menu == Menu::Help => Menu::Root,
             Some(menu) => menu.menu,
         };
@@ -377,7 +377,13 @@ impl App {
     }
 
     pub fn close_menu(&mut self) {
-        self.state.pending_menu = root_menu(&self.state.config).map(PendingMenu::init)
+        self.state.pending_menu = self.base_menu().map(PendingMenu::init)
+    }
+
+    /// The menu to fall back to once a pending one closes: a screen with its own
+    /// keymap (the interactive rebase todo) imposes it for as long as it is up.
+    pub(crate) fn base_menu(&self) -> Option<Menu> {
+        self.screen().menu.or_else(|| root_menu(&self.state.config))
     }
 
     pub fn inhibit_close_menu(&mut self) {

@@ -95,7 +95,7 @@ fn log_empty_branch() {
 /// Render the log with a command whose format prints each commit over several
 /// rows, marked with the `{commit}` token so gitu can tell the rows apart. Dates
 /// are absolute so the output doesn't drift with the wall clock.
-fn with_log_renderer(mut ctx: TestContext, args: &[&str], format: &str) -> TestContext {
+pub(super) fn with_log_renderer(mut ctx: TestContext, args: &[&str], format: &str) -> TestContext {
     let config = ctx.config();
     config.general.log_renderer.enabled = true;
     config.general.log_renderer.command = [&["git", "log", "--color=always", "--date=short"], args]
@@ -107,7 +107,8 @@ fn with_log_renderer(mut ctx: TestContext, args: &[&str], format: &str) -> TestC
     ctx
 }
 
-const MULTI_ROW_FORMAT: &str = "{commit}%n\u{25b8} %h %an %ad%C(auto)%d%C(reset)%n    %s";
+pub(super) const MULTI_ROW_FORMAT: &str =
+    "{commit}%n\u{25b8} %h %an %ad%C(auto)%d%C(reset)%n    %s";
 
 #[test]
 fn rendered_log() {

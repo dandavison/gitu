@@ -143,6 +143,7 @@ selection_line = { mods = "BOLD" }
 selection_area = {}
 
 hash = { fg = "yellow" }
+rebase_todo_action = { fg = "cyan" }
 branch = { fg = "green" }
 remote = { fg = "red" }
 tag = { fg = "yellow" }
@@ -268,6 +269,29 @@ rebase_menu.rebase_continue = ["c"]
 rebase_menu.rebase_elsewhere = ["e"]
 rebase_menu.rebase_autosquash = ["f"]
 rebase_menu.quit = ["q", "esc"]
+
+# The interactive rebase todo screen (opened by `rebase_menu.rebase_interactive`).
+# It has its own keymap: single keys re-mark the selected commit and alt+up /
+# alt+down reorder it. Nothing runs until `rebase_todo_start`.
+rebase_todo.rebase_todo_pick = ["p"]
+rebase_todo.rebase_todo_reword = ["r"]
+rebase_todo.rebase_todo_edit = ["e"]
+rebase_todo.rebase_todo_squash = ["s"]
+rebase_todo.rebase_todo_fixup = ["f"]
+rebase_todo.rebase_todo_drop = ["d"]
+rebase_todo.rebase_todo_move_up = ["alt+k", "alt+up"]
+rebase_todo.rebase_todo_move_down = ["alt+j", "alt+down"]
+rebase_todo.rebase_todo_start = ["enter"]
+rebase_todo.move_up = ["k", "up"]
+rebase_todo.move_down = ["j", "down"]
+rebase_todo.move_top = ["g+g"]
+rebase_todo.move_bottom = ["G"]
+rebase_todo.half_page_up = ["ctrl+u"]
+rebase_todo.half_page_down = ["ctrl+d"]
+rebase_todo.scroll_view_up = ["ctrl+y"]
+rebase_todo.scroll_view_down = ["ctrl+e"]
+rebase_todo.toggle_section = ["tab"]
+rebase_todo.quit = ["q", "esc"]
 
 root.remote_menu=["M"]
 remote_menu.add_remote=["a"]
