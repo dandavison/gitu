@@ -671,6 +671,7 @@ dependencies = [
 name = "gitu"
 version = "0.43.0"
 dependencies = [
+ "anstyle-parse",
  "arboard",
  "cached",
  "chrono",

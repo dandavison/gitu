@@ -28,6 +28,12 @@ pub(crate) fn highlight_hunk(
     file_index: usize,
     hunk_index: usize,
 ) -> Arc<HunkHighlights> {
+    if config.general.diff_renderer.enabled
+        && let Some(highlights) = highlights_from_renderer(config, diff, file_index, hunk_index)
+    {
+        return Arc::new(highlights);
+    }
+
     let file_diff = &diff.file_diffs[file_index];
 
     let hunk_content = diff.hunk_content(file_index, hunk_index);
@@ -68,6 +74,60 @@ pub(crate) fn highlight_hunk(
     }
 
     Arc::new(highlights)
+}
+
+/// Highlight a hunk by piping its patch through the configured renderer command.
+/// Returns `None` (so the caller falls back to built-in highlighting) if the
+/// command is unavailable or its output can't be mapped onto the hunk.
+fn highlights_from_renderer(
+    config: &Config,
+    diff: &Rc<Diff>,
+    file_index: usize,
+    hunk_index: usize,
+) -> Option<HunkHighlights> {
+    let patch = diff.format_hunk_patch(file_index, hunk_index);
+    // The `--color-only` path preserves structure and does not reflow, so width
+    // is irrelevant here (0 = no `{width}`/COLUMNS effect for a structural command).
+    let output = crate::diff_renderer::run(&config.general.diff_renderer.command, &patch, 0)?;
+    highlights_from_output(diff, file_index, hunk_index, &output)
+}
+
+/// Map renderer `output` onto the hunk's content lines. The renderer preserves
+/// line structure, so the content lines are the tail of its output; each must
+/// match the corresponding hunk line verbatim or we bail (returning `None`).
+fn highlights_from_output(
+    diff: &Rc<Diff>,
+    file_index: usize,
+    hunk_index: usize,
+    output: &str,
+) -> Option<HunkHighlights> {
+    let hunk_content = diff.hunk_content(file_index, hunk_index);
+    let content_lines: Vec<Range<usize>> = line_range_iterator(hunk_content)
+        .map(|(range, _)| range)
+        .collect();
+
+    let parsed = crate::diff_renderer::parse_ansi_lines(output).lines;
+    // The renderer preserves line structure, so content lines are its tail.
+    let rendered = parsed.get(parsed.len().checked_sub(content_lines.len())?..)?;
+
+    let mut highlights = HunkHighlights {
+        spans: vec![],
+        line_index: vec![],
+    };
+
+    for (line_range, rendered_line) in content_lines.iter().zip(rendered) {
+        // The renderer must reproduce each line verbatim; otherwise its byte
+        // ranges wouldn't be valid indices into our own hunk text.
+        if rendered_line.text != hunk_content[line_range.clone()] {
+            return None;
+        }
+
+        let start = highlights.spans.len();
+        highlights.spans.extend(rendered_line.runs.iter().cloned());
+        highlights.line_index.push(start..highlights.spans.len());
+    }
+
+    Some(highlights)
 }
 
 #[derive(Clone)]
@@ -405,4 +465,66 @@ pub(crate) fn syntax_highlight_tag_style(config: &SyntaxHighlightConfig, tag: Sy
         SyntaxTag::VariableParameter => &config.variable_parameter,
     }
     .into()
+}
+
+#[cfg(test)]
+mod renderer_tests {
+    use super::*;
+    use crate::git::diff::{Diff, DiffType};
+    use crate::gitu_diff;
+
+    fn diff_from(text: &str) -> Rc<Diff> {
+        let file_diffs = gitu_diff::Parser::new(text).parse_diff().unwrap();
+        Rc::new(Diff {
+            text: text.to_string(),
+            diff_type: DiffType::WorkdirToIndex,
+            file_diffs,
+            commit: None,
+        })
+    }
+
+    #[test]
+    fn maps_rendered_output_onto_content_lines() {
+        let text = "diff --git a/x.rs b/x.rs\n\
+                    index 0000000..1111111 100644\n\
+                    --- a/x.rs\n\
+                    +++ b/x.rs\n\
+                    @@ -1,2 +1,2 @@\n\
+                    -let x = 1;\n\
+                    +let y = 2;\n";
+        let diff = diff_from(text);
+
+        let rendered = "diff --git a/x.rs b/x.rs\n\
+                         index 0000000..1111111 100644\n\
+                         --- a/x.rs\n\
+                         +++ b/x.rs\n\
+                         @@ -1,2 +1,2 @@\n\
+                         \x1b[31m-let x = 1;\x1b[0m\n\
+                         \x1b[32m+let y = 2;\x1b[0m\n";
+
+        let highlights = highlights_from_output(&diff, 0, 0, rendered)
+            .expect("should map rendered output onto the hunk");
+
+        // Every content line's runs must reconstruct the hunk line verbatim.
+        let hunk_content = diff.hunk_content(0, 0);
+        let line_ranges: Vec<_> = line_range_iterator(hunk_content).map(|(r, _)| r).collect();
+        for (line_i, line_range) in line_ranges.iter().enumerate() {
+            let line = &hunk_content[line_range.clone()];
+            let reconstructed: String = highlights
+                .get_line_highlights(line_i)
+                .iter()
+                .map(|(r, _)| &line[r.clone()])
+                .collect();
+            assert_eq!(&reconstructed, line);
+        }
+
+        let has_color = highlights
+            .get_line_highlights(0)
+            .iter()
+            .any(|(_, style)| style.fg.is_some());
+        assert!(
+            has_color,
+            "expected a colored run on the first content line"
+        );
+    }
 }

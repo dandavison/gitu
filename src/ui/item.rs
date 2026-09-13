@@ -17,6 +17,9 @@ use unicode_width::UnicodeWidthStr;
 ///
 /// Every span is patched onto `base`, letting the caller supply a background
 /// style such as the selection highlight.
+///
+/// An item a renderer drew is laid out as the renderer drew it; the rest are
+/// laid out from their data.
 pub(crate) fn layout_item<'a>(
     layout: &mut UiTree<'a>,
     item: &'a Item,
@@ -24,6 +27,13 @@ pub(crate) fn layout_item<'a>(
     base: Style,
 ) {
     let style = &config.style;
+
+    if let Some(rendered) = &item.rendered {
+        for (text, span_style) in rendered.iter() {
+            layout_span(layout, (text.as_str().into(), base.patch(*span_style)));
+        }
+        return;
+    }
 
     match &item.data {
         ItemData::Raw(content) => {
@@ -155,6 +165,7 @@ pub(crate) fn layout_item<'a>(
             hunk_i,
             line_range,
             line_i,
+            line_indices: _,
         } => {
             let hunk_highlights =
                 highlight::highlight_hunk(item.id, config, diff, *file_i, *hunk_i);

@@ -15,6 +15,6 @@ pub(crate) fn create(
     Screen::new(
         Arc::clone(&config),
         size,
-        Box::new(move || log(&repo, limit, rev, msg_regex.clone())),
+        Box::new(move |_size: (u16, u16)| log(&repo, limit, rev, msg_regex.clone())),
     )
 }

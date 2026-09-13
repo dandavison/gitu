@@ -15,6 +15,26 @@ log_author_width = 15
 mouse_support = false
 mouse_scroll_lines = 3
 
+# Render diffs with an external command (e.g. delta) instead of Gitu's
+# built-in syntax/diff highlighting. The command receives a unified diff on
+# stdin and emits ANSI-colored output.
+#
+# Gitu advertises the OSC-1717 diff-line-metadata protocol to the command (via
+# the OSC1717_METADATA env var). If the renderer speaks it, the diff may be
+# rendered freely — dropping +/- markers, side-by-side, gutters — and Gitu maps
+# each rendered row back to its patch line for staging. If it doesn't, the
+# command must preserve line structure (`--color-only`), which Gitu maps 1:1.
+#
+# A `{width}` token in the command is replaced with the number of columns Gitu
+# will render into (and COLUMNS is exported), so a reflowing renderer fills the
+# viewport rather than defaulting too narrow over the pipe.
+#
+# The default is structure-preserving so it works either way; a renderer that
+# speaks OSC-1717 can be run freely, e.g.:
+#   diff_renderer.command = ["delta", "--side-by-side", "--width", "{width}"]
+diff_renderer.enabled = false
+diff_renderer.command = ["delta", "--color-only", "--true-color", "always"]
+
 # When to prompt for discard confirmation. Options:
 # "line"  - always prompt even for individual lines (default),
 # "hunk"  - prompt for files and hunks,

@@ -84,12 +84,16 @@ fn has_uppercase(query: &str) -> bool {
     false
 }
 
+/// Builds a screen's items, given the viewport it will be drawn into. A screen
+/// that renders through an external command needs the width to ask for.
+pub(crate) type RefreshItems = Box<dyn Fn((u16, u16)) -> Res<Vec<Item>>>;
+
 pub(crate) struct Screen {
     pub(crate) size: (u16, u16),
     cursor: usize,
     scroll: Scroll,
     config: Arc<Config>,
-    refresh_items: Box<dyn Fn() -> Res<Vec<Item>>>,
+    refresh_items: RefreshItems,
     items: Vec<Item>,
     /// Memoized `item_height`, indexed like `items`. Dropped by `invalidate`.
     item_heights: RefCell<Vec<Option<u16>>>,
@@ -101,7 +105,7 @@ impl Screen {
     pub(crate) fn new(
         config: Arc<Config>,
         size: (u16, u16),
-        refresh_items: Box<dyn Fn() -> Res<Vec<Item>>>,
+        refresh_items: RefreshItems,
     ) -> Res<Self> {
         let collapsed = config
             .general
@@ -123,7 +127,7 @@ impl Screen {
             search: None,
         };
 
-        screen.items = (screen.refresh_items)()?;
+        screen.items = (screen.refresh_items)(screen.size)?;
 
         // TODO Maybe this should be done on update. Better keep track of toggled sections rather than collapsed then.
         screen.collapsed.extend(
@@ -291,7 +295,7 @@ impl Screen {
     }
 
     pub(crate) fn refresh(&mut self) -> Res<()> {
-        self.items = (self.refresh_items)()?;
+        self.items = (self.refresh_items)(self.size)?;
         self.invalidate();
         self.update_cursor();
         Ok(())
@@ -1001,7 +1005,7 @@ mod tests {
         Screen::new(
             config,
             size,
-            Box::new(move || {
+            Box::new(move |_size| {
                 Ok((0..item_count)
                     .map(|i| Item {
                         id: i as u64,
@@ -1023,7 +1027,7 @@ mod tests {
         Screen::new(
             config,
             size,
-            Box::new(move || {
+            Box::new(move |_size| {
                 Ok(spec
                     .iter()
                     .enumerate()

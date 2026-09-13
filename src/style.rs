@@ -202,6 +202,20 @@ impl Modifier {
     }
 }
 
+impl std::ops::BitOr for Modifier {
+    type Output = Self;
+
+    fn bitor(self, other: Self) -> Self {
+        Modifier(self.0 | other.0)
+    }
+}
+
+impl std::ops::BitOrAssign for Modifier {
+    fn bitor_assign(&mut self, other: Self) {
+        self.insert(other);
+    }
+}
+
 impl FromStr for Modifier {
     type Err = ParseModifierError;
 

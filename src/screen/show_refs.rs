@@ -19,7 +19,7 @@ pub(crate) fn create(config: Arc<Config>, repo: Rc<Repository>, size: (u16, u16)
     Screen::new(
         Arc::clone(&config),
         size,
-        Box::new(move || {
+        Box::new(move |_size: (u16, u16)| {
             Ok(iter::once(Item {
                 id: hash("local_branches"),
                 data: ItemData::Header(SectionHeader::Branches),

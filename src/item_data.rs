@@ -37,6 +37,9 @@ pub(crate) enum ItemData {
         hunk_i: usize,
         line_i: usize,
         line_range: Range<usize>,
+        /// Content lines this row stages/reverses as a unit. Usually `[line_i]`;
+        /// a fused side-by-side change row also includes its replacement line.
+        line_indices: Vec<usize>,
     },
     Stash {
         message: String,

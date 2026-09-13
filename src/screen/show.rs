@@ -21,7 +21,7 @@ pub(crate) fn create(
     let mut screen = Screen::new(
         Arc::clone(&config),
         size,
-        Box::new(move || {
+        Box::new(move |size: (u16, u16)| {
             let commit = git::show_summary(repo.as_ref(), &reference)?;
             let show = git::show(repo.as_ref(), &reference)?;
             let details = commit.details.lines();
@@ -41,6 +41,8 @@ pub(crate) fn create(
             }))
             .chain([items::blank_line()])
             .chain(items::create_diff_items(
+                &config,
+                (size.0 as usize).saturating_sub(2),
                 &Rc::new(show),
                 0,
                 false,
@@ -58,6 +60,7 @@ pub(crate) fn create(
                 hunk_i,
                 line_i,
                 line_range,
+                ..
             } = data
             {
                 if diff.file_diffs[*file_i].header.new_file.fmt(&diff.text) != file {

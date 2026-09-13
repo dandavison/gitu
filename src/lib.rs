@@ -3,6 +3,7 @@ mod bindings;
 pub mod cli;
 mod cmd_log;
 pub mod config;
+mod diff_renderer;
 pub mod error;
 mod file_watcher;
 mod git;

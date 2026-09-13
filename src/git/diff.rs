@@ -1,5 +1,4 @@
 use crate::gitu_diff::FileDiff;
-use std::ops::Range;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Diff {
@@ -64,11 +63,15 @@ impl Diff {
             .clone()]
     }
 
-    pub(crate) fn format_line_patch(
+    /// Build a patch that stages/reverses exactly the given content lines of a
+    /// hunk. `line_indices` need not be contiguous: a side-by-side row that fuses
+    /// an in-place change maps to a deletion and its (possibly non-adjacent)
+    /// replacement, and both are staged together.
+    pub(crate) fn format_lines_patch(
         &self,
         file_i: usize,
         hunk_i: usize,
-        line_range: Range<usize>,
+        line_indices: &[usize],
         mode: PatchMode,
     ) -> String {
         let hunk = &self.file_diffs[file_i].hunks[hunk_i];
@@ -90,7 +93,7 @@ impl Diff {
                     PatchMode::Reverse => '+',
                 };
 
-                if line_range.contains(&i) {
+                if line_indices.contains(&i) {
                     Some(line.to_string())
                 } else if line.starts_with(add) {
                     None

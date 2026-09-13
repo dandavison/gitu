@@ -1,9 +1,11 @@
 use crate::Res;
+use crate::config::Config;
 use crate::error::Error;
 use crate::git::diff::Diff;
 use crate::highlight;
 use crate::item_data::ItemData;
 use crate::item_data::Ref;
+use crate::style::Style;
 use git2::Oid;
 use git2::Repository;
 use regex::Regex;
@@ -16,6 +18,9 @@ use std::time::SystemTime;
 
 pub type ItemId = u64;
 
+/// A pre-rendered line as owned styled spans (e.g. one row of a renderer's output).
+pub(crate) type RenderedRow = Vec<(String, Style)>;
+
 #[derive(Default, Clone, Debug)]
 pub(crate) struct Item {
     pub(crate) id: ItemId,
@@ -23,9 +28,188 @@ pub(crate) struct Item {
     pub(crate) depth: usize,
     pub(crate) unselectable: bool,
     pub(crate) data: ItemData,
+    /// Pre-rendered styled spans (e.g. a diff row from an external renderer),
+    /// used verbatim by [`crate::ui::item::layout_item`] in place of `data`.
+    pub(crate) rendered: Option<Rc<RenderedRow>>,
 }
 
+/// Build the items for a diff. When the configured renderer speaks the OSC-1717
+/// protocol, the diff is rendered freely by it (e.g. delta, side-by-side) and its
+/// styled rows drive the content lines; otherwise the built-in items are used
+/// (styled per-hunk by [`highlight`], including a `--color-only` renderer).
 pub(crate) fn create_diff_items(
+    config: &Config,
+    width: usize,
+    diff: &Rc<Diff>,
+    depth: usize,
+    default_collapsed: bool,
+    commit: Option<String>,
+) -> Vec<Item> {
+    if config.general.diff_renderer.enabled
+        && let Some(items) = create_rendered_diff_items(
+            config,
+            width,
+            diff,
+            depth,
+            default_collapsed,
+            commit.clone(),
+        )
+    {
+        return items;
+    }
+    create_builtin_diff_items(diff, depth, default_collapsed, commit).collect()
+}
+
+/// Render the diff through the OSC-1717 renderer and lay its rows out under
+/// gitu's own file/hunk structure (so collapse, navigation and file/hunk/line
+/// staging keep working). Each rendered content row is mapped back to its
+/// content-line coordinates via its metadata; decoration rows are dropped.
+/// Returns `None` (fall back to built-in) if the renderer doesn't speak the
+/// protocol.
+fn create_rendered_diff_items(
+    config: &Config,
+    width: usize,
+    diff: &Rc<Diff>,
+    depth: usize,
+    default_collapsed: bool,
+    commit: Option<String>,
+) -> Option<Vec<Item>> {
+    use std::collections::HashMap;
+
+    let output =
+        crate::diff_renderer::run(&config.general.diff_renderer.command, &diff.text, width)?;
+    let parsed = crate::diff_renderer::parse_ansi_lines(&output);
+    parsed.protocol_version?; // Not an OSC-1717 renderer: fall back to built-in.
+
+    use crate::diff_renderer::LineKind;
+
+    // Per hunk: the renderer's own hunk-header rows (`h`) to display in place of
+    // `@@`, and the content-line items. `f` (file-header) rows are dropped — gitu
+    // draws its own file header — as are the renderer's blank spacer rows.
+    let mut headers_by_hunk: HashMap<(usize, usize), Vec<RenderedRow>> = HashMap::new();
+    let mut content_by_hunk: HashMap<(usize, usize), Vec<Item>> = HashMap::new();
+
+    for line in &parsed.lines {
+        let Some(first) = line.records.first() else {
+            continue; // Un-annotated decoration (dividers): dropped.
+        };
+        match first.kind {
+            LineKind::FileHeader => {}
+            LineKind::HunkHeader => {
+                if line.text.trim().is_empty() {
+                    continue;
+                }
+                if let Some(key) = crate::diff_renderer::resolve_hunk(diff, first) {
+                    headers_by_hunk
+                        .entry(key)
+                        .or_default()
+                        .push(rendered_spans(line));
+                }
+            }
+            LineKind::Context | LineKind::Added | LineKind::Deleted => {
+                let Some((file_i, hunk_i, line_i)) =
+                    crate::diff_renderer::resolve_line(diff, first)
+                else {
+                    continue;
+                };
+                // A fused side-by-side change row also carries its replacement, so
+                // stage every record in the same hunk.
+                let line_indices = line
+                    .records
+                    .iter()
+                    .filter_map(|meta| crate::diff_renderer::resolve_line(diff, meta))
+                    .filter(|(f, h, _)| (*f, *h) == (file_i, hunk_i))
+                    .map(|(_, _, li)| li)
+                    .collect();
+                let hunk_hash = hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]);
+                let line_range = highlight::line_range_iterator(diff.hunk_content(file_i, hunk_i))
+                    .nth(line_i)
+                    .map(|(range, _)| range)
+                    .unwrap_or_default();
+                content_by_hunk
+                    .entry((file_i, hunk_i))
+                    .or_default()
+                    .push(Item {
+                        id: hunk_hash,
+                        depth: depth + 2,
+                        unselectable: matches!(first.kind, LineKind::Context),
+                        data: ItemData::HunkLine {
+                            diff: Rc::clone(diff),
+                            file_i,
+                            hunk_i,
+                            line_i,
+                            line_range,
+                            line_indices,
+                        },
+                        rendered: Some(Rc::new(rendered_spans(line))),
+                        ..Default::default()
+                    });
+            }
+        }
+    }
+
+    let mut items = Vec::new();
+    for (file_i, file_diff) in diff.file_diffs.iter().enumerate() {
+        items.push(Item {
+            id: hash(diff.file_diff_header(file_i)),
+            default_collapsed,
+            depth,
+            data: ItemData::Delta {
+                diff: Rc::clone(diff),
+                file_i,
+                commit: commit.clone(),
+            },
+            ..Default::default()
+        });
+        for hunk_i in 0..file_diff.hunks.len() {
+            let hunk_hash = hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]);
+            let hunk = ItemData::Hunk {
+                diff: Rc::clone(diff),
+                file_i,
+                hunk_i,
+            };
+            // Render the renderer's own hunk header: its first row is the
+            // selectable/collapsible Hunk anchor; the rest nest under it (so a
+            // collapsed hunk shows just the anchor). Fall back to gitu's `@@` when
+            // the renderer emitted no header for this hunk.
+            let mut header_rows = headers_by_hunk
+                .remove(&(file_i, hunk_i))
+                .unwrap_or_default()
+                .into_iter();
+            items.push(Item {
+                id: hunk_hash,
+                depth: depth + 1,
+                data: hunk,
+                rendered: header_rows.next().map(Rc::new),
+                ..Default::default()
+            });
+            for extra in header_rows {
+                items.push(Item {
+                    id: hunk_hash,
+                    depth: depth + 2,
+                    unselectable: true,
+                    rendered: Some(Rc::new(extra)),
+                    ..Default::default()
+                });
+            }
+            if let Some(rows) = content_by_hunk.remove(&(file_i, hunk_i)) {
+                items.extend(rows);
+            }
+        }
+    }
+    Some(items)
+}
+
+/// The renderer's styled runs for a line, as owned `(text, style)` spans with
+/// tabs expanded (matching the built-in hunk-line rendering).
+fn rendered_spans(line: &crate::diff_renderer::ParsedLine) -> RenderedRow {
+    line.runs
+        .iter()
+        .map(|(range, style)| (line.text[range.clone()].replace('\t', "    "), *style))
+        .collect()
+}
+
+fn create_builtin_diff_items(
     diff: &Rc<Diff>,
     depth: usize,
     default_collapsed: bool,
@@ -103,6 +287,7 @@ fn format_diff_hunk_items(
                     hunk_i,
                     line_i: line_index,
                     line_range,
+                    line_indices: vec![line_index],
                 },
                 ..Default::default()
             }

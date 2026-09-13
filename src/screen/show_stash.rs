@@ -20,7 +20,7 @@ pub(crate) fn create(
     Screen::new(
         Arc::clone(&config),
         size,
-        Box::new(move || {
+        Box::new(move |size: (u16, u16)| {
             let commit = git::show_summary(repo.as_ref(), &stash_ref)?;
             let details = commit.details.lines();
 
@@ -56,7 +56,14 @@ pub(crate) fn create(
                         ..Default::default()
                     },
                 ]);
-                out.extend(items::create_diff_items(&diff, 1, false, None));
+                out.extend(items::create_diff_items(
+                    &config,
+                    (size.0 as usize).saturating_sub(2),
+                    &diff,
+                    1,
+                    false,
+                    None,
+                ));
             };
 
             if !staged.file_diffs.is_empty() {

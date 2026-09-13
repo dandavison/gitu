@@ -33,9 +33,9 @@ impl OpTrait for Stage {
                 diff,
                 file_i,
                 hunk_i,
-                line_i,
+                line_indices,
                 ..
-            } => stage_line(Rc::clone(diff), *file_i, *hunk_i, *line_i),
+            } => stage_line(Rc::clone(diff), *file_i, *hunk_i, line_indices.clone()),
             _ => return None,
         };
 
@@ -92,13 +92,13 @@ fn stage_patch(diff: Rc<Diff>, file_i: usize, hunk_i: usize) -> Action {
     })
 }
 
-fn stage_line(diff: Rc<Diff>, file_i: usize, hunk_i: usize, line_i: usize) -> Action {
+fn stage_line(diff: Rc<Diff>, file_i: usize, hunk_i: usize, line_indices: Vec<usize>) -> Action {
     Rc::new(move |app, term| {
         let mut cmd = Command::new("git");
         cmd.args(["apply", "--cached", "--recount"]);
 
         let input = diff
-            .format_line_patch(file_i, hunk_i, line_i..(line_i + 1), PatchMode::Normal)
+            .format_lines_patch(file_i, hunk_i, &line_indices, PatchMode::Normal)
             .into_bytes();
 
         app.run_cmd(term, &input, cmd)

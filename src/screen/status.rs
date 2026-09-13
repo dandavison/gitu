@@ -46,7 +46,7 @@ pub(crate) fn create(config: Arc<Config>, repo: Rc<Repository>, size: (u16, u16)
     Screen::new(
         Arc::clone(&config),
         size,
-        Box::new(move || {
+        Box::new(move |size: (u16, u16)| {
             let status = git::status(repo.workdir().ok_or(Error::NoRepoWorkdir)?)?;
             let untracked_files = status
                 .files
@@ -105,10 +105,14 @@ pub(crate) fn create(config: Arc<Config>, repo: Rc<Repository>, size: (u16, u16)
             })
             .chain(untracked)
             .chain(create_status_section_items(
+                &config,
+                render_width(size),
                 SectionID::UnstagedChanges,
                 &Rc::new(git::diff_unstaged(repo.as_ref())?),
             ))
             .chain(create_status_section_items(
+                &config,
+                render_width(size),
                 SectionID::StagedChanges,
                 &Rc::new(git::diff_staged(repo.as_ref())?),
             ))
@@ -172,6 +176,8 @@ fn branch_status_items(status: &BranchStatus) -> Res<Vec<Item>> {
 }
 
 fn create_status_section_items<'a>(
+    config: &'a Config,
+    width: usize,
     section: SectionID,
     diff: &'a Rc<Diff>,
 ) -> impl Iterator<Item = Item> + 'a {
@@ -196,7 +202,14 @@ fn create_status_section_items<'a>(
         ]
     }
     .into_iter()
-    .chain(items::create_diff_items(diff, 1, true, None))
+    .chain(items::create_diff_items(config, width, diff, 1, true, None))
+}
+
+/// Columns to render a diff row into: the viewport width less the 1-char gutter,
+/// and one more so a renderer that pads rows to full width (delta side-by-side)
+/// doesn't reach the edge, where the overflow guard would clip it.
+fn render_width(size: (u16, u16)) -> usize {
+    (size.0 as usize).saturating_sub(2)
 }
 
 fn create_stash_list_section_items<'a>(

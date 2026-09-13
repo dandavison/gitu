@@ -60,6 +60,18 @@ pub struct GeneralConfig {
     pub log_author_width: usize,
     pub mouse_support: bool,
     pub mouse_scroll_lines: usize,
+    #[serde(default)]
+    pub diff_renderer: DiffRendererConfig,
+}
+
+#[derive(Default, Debug, Deserialize)]
+pub struct DiffRendererConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// Renderer command as `[executable, ...args]`. It receives a unified diff
+    /// on stdin and must emit ANSI-colored output that preserves line structure.
+    #[serde(default)]
+    pub command: Vec<String>,
 }
 
 #[derive(Default, Debug, Deserialize)]
