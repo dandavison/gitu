@@ -1,6 +1,7 @@
 pub mod app;
 mod bindings;
 mod calling_process;
+mod capped_input;
 pub mod cli;
 mod cmd_log;
 pub mod config;
@@ -44,6 +45,7 @@ use std::{
 };
 use term::Term;
 
+use crate::capped_input::Capped;
 use crate::config::Config;
 use crate::screen::pager::Paged;
 
@@ -100,7 +102,10 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
     let dir = find_git_dir()?;
     let repo = open_repo(&dir)?;
 
-    let piped = args.pager.then(|| read_piped_input(git_argv)).transpose()?;
+    let piped = args
+        .pager
+        .then(|| read_piped_input(git_argv, config.general.max_input_bytes))
+        .transpose()?;
 
     let mut app = app::App::create(
         Rc::new(repo),
@@ -135,13 +140,15 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
 /// What git piped to us as its pager, alongside the command already found to
 /// have produced it. Reading the terminal instead would wait for input that is
 /// never coming, so that is refused outright.
-fn read_piped_input(git_argv: Option<Vec<String>>) -> Res<Paged> {
+fn read_piped_input(git_argv: Option<Vec<String>>, limit: u64) -> Res<Paged> {
     if io::stdin().is_terminal() {
         return Err(Error::PagerWithoutInput);
     }
 
+    let input = Capped::read(io::stdin(), limit).map_err(Error::ReadPipedInput)?;
     Ok(Paged {
-        text: io::read_to_string(io::stdin()).map_err(Error::ReadPipedInput)?,
+        text: input.text,
+        truncated: input.truncated,
         git_argv,
     })
 }

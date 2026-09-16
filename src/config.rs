@@ -60,6 +60,11 @@ pub struct GeneralConfig {
     pub log_author_width: usize,
     pub mouse_support: bool,
     pub mouse_scroll_lines: usize,
+    /// The most input gitu will read, as a pager or when putting a command
+    /// again. It is read in one pass before anything is drawn, so this is what
+    /// stops a `git log -p` over a whole history from showing nothing for
+    /// minutes. What is past the limit is dropped, not deferred.
+    pub max_input_bytes: u64,
     /// Whether the branch section uses git's wording - 'On branch {name}' over
     /// a line placing it relative to its upstream - or the branch name alone.
     pub verbose_branch_status: bool,
