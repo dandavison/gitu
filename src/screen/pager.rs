@@ -12,6 +12,7 @@ use crate::style::{Modifier, Style};
 use crate::{
     Res,
     calling_process::GitCommand,
+    capped_input::Capped,
     config::Config,
     error::Error,
     git::diff::{Diff, DiffType},
@@ -19,13 +20,16 @@ use crate::{
     items::{self, Item, RenderParams},
 };
 use git2::Repository;
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, io::Read, process::Stdio, rc::Rc, sync::Arc, thread};
 
 /// What git handed gitu as its pager: its output, and the argv of the command
 /// that produced it where gitu could find it.
 pub struct Paged {
     pub text: String,
     pub git_argv: Option<Vec<String>>,
+    /// Whether reading the input stopped at the byte limit rather than at its
+    /// end (see [`Capped`]).
+    pub truncated: bool,
 }
 
 pub(crate) fn create(
@@ -34,7 +38,7 @@ pub(crate) fn create(
     params: RenderParams,
     paged: Paged,
 ) -> Res<Screen> {
-    let source = Source::of(paged.text, paged.git_argv, &config.general.hide);
+    let source = Source::of(paged, &config.general.hide);
     let git_command = source.git_command();
 
     let mut screen = Screen::new(
@@ -62,11 +66,11 @@ enum Source {
     /// A patch gitu found no command for: a saved patch file, another repo's,
     /// one piped in from a process already gone. It stays as it came, and gitu
     /// structures it.
-    Patch(Rc<Diff>),
+    Patch { diff: Rc<Diff>, truncated: bool },
     /// Output with no diff in it: a log, a blame, a grep, a man page. gitu has
     /// no structure of its own to impose, so the renderer draws it and what it
     /// says about the rows it drew decides what they are.
-    Unstructured(String),
+    Unstructured { text: String, truncated: bool },
 }
 
 impl Source {
@@ -78,8 +82,8 @@ impl Source {
     /// The files the user has said to `hide` are dropped from the question
     /// before it is first asked, so the command holds them like any other
     /// pathspec: `:` shows them, and `_` takes them back.
-    fn of(patch: String, git_argv: Option<Vec<String>>, hide: &[String]) -> Self {
-        if let Some(git) = git_argv.and_then(GitCommand::of) {
+    fn of(paged: Paged, hide: &[String]) -> Self {
+        if let Some(git) = paged.git_argv.and_then(GitCommand::of) {
             let mut patterns = git.file_patterns();
             patterns.extend(hide.iter().map(|glob| format!("!{glob}")));
 
@@ -89,83 +93,130 @@ impl Source {
             };
         }
 
-        let text = crate::diff_renderer::strip_ansi(&patch);
+        let text = crate::diff_renderer::strip_ansi(&paged.text);
         let file_diffs = gitu_diff::Parser::new(&text)
             .parse_diff()
             .unwrap_or_default();
 
         if file_diffs.is_empty() {
-            return Source::Unstructured(patch);
+            return Source::Unstructured {
+                text: paged.text,
+                truncated: paged.truncated,
+            };
         }
 
-        Source::Patch(Rc::new(Diff {
-            file_diffs,
-            text,
-            diff_type: DiffType::TreeToTree,
-            commit: None,
-        }))
+        Source::Patch {
+            diff: Rc::new(Diff {
+                file_diffs,
+                text,
+                diff_type: DiffType::TreeToTree,
+                commit: None,
+            }),
+            truncated: paged.truncated,
+        }
     }
 
     /// The command being asked, where there is one to edit.
     fn git_command(&self) -> Option<Rc<RefCell<GitCommand>>> {
         match self {
             Source::Live { git, .. } => Some(Rc::clone(git)),
-            Source::Patch(_) | Source::Unstructured(_) => None,
+            Source::Patch { .. } | Source::Unstructured { .. } => None,
         }
     }
 
     fn items(&self, config: &Config, repo: &Repository, params: &RenderParams) -> Res<Vec<Item>> {
-        let (diff, mut items) = match self {
+        let limit = config.general.max_input_bytes;
+        let (diff, mut items, truncated) = match self {
             Source::Live { git, found } => {
                 let line = git.borrow().line(params.context.as_deref());
-                let diff = ask_git(&git.borrow(), repo, params.context.as_deref())?;
-                (Rc::new(diff), asked_rows(&line, found))
+                let asked = ask_git(&git.borrow(), repo, params.context.as_deref(), limit)?;
+                (
+                    Rc::new(asked.diff),
+                    asked_rows(&line, found),
+                    asked.truncated,
+                )
             }
-            Source::Patch(diff) => (Rc::clone(diff), Vec::new()),
-            Source::Unstructured(text) => return Ok(rows(config, repo, params, text)),
+            Source::Patch { diff, truncated } => (Rc::clone(diff), Vec::new(), *truncated),
+            Source::Unstructured { text, truncated } => {
+                let mut items = rows(config, repo, params, text);
+                items.extend(truncated_rows(*truncated, limit));
+                return Ok(items);
+            }
         };
 
         // What came back has no diff in it: a log, a blame, a grep, a man page.
         // gitu has no structure of its own to impose, so the renderer draws it.
         if diff.file_diffs.is_empty() {
             items.extend(rows(config, repo, params, &diff.text));
-            return Ok(items);
+        } else {
+            items.extend(preamble_items(config, params, &diff.text));
+            items.extend(diff_items(config, params, &diff));
         }
 
-        items.extend(preamble_items(config, params, &diff.text));
-        items.extend(diff_items(config, params, &diff));
+        items.extend(truncated_rows(truncated, limit));
         Ok(items)
     }
 }
 
+/// What putting the command again said, and whether it was still saying it when
+/// reading stopped.
+struct Asked {
+    diff: Diff,
+    truncated: bool,
+}
+
 /// Put the command again, for however much of the file around each change is
-/// being asked for now.
-fn ask_git(git: &GitCommand, repo: &Repository, context: Option<&str>) -> Res<Diff> {
-    let output = git
+/// being asked for now, reading it to the same limit as the piped input.
+fn ask_git(git: &GitCommand, repo: &Repository, context: Option<&str>, limit: u64) -> Res<Asked> {
+    let mut child = git
         .command(context)
         .current_dir(repo.workdir().ok_or(Error::NoRepoWorkdir)?)
-        .output()
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(Error::GitDiff)?;
 
+    // Read stderr on its own thread: a command filling that pipe while gitu is
+    // reading stdout would otherwise deadlock.
+    let mut pipe = child.stderr.take().expect("stderr was piped");
+    let complaint = thread::spawn(move || {
+        let mut said = String::new();
+        let _ = pipe.read_to_string(&mut said);
+        said
+    });
+
+    let output = Capped::read(child.stdout.take().expect("stdout was piped"), limit)
+        .map_err(Error::GitDiff)?;
+    if output.truncated {
+        // The rest of it is not going to be read, so it is not left to be
+        // written either.
+        let _ = child.kill();
+    }
+
+    let status = child.wait().map_err(Error::GitDiff)?;
     // A command the user can edit is a command the user can get wrong, and an
-    // empty screen does not say what git thought of it. (`git diff
-    // --exit-code` answers with a status too, so a command that answered at
-    // all is taken to have worked.)
-    if !output.status.success() && output.stdout.is_empty() {
-        let complaint = String::from_utf8_lossy(&output.stderr);
+    // empty screen does not say what git thought of it. (`git diff --exit-code`
+    // answers with a status too, and a killed command has one as well, so a
+    // command that answered at all is taken to have worked.)
+    if !status.success() && output.text.is_empty() {
+        let complaint = complaint.join().unwrap_or_default();
         return Err(Error::GitRefusedTheCommand(
             complaint.lines().next().unwrap_or_default().to_owned(),
         ));
     }
 
-    let text = String::from_utf8_lossy(&output.stdout).into_owned();
-    Ok(Diff {
-        file_diffs: gitu_diff::Parser::new(&text)
-            .parse_diff()
-            .unwrap_or_default(),
-        diff_type: git.diff_type(),
-        commit: commit_named_by(&text),
-        text,
+    let text = output.text;
+    Ok(Asked {
+        diff: Diff {
+            file_diffs: gitu_diff::Parser::new(&text)
+                .parse_diff()
+                .unwrap_or_default(),
+            diff_type: git.diff_type(),
+            commit: commit_named_by(&text),
+            text,
+        },
+        truncated: output.truncated,
     })
 }
 
@@ -177,17 +228,38 @@ fn asked_rows(line: &str, found: &str) -> Vec<Item> {
         return Vec::new();
     }
 
-    vec![Item {
+    vec![dim_row(line.to_owned())]
+}
+
+/// One line saying that what is shown is not all of the output, for output that
+/// stopped at the byte limit rather than at its end. It goes last, where the
+/// reading stops: nobody who does not get that far needs to be told. What is
+/// past the limit was not read, so there is nothing to say about how much of it
+/// there was.
+fn truncated_rows(truncated: bool, limit: u64) -> Vec<Item> {
+    if !truncated {
+        return Vec::new();
+    }
+
+    vec![dim_row(format!(
+        "input truncated at {limit} bytes (general.max_input_bytes)"
+    ))]
+}
+
+/// A row of gitu's own, saying something about the view rather than being part
+/// of it.
+fn dim_row(text: String) -> Item {
+    Item {
         unselectable: true,
         rendered: Some(Rc::new(vec![(
-            line.to_owned(),
+            text,
             Style {
                 add_modifier: Modifier::DIM,
                 ..Style::new()
             },
         )])),
         ..Default::default()
-    }]
+    }
 }
 
 /// Text the renderer draws and gitu does not structure. A renderer that says
@@ -263,9 +335,18 @@ mod tests {
                          -gone\n\
                          +added\n";
 
+    /// Input as it arrives when the limit did not stop it.
+    fn paged(text: &str, git_argv: Option<Vec<String>>) -> Paged {
+        Paged {
+            text: text.to_owned(),
+            git_argv,
+            truncated: false,
+        }
+    }
+
     fn items_of(repo: &Repository, patch: &str) -> Vec<ItemData> {
         let config = config::init_test_config().unwrap();
-        Source::of(patch.to_string(), None, &[])
+        Source::of(paged(patch, None), &[])
             .items(&config, repo, &Default::default())
             .unwrap()
             .into_iter()
@@ -282,10 +363,7 @@ mod tests {
                 features: Rc::from([]),
                 context: None,
             },
-            Paged {
-                text: patch.to_string(),
-                git_argv: None,
-            },
+            paged(patch, None),
         )
         .unwrap()
     }
@@ -473,8 +551,10 @@ mod tests {
         let config = config::init_test_config().unwrap();
         let repo = Repository::open(&ctx.dir).unwrap();
         let source = Source::of(
-            run(&ctx.dir, &["git", "log"]),
-            Some(["git", "log"].map(String::from).to_vec()),
+            paged(
+                &run(&ctx.dir, &["git", "log"]),
+                Some(["git", "log"].map(String::from).to_vec()),
+            ),
             &[],
         );
         let items = |source: &Source| {
@@ -518,8 +598,10 @@ mod tests {
         run(&ctx.dir, &["git", "add", "."]);
 
         let source = Source::of(
-            run(&ctx.dir, &["git", "diff", "--cached"]),
-            Some(["git", "diff", "--cached"].map(String::from).to_vec()),
+            paged(
+                &run(&ctx.dir, &["git", "diff", "--cached"]),
+                Some(["git", "diff", "--cached"].map(String::from).to_vec()),
+            ),
             &["*.pb.rs".to_owned()],
         );
         let files = source
@@ -555,7 +637,7 @@ mod tests {
     ) -> usize {
         let config = config::init_test_config().unwrap();
         let repo = Repository::open(&ctx.dir).unwrap();
-        Source::of(patch.to_string(), Some(argv.to_vec()), &[])
+        Source::of(paged(patch, Some(argv.to_vec())), &[])
             .items(
                 &config,
                 &repo,

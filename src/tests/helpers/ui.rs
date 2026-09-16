@@ -1,6 +1,7 @@
 use crate::style::Modifier;
 use crate::{
     app::App,
+    capped_input::Capped,
     cli::Args,
     config::{self, Config, TEST_SEARCH_HIGHLIGHT_BG},
     error::Error,
@@ -94,21 +95,27 @@ impl TestContext {
 
     pub fn init_app_as_pager_of_at(&mut self, path: PathBuf, cmd: &[&str]) -> App {
         let text = crate::tests::helpers::run(&path, cmd);
-        self.init_app_paged_at(
-            path,
-            Paged {
-                text,
-                git_argv: Some(cmd.iter().map(|arg| (*arg).to_owned()).collect()),
-            },
-        )
+        let paged = self.piped(
+            text,
+            Some(cmd.iter().map(|arg| (*arg).to_owned()).collect()),
+        );
+        self.init_app_paged_at(path, paged)
     }
 
     /// Start gitu on piped text no command of git's is known to have produced.
     pub fn init_app_with_patch(&mut self, patch: String) -> App {
-        self.init_app_paged(Paged {
-            text: patch,
-            git_argv: None,
-        })
+        let paged = self.piped(patch, None);
+        self.init_app_paged(paged)
+    }
+
+    /// `text` as gitu reads it from a pipe: up to the byte limit in config.
+    fn piped(&self, text: String, git_argv: Option<Vec<String>>) -> Paged {
+        let input = Capped::read(text.as_bytes(), self.config.general.max_input_bytes).unwrap();
+        Paged {
+            text: input.text,
+            truncated: input.truncated,
+            git_argv,
+        }
     }
 
     fn init_app_paged(&mut self, paged: Paged) -> App {

@@ -840,6 +840,107 @@ fn fusing_renderer() -> Vec<String> {
     .to_vec()
 }
 
+/// A one-hunk patch of `file`, whose content lines say which file they are
+/// from, so a view can be asserted to have dropped one of two files.
+fn one_hunk_patch(file: &str) -> String {
+    format!(
+        "diff --git a/{file} b/{file}\n\
+         index 1111111..2222222 100644\n\
+         --- a/{file}\n\
+         +++ b/{file}\n\
+         @@ -1 +1 @@\n\
+         -{file} was\n\
+         +{file} is\n"
+    )
+}
+
+/// gitu reads all of its input before it draws anything, so input it cannot get
+/// to the end of quickly has to stop somewhere. A file diff cut short is dropped
+/// whole: what is left is a patch, not a fragment of one.
+#[test]
+fn input_past_the_limit_is_cut_back_to_whole_file_diffs() {
+    let mut ctx = setup_clone!();
+    let first = one_hunk_patch("a.rs");
+    let patch = format!("{first}{}", one_hunk_patch("b.rs"));
+    ctx.config().general.max_input_bytes = (first.len() + 60) as u64;
+
+    let mut app = ctx.init_app_with_patch(patch);
+    ctx.update(&mut app, keys("j"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(!buffer.contains("b.rs"), "{buffer}");
+    // Where the reading stopped, which is not where anyone starts reading.
+    assert!(
+        buffer.find("a.rs is") < buffer.find("input truncated at"),
+        "{buffer}"
+    );
+}
+
+/// A hunk missing its last lines is one git will not apply, so the hunk the
+/// limit fell inside goes too.
+#[test]
+fn a_hunk_the_limit_cut_short_is_dropped() {
+    let mut ctx = setup_clone!();
+    let patch = "diff --git a/f.rs b/f.rs\n\
+                 index 1111111..2222222 100644\n\
+                 --- a/f.rs\n\
+                 +++ b/f.rs\n\
+                 @@ -1 +1 @@\n\
+                 -first was\n\
+                 +first is\n\
+                 @@ -9 +9 @@\n\
+                 -second was\n\
+                 +second is\n";
+    ctx.config().general.max_input_bytes = (patch.find("+second").unwrap() + 4) as u64;
+
+    let mut app = ctx.init_app_with_patch(patch.to_owned());
+    ctx.update(&mut app, keys("j"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("first is"), "{buffer}");
+    assert!(!buffer.contains("second"), "{buffer}");
+}
+
+/// git colours what it writes to its pager, and the line's first character is
+/// what says whether a file diff or a hunk starts there.
+#[test]
+fn a_coloured_patch_is_cut_back_at_the_same_place() {
+    let mut ctx = setup_clone!();
+    let first = one_hunk_patch("a.rs");
+    let coloured = |patch: String| {
+        patch
+            .lines()
+            .map(|line| format!("\x1b[1m{line}\x1b[m\n"))
+            .collect::<String>()
+    };
+    let patch = coloured(format!("{first}{}", one_hunk_patch("b.rs")));
+    ctx.config().general.max_input_bytes = (coloured(first).len() + 60) as u64;
+
+    let _app = ctx.init_app_with_patch(patch);
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("a.rs is"), "{buffer}");
+    assert!(!buffer.contains("b.rs"), "{buffer}");
+}
+
+/// A command gitu puts again can say as much as the pipe did, so what comes
+/// back is read to the same limit.
+#[test]
+fn a_command_that_says_more_than_the_limit_is_cut_back_too() {
+    let mut ctx = setup_clone!();
+    two_changed_files(&ctx);
+    ctx.config().general.max_input_bytes = 150;
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(&mut app, keys("j"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("input truncated at 150 bytes"), "{buffer}");
+    assert!(buffer.contains("alpha"), "{buffer}");
+    assert!(!buffer.contains("beta"), "{buffer}");
+    assert!(offers(&app, Op::Stage), "what is left is still a patch");
+}
+
 /// Rows of the viewport with nothing drawn on them, counted up from the last.
 /// [`TestContext::redact_buffer`] ends with a `styles_hash` line, which is not
 /// one of them.
