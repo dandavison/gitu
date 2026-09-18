@@ -196,6 +196,8 @@ blame.code_line = { mods = "DIM" }
 [bindings]
 root.quit = ["q", "esc"]
 root.refresh = ["g+r"]
+# Go to the status screen, leaving the screen gitu was started on underneath.
+root.status = ["g+s"]
 root.toggle_section = ["tab"]
 root.toggle_all_sections = ["backtab"]
 root.diff_context = ["U"]

@@ -3,23 +3,23 @@ source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
 ────────────────────────────────────────────────────────────────────────────────|
- Help                                   Submenu           On branch main        |
- Y                Show Refs             b   Branch        tab Fold              |
- |                Renderer features     c   Commit                              |
- backtab          Fold all              f   Fetch                               |
- U                Diff context          h/? Help                                |
- :                Edit git command      l   Log                                 |
- _                Files                 m   Merge                               |
- k/up             Up                    M   Remote                              |
- j/down           Down                  F   Pull                                |
- ctrl+k/ctrl+up   Up line               P   Push                                |
- ctrl+j/ctrl+down Down line             r   Rebase                              |
- shift+up         Select up             X   Reset                               |
- shift+down       Select down           V   Revert                              |
- alt+k/alt+up     Prev section          A   Cherry-pick                         |
- alt+j/alt+down   Next section          z   Stash                               |
+ Help                                 Submenu           On branch main          |
+ Y                Show Refs           b   Branch        tab Fold                |
+ g+s              Status              c   Commit                                |
+ |                Renderer features   f   Fetch                                 |
+ backtab          Fold all            h/? Help                                  |
+ U                Diff context        l   Log                                   |
+ :                Edit git command    m   Merge                                 |
+ _                Files               M   Remote                                |
+ k/up             Up                  F   Pull                                  |
+ j/down           Down                P   Push                                  |
+ ctrl+k/ctrl+up   Up line             r   Rebase                                |
+ ctrl+j/ctrl+down Down line           X   Reset                                 |
+ shift+up         Select up           V   Revert                                |
+ shift+down       Select down         A   Cherry-pick                           |
+ alt+k/alt+up     Prev section        z   Stash                                 |
+ alt+j/alt+down   Next section                                                  |
  alt+h/alt+left   Parent section                                                |
  g+g              Top                                                           |
  G                Bottom                                                        |
- ctrl+u           Scroll half page up                                           |
-styles_hash: 21dcc481acad9e34
+styles_hash: b2f854947d48e3e2

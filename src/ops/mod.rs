@@ -34,6 +34,7 @@ pub(crate) mod show;
 pub(crate) mod show_refs;
 pub(crate) mod stage;
 pub(crate) mod stash;
+pub(crate) mod status;
 pub(crate) mod unstage;
 
 pub(crate) type Action = Rc<dyn FnMut(&mut App, &mut Term) -> Res<()>>;
@@ -82,6 +83,7 @@ pub(crate) enum Op {
     Rename,
     RenameRemote,
     ShowRefs,
+    Status,
     Stash,
     StashApply,
     StashIndex,
@@ -227,6 +229,7 @@ impl Op {
             Op::RebaseContinue => Box::new(rebase::RebaseContinue),
             Op::RebaseElsewhere => Box::new(rebase::RebaseElsewhere),
             Op::ShowRefs => Box::new(show_refs::ShowRefs),
+            Op::Status => Box::new(status::Status),
             Op::Stash => Box::new(stash::Stash),
             Op::StashApply => Box::new(stash::StashApply),
             Op::StashIndex => Box::new(stash::StashIndex),

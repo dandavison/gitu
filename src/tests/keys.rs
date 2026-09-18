@@ -10,4 +10,5 @@
 
 pub const HELP: &str = "h";
 pub const REFRESH: &str = "gr";
+pub const STATUS: &str = "gs";
 pub const HALF_PAGE_DOWN: &str = "<ctrl+d>";
