@@ -103,6 +103,9 @@ pub(crate) struct Screen {
     /// Whether that keymap is listed on screen. It stays up as long as the
     /// screen does, so it starts out of the way.
     pub(crate) show_menu: bool,
+    /// Whether this is the status screen, so that going to status doesn't put a
+    /// second copy of it on the stack.
+    pub(crate) is_status: bool,
     cursor: usize,
     /// Where a multi-line selection was started, if one is being made. The
     /// selection runs from here to the cursor, inclusive.
@@ -146,6 +149,7 @@ impl Screen {
             anchor: None,
             menu: None,
             show_menu: false,
+            is_status: false,
             scroll: Scroll::default(),
             size: params.size,
             config,

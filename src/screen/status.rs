@@ -48,7 +48,7 @@ pub(crate) fn create(
     repo: Rc<Repository>,
     params: RenderParams,
 ) -> Res<Screen> {
-    Screen::new(
+    let mut screen = Screen::new(
         Arc::clone(&config),
         params,
         Box::new(move |params: RenderParams| {
@@ -136,7 +136,10 @@ pub(crate) fn create(
 
             Ok(items)
         }),
-    )
+    )?;
+
+    screen.is_status = true;
+    Ok(screen)
 }
 
 fn untracked_list(files: &[&String]) -> Vec<Item> {
