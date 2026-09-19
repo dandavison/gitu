@@ -43,7 +43,7 @@ visit_context_lines = false
 # stdin and emits ANSI-colored output.
 #
 # Gitu advertises the OSC-1717 diff-line-metadata protocol to the command (via
-# the OSC1717_METADATA env var). If the renderer speaks it, the diff may be
+# the OSC1717 env var). If the renderer speaks it, the diff may be
 # rendered freely — dropping +/- markers, side-by-side, gutters — and Gitu maps
 # each rendered row back to its patch line for staging. If it doesn't, the
 # command must preserve line structure (`--color-only`), which Gitu maps 1:1.

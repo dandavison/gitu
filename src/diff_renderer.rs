@@ -11,7 +11,7 @@
 //! - A renderer speaking the OSC-1717 diff-line-metadata protocol may restructure
 //!   the diff freely (drop `+`/`-` markers, side-by-side, gutters) and annotate
 //!   each rendered line with its patch-space identity `(file, kind, new/old line)`.
-//!   We advertise the protocol via the `OSC1717_METADATA` env var and attach each
+//!   We advertise the protocol via the `OSC1717` env var and attach each
 //!   record to the line that follows it.
 
 use crate::Res;
@@ -27,8 +27,8 @@ use std::process::{Command, Stdio};
 use std::thread;
 
 /// Protocol versions of the OSC-1717 diff-line-metadata spec we understand,
-/// advertised to the renderer via `OSC1717_METADATA` (a version set, `V`-prefixed).
-const OSC1717_METADATA_ADVERTISED: &str = "V1";
+/// advertised to the renderer via `OSC1717` (a version set, `V`-prefixed).
+const OSC1717_ADVERTISED: &str = "V1";
 
 /// Where delta reads named features from. A leading `+` means "in addition to
 /// the features already in git config", so what the user configured stays the
@@ -253,7 +253,7 @@ pub(crate) fn run(
     let mut command = Command::new(program);
     command
         .args(&args)
-        .env("OSC1717_METADATA", OSC1717_METADATA_ADVERTISED)
+        .env("OSC1717", OSC1717_ADVERTISED)
         .env("COLUMNS", width.to_string())
         .stdin(if input.is_some() {
             Stdio::piped()
