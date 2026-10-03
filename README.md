@@ -1,3 +1,11 @@
+> **This is a fork.** Upstream is [altsem/gitu](https://github.com/altsem/gitu) by altsem,
+> MIT licensed; it is published here as the `delta-gitu` crate, with altsem's agreement, so that
+> [delta](https://github.com/dandavison/delta) can embed it and offer the TUI as `delta --gitu`.
+> The fork adds delta as a diff renderer and the ability to act as git's pager. Only the library
+> is built by default: `cargo install delta-gitu` installs nothing, and this is not intended as an
+> alternative way to get gitu. Install gitu itself from upstream.
+>
+
 ## It's Gitu! - A Git porcelain *outside* of Emacs
 [![CI](https://github.com/altsem/gitu/actions/workflows/ci.yml/badge.svg)](https://github.com/altsem/gitu/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/altsem/gitu/graph/badge.svg?token=5YWPU7GWFW)](https://codecov.io/gh/altsem/gitu)

@@ -1,10 +1,24 @@
 [package]
-name = "gitu"
-description = "A git client inspired by Magit"
-version = "0.43.0"
+name = "delta-gitu"
+description = "An experimental fork of gitu (a git client inspired by Magit), published as a library for delta to embed"
+version = "0.1.0"
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/altsem/gitu"
+repository = "https://github.com/dandavison/gitu"
+
+[lib]
+name = "gitu"
+
+# The binary is not built by default, so `cargo install delta-gitu` installs
+# nothing: this crate exists for delta to embed, not as a second way to get
+# gitu. Build it with `--features bin` for development.
+[[bin]]
+name = "gitu"
+path = "src/main.rs"
+required-features = ["bin"]
+
+[features]
+bin = []
 
 [[bench]]
 name = "show"
