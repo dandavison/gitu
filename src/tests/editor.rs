@@ -192,6 +192,21 @@ fn a_feature_key_toggles_its_feature() {
     assert!(app.state.features.is_empty());
 }
 
+/// The help menu lists feature keys with the other top-level keys.
+#[test]
+fn the_help_menu_lists_feature_keys() {
+    let mut ctx = setup_clone!();
+    with_feature_key(&mut ctx, "side-by-side", 'x');
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("?"));
+    let buffer = ctx.redact_buffer();
+    assert!(
+        regex::Regex::new(r"\bx +side-by-side").unwrap().is_match(&buffer),
+        "{buffer}"
+    );
+}
+
 /// A key that does something already keeps doing it.
 #[test]
 fn a_configured_feature_key_that_is_already_bound_is_a_config_error() {
