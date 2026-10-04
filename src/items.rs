@@ -153,10 +153,15 @@ fn rendered_diff_items(
 ) -> Vec<Item> {
     use crate::diff_renderer::LineKind;
 
-    // Per hunk: the renderer's own hunk-header rows (`h`) to display in place of
-    // `@@`, and the content-line items. `f` (file-header) rows are dropped — gitu
-    // draws its own file header — as are the renderer's blank spacer rows.
+    // Per file and per hunk: the renderer's own header rows (`f`, `h`) to display
+    // in place of gitu's, and per hunk the content-line items. The renderer's
+    // blank spacer rows are dropped.
+    let mut headers_by_file: HashMap<usize, Vec<RenderedRow>> = HashMap::new();
     let mut headers_by_hunk: HashMap<(usize, usize), Vec<RenderedRow>> = HashMap::new();
+    // The file a run of `f` rows belongs to. A path can recur in a log of
+    // patches, so a new run is the next file of its path after the last.
+    let mut file_header: Option<(usize, &str)> = None;
+    let mut next_file = 0;
     let mut content_by_hunk: HashMap<(usize, usize), Vec<Item>> = HashMap::new();
     // The content line the previous row belonged to; a row repeating it is a
     // wrapped continuation of it. Cleared by every other kind of row, so only a
@@ -164,12 +169,31 @@ fn rendered_diff_items(
     let mut last_content: Option<(usize, usize, usize)> = None;
 
     for line in lines {
+        let previous_file_header = file_header.take();
         let Some(first) = line.records.first() else {
             last_content = None;
             continue; // Un-annotated decoration (dividers): dropped.
         };
         match first.kind {
-            LineKind::FileHeader | LineKind::Commit => last_content = None,
+            LineKind::Commit => last_content = None,
+            LineKind::FileHeader => {
+                last_content = None;
+                let file_i = match previous_file_header {
+                    Some((file_i, path)) if path == first.file => Some(file_i),
+                    _ => crate::diff_renderer::resolve_file(diff, first, next_file),
+                };
+                let Some(file_i) = file_i else {
+                    continue;
+                };
+                next_file = file_i + 1;
+                file_header = Some((file_i, &first.file));
+                if !line.text.trim().is_empty() {
+                    headers_by_file
+                        .entry(file_i)
+                        .or_default()
+                        .push(rendered_spans(line));
+                }
+            }
             LineKind::HunkHeader => {
                 last_content = None;
                 if line.text.trim().is_empty() {
@@ -242,8 +266,23 @@ fn rendered_diff_items(
 
     let mut items = Vec::new();
     for (file_i, file_diff) in diff.file_diffs.iter().enumerate() {
+        let file_hash = hash(diff.file_diff_header(file_i));
+        // The renderer's file header, if it drew one: the row naming the file
+        // is the selectable, collapsible File anchor. Decoration above it (a
+        // box's top, an overline) stays above it, and the rest nests under it,
+        // so a collapsed file shows its name. Without one, gitu draws its own.
+        let (above, anchor, below) = split_at_name(headers_by_file.remove(&file_i));
+        for row in above {
+            items.push(Item {
+                id: file_hash,
+                depth,
+                unselectable: true,
+                rendered: Some(Rc::new(row)),
+                ..Default::default()
+            });
+        }
         items.push(Item {
-            id: hash(diff.file_diff_header(file_i)),
+            id: file_hash,
             default_collapsed,
             depth,
             data: ItemData::Delta {
@@ -251,8 +290,18 @@ fn rendered_diff_items(
                 file_i,
                 commit: commit.clone(),
             },
+            rendered: anchor.map(Rc::new),
             ..Default::default()
         });
+        for row in below {
+            items.push(Item {
+                id: file_hash,
+                depth: depth + 1,
+                unselectable: true,
+                rendered: Some(Rc::new(row)),
+                ..Default::default()
+            });
+        }
         for hunk_i in 0..file_diff.hunks.len() {
             let hunk_hash = hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]);
             let hunk = ItemData::Hunk {
@@ -290,6 +339,25 @@ fn rendered_diff_items(
         }
     }
     items
+}
+
+/// A header's rows split around the first that says something, rather than
+/// being decoration drawn with box and line characters.
+fn split_at_name(
+    rows: Option<Vec<RenderedRow>>,
+) -> (Vec<RenderedRow>, Option<RenderedRow>, Vec<RenderedRow>) {
+    let mut rows = rows.unwrap_or_default();
+    let names = |row: &RenderedRow| {
+        row.iter()
+            .any(|(text, _)| text.chars().any(char::is_alphanumeric))
+    };
+    let Some(at) = rows.iter().position(names) else {
+        let mut rows = rows.into_iter();
+        return (Vec::new(), rows.next(), rows.collect());
+    };
+    let below = rows.split_off(at + 1);
+    let anchor = rows.pop();
+    (rows, anchor, below)
 }
 
 /// Colored text as one row per line, keeping the colors it arrived with. For
@@ -1066,11 +1134,13 @@ mod tests {
     #[test]
     fn each_file_of_a_path_seen_twice_has_its_own_header() {
         let diff = diff_from(&DIFF.repeat(2));
-        let lines = parse_ansi_lines(
+        let lines = parse_ansi_lines(&format!(
             "\x1b]1717;1\x1b\\\n\
              \x1b]1717;1;f;;;f.rs\x1b\\• first\n\
-             \x1b]1717;1;f;;;f.rs\x1b\\• second\n",
-        )
+             {ADDED}\
+             \x1b]1717;1;f;;;f.rs\x1b\\• second\n\
+             {ADDED}"
+        ))
         .lines;
 
         let items = rendered_diff_items(&diff, &lines, 0, false, None, false);

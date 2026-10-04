@@ -206,6 +206,14 @@ pub(crate) fn resolve_line(diff: &Diff, meta: &LineMetadata) -> Option<(usize, u
     None
 }
 
+/// The first file at or after `from` that the file-header record `meta` names.
+pub(crate) fn resolve_file(diff: &Diff, meta: &LineMetadata, from: usize) -> Option<usize> {
+    (from..diff.file_diffs.len()).find(|&file_index| {
+        let header = &diff.file_diffs[file_index].header;
+        meta.file == header.new_file.fmt(&diff.text) || meta.file == header.old_file.fmt(&diff.text)
+    })
+}
+
 /// Resolve an `h` (hunk-header) record to `(file_index, hunk_index)` by matching
 /// its file and its `new_line` (the hunk's first new-file line) against the parsed
 /// diff's hunk headers. Lets the host render the renderer's hunk header as the
