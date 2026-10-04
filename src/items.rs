@@ -974,6 +974,115 @@ mod tests {
         );
     }
 
+    /// The rows before the first hunk, as (depth, selectable, is the file,
+    /// text): the file's header as the renderer drew it, or as gitu draws it.
+    fn file_header_rows(items: &[Item]) -> Vec<(usize, bool, bool, String)> {
+        items
+            .iter()
+            .take_while(|item| !matches!(item.data, ItemData::Hunk { .. }))
+            .map(|item| {
+                let text = item
+                    .rendered
+                    .iter()
+                    .flat_map(|row| row.iter())
+                    .map(|(text, _)| text.as_str())
+                    .collect();
+                (
+                    item.depth,
+                    !item.unselectable,
+                    matches!(item.data, ItemData::Delta { .. }),
+                    text,
+                )
+            })
+            .collect()
+    }
+
+    const ADDED: &str = "\x1b]1717;1;a;2;;f.rs\x1b\\+added\n";
+
+    /// The renderer's file header is shown in place of gitu's: the file is the
+    /// row naming it, and decoration below that folds away with the file.
+    #[test]
+    fn the_renderers_file_header_heads_the_file() {
+        let diff = diff_from(DIFF);
+        let lines = parse_ansi_lines(&format!(
+            "\x1b]1717;1\x1b\\\n\
+             \x1b]1717;1;f;;;f.rs\x1b\\• f.rs\n\
+             \x1b]1717;1;f;;;f.rs\x1b\\──────\n\
+             {ADDED}"
+        ))
+        .lines;
+
+        let items = rendered_diff_items(&diff, &lines, 0, false, None, false);
+
+        assert_eq!(
+            file_header_rows(&items),
+            [
+                (0, true, true, "• f.rs".into()),
+                (1, false, false, "──────".into()),
+            ]
+        );
+    }
+
+    /// Decoration drawn above the file's name stays above it, rather than
+    /// becoming the row the file is selected and folded by.
+    #[test]
+    fn decoration_above_the_file_name_stays_above_it() {
+        let diff = diff_from(DIFF);
+        let lines = parse_ansi_lines(&format!(
+            "\x1b]1717;1\x1b\\\n\
+             \x1b]1717;1;f;;;f.rs\x1b\\─────┐\n\
+             \x1b]1717;1;f;;;f.rs\x1b\\• f.rs │\n\
+             \x1b]1717;1;f;;;f.rs\x1b\\─────┘\n\
+             {ADDED}"
+        ))
+        .lines;
+
+        let items = rendered_diff_items(&diff, &lines, 0, false, None, false);
+
+        assert_eq!(
+            file_header_rows(&items),
+            [
+                (0, false, false, "─────┐".into()),
+                (0, true, true, "• f.rs │".into()),
+                (1, false, false, "─────┘".into()),
+            ]
+        );
+    }
+
+    /// A renderer told to draw no file header (delta's `file-style = omit`)
+    /// leaves gitu's.
+    #[test]
+    fn without_the_renderers_file_header_gitu_draws_its_own() {
+        let diff = diff_from(DIFF);
+        let lines = parse_ansi_lines(&format!("\x1b]1717;1\x1b\\\n{ADDED}")).lines;
+
+        let items = rendered_diff_items(&diff, &lines, 0, false, None, false);
+
+        assert_eq!(file_header_rows(&items), [(0, true, true, String::new())]);
+    }
+
+    /// A log of patches can change the same file in several commits, so a
+    /// header belongs to the next file of its path, not the first.
+    #[test]
+    fn each_file_of_a_path_seen_twice_has_its_own_header() {
+        let diff = diff_from(&DIFF.repeat(2));
+        let lines = parse_ansi_lines(
+            "\x1b]1717;1\x1b\\\n\
+             \x1b]1717;1;f;;;f.rs\x1b\\• first\n\
+             \x1b]1717;1;f;;;f.rs\x1b\\• second\n",
+        )
+        .lines;
+
+        let items = rendered_diff_items(&diff, &lines, 0, false, None, false);
+
+        let file_rows: Vec<String> = items
+            .iter()
+            .filter(|item| matches!(item.data, ItemData::Delta { .. }))
+            .map(|item| item.rendered.as_ref().unwrap()[0].0.clone())
+            .collect();
+        assert_eq!(file_rows, ["• first", "• second"]);
+    }
+
     /// A renderer that wraps a long line emits several rows for it, re-emitting
     /// the same record on each (OSC-1717 §6.3). Those continuation rows are one
     /// diff line, so only the first takes the cursor; the rest nest under it, as

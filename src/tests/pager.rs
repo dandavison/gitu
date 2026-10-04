@@ -1049,3 +1049,44 @@ fn hunk_header_renderer() -> Vec<String> {
         })
         .collect()
 }
+
+/// The file header the renderer draws (delta's `file-style` and
+/// `file-decoration-style`) is the file's row: it folds the file, and the
+/// file's commands act from it.
+#[test]
+fn the_renderers_file_header_folds_and_stages_its_file() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
+    ctx.config().general.diff_renderer.enabled = true;
+    ctx.config().general.diff_renderer.command = file_header_renderer();
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("~ firstfile ~"), "{buffer}");
+    assert!(buffer.contains("==========="), "{buffer}");
+    assert!(!buffer.contains("modified   firstfile"), "{buffer}");
+
+    ctx.update(&mut app, keys("k<tab>"));
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("~ firstfile ~"), "{buffer}");
+    assert!(!buffer.contains("==========="), "{buffer}");
+    assert!(!buffer.contains("changed"), "{buffer}");
+
+    ctx.update(&mut app, keys("s"));
+    assert!(run(&ctx.dir, &["git", "diff", "--cached"]).contains("+changed"));
+}
+
+/// [`osc_1717_passthrough`], drawing each file's header its own way, named and
+/// underlined, as delta does.
+fn file_header_renderer() -> Vec<String> {
+    osc_1717_passthrough()
+        .into_iter()
+        .map(|arg| {
+            arg.replace(
+                r#"/^\+\+\+ /{file=substr($0,7);print;next}"#,
+                r#"/^\+\+\+ /{file=substr($0,7);printf "\033]1717;1;f;;;%s\033\\~ %s ~\n\033]1717;1;f;;;%s\033\\===========\n",file,file,file;next}"#,
+            )
+        })
+        .collect()
+}
