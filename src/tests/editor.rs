@@ -202,7 +202,9 @@ fn the_help_menu_lists_feature_keys() {
     ctx.update(&mut app, keys("?"));
     let buffer = ctx.redact_buffer();
     assert!(
-        regex::Regex::new(r"\bx +side-by-side").unwrap().is_match(&buffer),
+        regex::Regex::new(r"\bx +side-by-side")
+            .unwrap()
+            .is_match(&buffer),
         "{buffer}"
     );
 }

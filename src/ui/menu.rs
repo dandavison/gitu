@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use crate::item_data::ItemData;
+use crate::menu::Menu;
 use crate::menu::arg::Arg;
 use crate::style::Style;
 use crate::ui::item::{layout_item, layout_item_data};
@@ -59,6 +60,22 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
         })
         .partition(|(op, _binds)| matches!(op, Op::OpenMenu(_)));
 
+    // Feature keys are top-level keys, so they are listed where those are.
+    let feature_binds: Vec<_> = if matches!(pending.menu, Menu::Root | Menu::Help) {
+        state
+            .feature_keys
+            .iter()
+            .map(|(feature, key)| {
+                (
+                    key.to_string().into(),
+                    MenuValue::Text(feature.as_str().into()),
+                )
+            })
+            .collect()
+    } else {
+        vec![]
+    };
+
     let separator_style = Style::from(&style.separator);
 
     layout.col(opts(), |layout| {
@@ -92,28 +109,35 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
                 });
             }
 
-            // Column 2: Submenus
-            if !menu_binds.is_empty() {
+            // Column 2: Submenus, and the keys toggling renderer features
+            if !menu_binds.is_empty() || !feature_binds.is_empty() {
                 layout.col(opts(), |layout| {
-                    layout_line(layout, "Submenu".into(), Style::from(&style.menu.heading));
+                    if !menu_binds.is_empty() {
+                        layout_line(layout, "Submenu".into(), Style::from(&style.menu.heading));
 
-                    layout_keybinds_table(
-                        layout,
-                        config,
-                        menu_binds
-                            .into_iter()
-                            .map(|(op, binds)| {
-                                let Op::OpenMenu(menu) = op else {
-                                    unreachable!();
-                                };
+                        layout_keybinds_table(
+                            layout,
+                            config,
+                            menu_binds
+                                .into_iter()
+                                .map(|(op, binds)| {
+                                    let Op::OpenMenu(menu) = op else {
+                                        unreachable!();
+                                    };
 
-                                (
-                                    binds.iter().map(|bind| bind.raw.as_str()).join("/").into(),
-                                    MenuValue::Text(menu.to_string().into()),
-                                )
-                            })
-                            .collect(),
-                    );
+                                    (
+                                        binds.iter().map(|bind| bind.raw.as_str()).join("/").into(),
+                                        MenuValue::Text(menu.to_string().into()),
+                                    )
+                                })
+                                .collect(),
+                        );
+                    }
+
+                    if !feature_binds.is_empty() {
+                        layout_line(layout, "Feature".into(), Style::from(&style.menu.heading));
+                        layout_keybinds_table(layout, config, feature_binds);
+                    }
                 });
             }
 
