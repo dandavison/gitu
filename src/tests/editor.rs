@@ -147,6 +147,69 @@ fn renderer_features_offers_the_configured_ones() {
     snapshot!(setup_clone!(), "|");
 }
 
+/// A feature's key toggles it straight from the list, so `| s` is the whole of
+/// it.
+#[test]
+fn a_feature_key_toggles_its_feature() {
+    let mut ctx = setup_clone!();
+    ctx.config()
+        .general
+        .diff_renderer
+        .feature_keys
+        .insert("side-by-side".into(), 's');
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("|s"));
+    assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
+}
+
+/// Once something is typed, a letter is part of a filter, not a key.
+#[test]
+fn a_feature_key_is_a_letter_once_something_is_typed() {
+    let mut ctx = setup_clone!();
+    ctx.config()
+        .general
+        .diff_renderer
+        .feature_keys
+        .insert("side-by-side".into(), 'i');
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("|li<enter>"));
+    assert_eq!(&*app.state.features, ["line-numbers".to_string()]);
+}
+
+/// A key set from the list works at once, and is saved to the user's config
+/// file for next time, beside what was already there.
+#[test]
+fn a_feature_key_set_from_the_list_is_used_and_saved() {
+    let mut ctx = setup_clone!();
+    let dir = temp_dir::TempDir::new().unwrap();
+    let path = dir.path().join("config.toml");
+    std::fs::write(&path, "# mine\n[general]\nvisit_context_lines = true\n").unwrap();
+    ctx.config().path = path.clone();
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("|side<ctrl+t>s"));
+    assert!(
+        app.state.features.is_empty(),
+        "setting a key toggles nothing"
+    );
+
+    ctx.update(&mut app, keys("|s"));
+    assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
+
+    assert!(
+        std::fs::read_to_string(&path)
+            .unwrap()
+            .starts_with("# mine\n")
+    );
+    let saved = crate::config::init_config(Some(path)).unwrap();
+    assert_eq!(
+        saved.general.diff_renderer.feature_keys.get("side-by-side"),
+        Some(&'s')
+    );
+}
+
 /// The features the user defined for themselves are theirs to choose from too,
 /// by a pattern rather than one by one.
 #[test]

@@ -151,6 +151,7 @@ mod tests {
         use crate::config::{GeneralConfig, PickerBindingsConfig, StyleConfig};
 
         Config {
+            path: Default::default(),
             general: GeneralConfig::default(),
             style: StyleConfig::default(),
             bindings: BTreeMap::new().try_into().unwrap(),

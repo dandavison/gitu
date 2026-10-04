@@ -13,6 +13,9 @@ use serde::Deserialize;
 const DEFAULT_CONFIG: &str = include_str!("default_config.toml");
 
 pub struct Config {
+    /// The file the user's configuration is read from, whether or not it
+    /// exists, and so the one gitu writes to.
+    pub path: PathBuf,
     pub general: GeneralConfig,
     pub style: StyleConfig,
     pub bindings: Bindings,
@@ -96,6 +99,10 @@ pub struct DiffRendererConfig {
     /// off while viewing a diff.
     #[serde(default)]
     pub features: Vec<String>,
+    /// Keys that toggle a feature from `renderer_features` before anything is
+    /// typed to filter it, by feature.
+    #[serde(default)]
+    pub feature_keys: BTreeMap<String, char>,
 }
 
 #[derive(Default, Debug, Deserialize)]
@@ -399,7 +406,7 @@ pub fn init_config(path: Option<PathBuf>) -> Res<Config> {
         bindings: bindings_config,
     } = Figment::new()
         .merge(Toml::string(DEFAULT_CONFIG))
-        .merge(Toml::file(config_path))
+        .merge(Toml::file(&config_path))
         .extract()
         .map_err(Box::new)
         .map_err(Error::Config)?;
@@ -407,6 +414,7 @@ pub fn init_config(path: Option<PathBuf>) -> Res<Config> {
     let picker_bindings = PickerBindings::try_from(bindings_config.picker)?;
 
     Ok(Config {
+        path: config_path,
         general,
         style,
         bindings,
@@ -446,6 +454,9 @@ pub(crate) fn init_test_config() -> Res<Config> {
     };
 
     Ok(Config {
+        // A test that writes config says where; one that doesn't must not
+        // write the user's.
+        path: PathBuf::from("/nonexistent/gitu/config.toml"),
         general,
         style,
         bindings: Bindings::try_from(bindings_config.menus).unwrap(),
