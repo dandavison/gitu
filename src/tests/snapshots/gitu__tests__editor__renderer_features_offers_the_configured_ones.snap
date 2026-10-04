@@ -11,10 +11,10 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- 3/3   Renderer feature › █                                                     |
+ 2/2   Renderer feature › █                                                     |
 ▌  side-by-side                                                                 |
    line-numbers                                                                 |
-   hyperlinks                                                                   |
+                                                                                |
                                                                                 |
                                                                                 |
                                                                                 |

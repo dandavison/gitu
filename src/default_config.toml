@@ -63,10 +63,13 @@ diff_renderer.command = ["delta", "--color-only", "--true-color", "always"]
 # session and never written to disk.
 #
 # Any feature you have defined in git config as `[delta "name"]` can be named
-# here alongside delta's built-in ones. A feature is free to restructure the
-# diff however it likes: Gitu maps each rendered row back to its patch line from
-# the metadata the renderer emits, not from how the row looks.
-diff_renderer.features = ["side-by-side", "line-numbers", "hyperlinks"]
+# here alongside delta's built-in ones, singly or by a pattern: `*` matches any
+# run of characters and `?` any one, so "*" offers every feature defined in git
+# config, including any themes included there. A pattern matches only those,
+# not delta's built-in features. A feature is free to restructure the diff
+# however it likes: Gitu maps each rendered row back to its patch line from the
+# metadata the renderer emits, not from how the row looks.
+diff_renderer.features = ["side-by-side", "line-numbers"]
 
 # Render the log view with a command of your own instead of Gitu's built-in
 # one-line-per-commit list. The command is run in the repository and its

@@ -19,6 +19,7 @@ use crate::error::Error;
 use crate::git::diff::Diff;
 use crate::style::{Color, Modifier, Style};
 use anstyle_parse::{DefaultCharAccumulator, Params, Parser, Perform};
+use regex::Regex;
 use std::io::Write;
 use std::mem;
 use std::ops::Range;
@@ -306,27 +307,67 @@ fn feature_overlay(features: &[String]) -> Option<String> {
     Some(format!("+{}", features.join(" ")))
 }
 
-/// The renderer features to offer: those gitu is configured with, followed by
-/// every `[delta "name"]` section the user has defined, so a feature of their
-/// own is offered without their having to name it to gitu as well.
+/// The renderer features to offer: those gitu is configured with, in order. An
+/// entry with `*` or `?` in it is a pattern, and stands for the features defined
+/// in git config as `[delta "name"]` that it matches.
 pub(crate) fn offered_features(
     configured: &[String],
     git_config: &git2::Config,
 ) -> Res<Vec<String>> {
+    let defined = defined_features(git_config)?;
+    let mut offered = Vec::new();
+    for entry in configured {
+        let names = match glob(entry) {
+            Some(pattern) => defined
+                .iter()
+                .filter(|name| pattern.is_match(name))
+                .cloned()
+                .collect(),
+            None => vec![entry.clone()],
+        };
+        for name in names {
+            if !offered.contains(&name) {
+                offered.push(name);
+            }
+        }
+    }
+
+    Ok(offered)
+}
+
+/// Every feature defined in git config as `[delta "name"]`, sorted.
+fn defined_features(git_config: &git2::Config) -> Res<Vec<String>> {
     let mut defined = Vec::new();
     let mut entries = git_config.entries(None).map_err(Error::ReadGitConfig)?;
     while let Some(entry) = entries.next() {
         let entry = entry.map_err(Error::ReadGitConfig)?;
-        if let Some(name) = entry.name().and_then(feature_name)
-            && !configured.contains(&name)
-        {
+        if let Some(name) = entry.name().and_then(feature_name) {
             defined.push(name);
         }
     }
 
     defined.sort();
     defined.dedup();
-    Ok(configured.iter().cloned().chain(defined).collect())
+    Ok(defined)
+}
+
+/// `entry` as a regex, if it is a pattern: `*` matches any run of characters
+/// and `?` any one.
+fn glob(entry: &str) -> Option<Regex> {
+    if !entry.contains(['*', '?']) {
+        return None;
+    }
+
+    let mut pattern = String::from("^");
+    for c in entry.chars() {
+        match c {
+            '*' => pattern.push_str(".*"),
+            '?' => pattern.push('.'),
+            c => pattern.push_str(&regex::escape(c.encode_utf8(&mut [0; 4]))),
+        }
+    }
+    pattern.push('$');
+    Some(Regex::new(&pattern).expect("an escaped glob is a valid regex"))
 }
 
 /// The feature a `delta.<name>.<key>` config entry belongs to. A subsection name
