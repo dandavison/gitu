@@ -1,8 +1,13 @@
-use std::{cell::RefCell, collections::HashMap, ops::Range, path::Path};
+#[cfg(feature = "syntax-highlighting")]
+use std::{cell::RefCell, collections::HashMap};
+use std::{ops::Range, path::Path};
+#[cfg(feature = "syntax-highlighting")]
 use tree_sitter::Language;
+#[cfg(feature = "syntax-highlighting")]
 use tree_sitter_highlight::{Highlight, HighlightConfiguration, HighlightEvent, Highlighter};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(feature = "syntax-highlighting"), allow(dead_code))]
 pub enum SyntaxTag {
     Attribute,
     Comment,
@@ -57,6 +62,7 @@ impl AsRef<str> for SyntaxTag {
     }
 }
 
+#[cfg(feature = "syntax-highlighting")]
 fn tags_by_highlight_index() -> [SyntaxTag; 22] {
     [
         SyntaxTag::Attribute,
@@ -84,6 +90,7 @@ fn tags_by_highlight_index() -> [SyntaxTag; 22] {
     ]
 }
 
+#[cfg(feature = "syntax-highlighting")]
 #[derive(PartialEq, Eq, Hash, Debug)]
 enum Lang {
     Rust,
@@ -109,6 +116,7 @@ enum Lang {
     Elixir,
 }
 
+#[cfg(feature = "syntax-highlighting")]
 /// The defaults for these seem to exist in the `package.json` of each repo:
 /// `curl https://raw.githubusercontent.com/tree-sitter/tree-sitter-html/master/package.json | jq -r '."tree-sitter"'`
 fn determine_lang(path: &Path) -> Option<Lang> {
@@ -140,6 +148,7 @@ fn determine_lang(path: &Path) -> Option<Lang> {
     }
 }
 
+#[cfg(feature = "syntax-highlighting")]
 fn create_highlight_config(lang: &Lang) -> HighlightConfiguration {
     let (lang_fn, hquery, iquery, lquery) = match lang {
         Lang::Rust => (
@@ -278,11 +287,13 @@ fn create_highlight_config(lang: &Lang) -> HighlightConfiguration {
     highlight_config
 }
 
+#[cfg(feature = "syntax-highlighting")]
 thread_local! {
     pub static HIGHLIGHTER: RefCell<Highlighter> = RefCell::new(Highlighter::new());
     pub static LANG_CONFIGS: RefCell<HashMap<Lang, HighlightConfiguration>> = RefCell::new(HashMap::new());
 }
 
+#[cfg(feature = "syntax-highlighting")]
 pub(crate) fn parse<'a>(path: &'a Path, content: &'a str) -> Vec<(Range<usize>, SyntaxTag)> {
     let tags = tags_by_highlight_index();
 
@@ -318,7 +329,12 @@ pub(crate) fn parse<'a>(path: &'a Path, content: &'a str) -> Vec<(Range<usize>, 
     })
 }
 
-#[cfg(test)]
+#[cfg(not(feature = "syntax-highlighting"))]
+pub(crate) fn parse(_path: &Path, _content: &str) -> Vec<(Range<usize>, SyntaxTag)> {
+    vec![]
+}
+
+#[cfg(all(test, feature = "syntax-highlighting"))]
 mod tests {
     use super::*;
 
