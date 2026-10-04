@@ -262,12 +262,12 @@ fn another_letter_replaces_the_key() {
     let (_dir, path) = config_file(&mut ctx, "");
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("|xy<esc>x"));
+    ctx.update(&mut app, keys("|xw<esc>x"));
     assert!(app.state.features.is_empty());
 
-    ctx.update(&mut app, keys("y"));
+    ctx.update(&mut app, keys("w"));
     assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
-    assert_eq!(saved_feature_keys(&path), [("side-by-side".into(), 'y')]);
+    assert_eq!(saved_feature_keys(&path), [("side-by-side".into(), 'w')]);
 }
 
 #[test]

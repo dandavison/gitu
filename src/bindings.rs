@@ -61,6 +61,14 @@ impl Bindings {
             .filter(|binding| binding.keys.starts_with(events))
     }
 
+    /// Whether `key` does something at the top level, alone or as the first of
+    /// several keys.
+    pub(crate) fn binds_at_top_level(&self, key: char) -> bool {
+        self.match_bindings(&Menu::Root, &[(KeyModifiers::NONE, KeyCode::Char(key))])
+            .next()
+            .is_some()
+    }
+
     pub(crate) fn list<'a>(&'a self, pending: &Menu) -> impl Iterator<Item = &'a Binding> {
         let expected = if pending == &Menu::Help {
             Menu::Root

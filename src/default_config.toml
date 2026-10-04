@@ -71,9 +71,10 @@ diff_renderer.command = ["delta", "--color-only", "--true-color", "always"]
 # metadata the renderer emits, not from how the row looks.
 diff_renderer.features = ["side-by-side", "line-numbers"]
 
-# Keys that toggle a feature from `renderer_features` before anything is typed
-# to filter the list, e.g. `{ side-by-side = "s" }` makes `| s` toggle it.
-# `picker.set_key` sets one from the list, and Gitu writes it here.
+# Top-level keys that toggle features, e.g. `{ side-by-side = "x" }`. A key
+# already bound at the top level is refused. In the `renderer_features` list, a
+# letter sets the selected feature's key, the same letter again unsets it, and
+# Gitu writes it here.
 diff_renderer.feature_keys = {}
 
 # Render the log view with a command of your own instead of Gitu's built-in
@@ -254,9 +255,6 @@ picker.next = ["down", "ctrl+n", "tab"]
 picker.previous = ["up", "ctrl+p", "backtab"]
 picker.done = ["enter"]
 picker.cancel = ["esc", "ctrl+c"]
-# Followed by a key, gives the selected item that key, in a list whose items
-# have keys (`renderer_features`). The key is saved to this file.
-picker.set_key = ["ctrl+t"]
 
 root.help_menu = ["h", "?"]
 help_menu.quit = ["q", "h", "?", "esc"]

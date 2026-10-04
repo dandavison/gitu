@@ -374,7 +374,21 @@ impl App {
                     self.handle_op(op, term)?;
                 }
             }
-            [] => self.state.pending_keys.clear(),
+            [] => {
+                let feature = match self.state.pending_keys[..] {
+                    [(KeyModifiers::NONE, KeyCode::Char(key))] if menu == Menu::Root => self
+                        .state
+                        .feature_keys
+                        .iter()
+                        .find(|(_, held)| **held == key)
+                        .map(|(feature, _)| feature.clone()),
+                    _ => None,
+                };
+                self.state.pending_keys.clear();
+                if let Some(feature) = feature {
+                    crate::ops::editor::toggle_feature(self, &feature)?;
+                }
+            }
             [_, ..] => (),
         }
 
@@ -788,7 +802,7 @@ impl App {
             .pick_or_set_key(term, picker_state)?
             .map(|picked| match picked {
                 Picked::Item(data) => data,
-                Picked::KeySet(..) => unreachable!("only a picker with hot keys sets keys"),
+                Picked::KeySet(..) => unreachable!("only a picker assigning keys sets them"),
             }))
     }
 
@@ -893,15 +907,7 @@ impl App {
                 _ => None,
             };
 
-            if picker.key_target().is_some() {
-                match typed {
-                    Some(c) => picker.set_key(c),
-                    None if bindings.cancel.iter().any(|b| b == &key_combo) => {
-                        picker.stop_setting_key()
-                    }
-                    None => (),
-                }
-            } else if bindings.next.iter().any(|b| b == &key_combo) {
+            if bindings.next.iter().any(|b| b == &key_combo) {
                 picker.next();
             } else if bindings.previous.iter().any(|b| b == &key_combo) {
                 picker.previous();
@@ -909,9 +915,11 @@ impl App {
                 picker.done();
             } else if bindings.cancel.iter().any(|b| b == &key_combo) {
                 picker.cancel();
-            } else if bindings.set_key.iter().any(|b| b == &key_combo) {
-                picker.start_setting_key();
-            } else if !typed.is_some_and(|c| picker.press_hot_key(c)) {
+            } else if picker.assigns_keys() {
+                if let Some(c) = typed {
+                    picker.set_key(c);
+                }
+            } else {
                 // Text input - delegate to text state
                 picker.input_state.handle_key_event(key);
                 picker.update_filter();

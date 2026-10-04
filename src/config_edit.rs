@@ -8,27 +8,26 @@ use toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value};
 /// Make `key` toggle `feature`, taking it from any feature that had it; or,
 /// with `None`, give `feature` no key.
 pub(crate) fn set_feature_key(path: &Path, feature: &str, key: Option<char>) -> Res<()> {
-    let Some(key) = key else {
-        return Ok(());
-    };
+    let key = key.map(String::from);
     edit(path, |doc| {
         let feature_keys = feature_keys(doc);
-        let key = key.to_string();
-        let holders: Vec<String> = feature_keys
+        let replaced: Vec<String> = feature_keys
             .as_table_like()
             .expect("feature_keys is a table")
             .iter()
-            .filter(|(_, held)| held.as_str() == Some(&key))
-            .map(|(holder, _)| holder.to_owned())
+            .filter(|(name, held)| *name == feature || held.as_str() == key.as_deref())
+            .map(|(name, _)| name.to_owned())
             .collect();
 
         let table = feature_keys
             .as_table_like_mut()
             .expect("feature_keys is a table");
-        for holder in holders {
-            table.remove(&holder);
+        for name in replaced {
+            table.remove(&name);
         }
-        table.insert(feature, toml_edit::value(key));
+        if let Some(key) = key {
+            table.insert(feature, toml_edit::value(key));
+        }
 
         // An inline table holds no comments, so normalising its spacing loses
         // nothing; a section's entries keep theirs.
@@ -106,9 +105,9 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("gitu/config.toml");
 
-        set_feature_key(&path, "side-by-side", Some('s')).unwrap();
+        set_feature_key(&path, "side-by-side", Some('x')).unwrap();
 
-        assert_eq!(feature_keys(&path), [("side-by-side".into(), 's')]);
+        assert_eq!(feature_keys(&path), [("side-by-side".into(), 'x')]);
     }
 
     /// The file is the user's: what they wrote, and how, stays.
@@ -126,13 +125,13 @@ mod tests {
                     root.discard = [\"k\"]\n";
         fs::write(&path, mine).unwrap();
 
-        set_feature_key(&path, "side-by-side", Some('s')).unwrap();
+        set_feature_key(&path, "side-by-side", Some('x')).unwrap();
 
         let written = fs::read_to_string(&path).unwrap();
         for line in mine.lines() {
             assert!(written.contains(line), "lost {line:?} from:\n{written}");
         }
-        assert_eq!(feature_keys(&path), [("side-by-side".into(), 's')]);
+        assert_eq!(feature_keys(&path), [("side-by-side".into(), 'x')]);
     }
 
     #[test]
@@ -140,10 +139,10 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("config.toml");
         let mine = "[general.diff_renderer.feature_keys]\n\
-                    line-numbers = \"l\"  # mine\n";
+                    line-numbers = \"w\"  # mine\n";
         fs::write(&path, mine).unwrap();
 
-        set_feature_key(&path, "side-by-side", Some('s')).unwrap();
+        set_feature_key(&path, "side-by-side", Some('x')).unwrap();
 
         let written = fs::read_to_string(&path).unwrap();
         assert!(written.starts_with(mine), "{written}");
@@ -154,11 +153,11 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("config.toml");
 
-        set_feature_key(&path, "side-by-side", Some('s')).unwrap();
-        set_feature_key(&path, "line-numbers", Some('l')).unwrap();
+        set_feature_key(&path, "side-by-side", Some('x')).unwrap();
+        set_feature_key(&path, "line-numbers", Some('w')).unwrap();
         set_feature_key(&path, "side-by-side", None).unwrap();
 
-        assert_eq!(feature_keys(&path), [("line-numbers".into(), 'l')]);
+        assert_eq!(feature_keys(&path), [("line-numbers".into(), 'w')]);
     }
 
     #[test]
@@ -166,11 +165,11 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("config.toml");
 
-        set_feature_key(&path, "side-by-side", Some('s')).unwrap();
-        set_feature_key(&path, "line-numbers", Some('l')).unwrap();
-        set_feature_key(&path, "line-numbers", Some('s')).unwrap();
+        set_feature_key(&path, "side-by-side", Some('x')).unwrap();
+        set_feature_key(&path, "line-numbers", Some('w')).unwrap();
+        set_feature_key(&path, "line-numbers", Some('x')).unwrap();
 
-        assert_eq!(feature_keys(&path), [("line-numbers".into(), 's')]);
+        assert_eq!(feature_keys(&path), [("line-numbers".into(), 'x')]);
     }
 
     /// A config kept in a dotfiles repo is often a link into it.
@@ -182,9 +181,9 @@ mod tests {
         fs::write(&target, "[general]\n").unwrap();
         std::os::unix::fs::symlink(&target, &link).unwrap();
 
-        set_feature_key(&link, "side-by-side", Some('s')).unwrap();
+        set_feature_key(&link, "side-by-side", Some('x')).unwrap();
 
         assert!(fs::symlink_metadata(&link).unwrap().is_symlink());
-        assert_eq!(feature_keys(&target), [("side-by-side".into(), 's')]);
+        assert_eq!(feature_keys(&target), [("side-by-side".into(), 'x')]);
     }
 }

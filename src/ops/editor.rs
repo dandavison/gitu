@@ -411,38 +411,23 @@ impl OpTrait for RendererFeatures {
                 return Ok(());
             }
 
-            let keys = &app.state.feature_keys;
-            let items = offered
-                .iter()
-                .map(|feature| {
-                    let mark = if app.state.features.contains(feature) {
-                        '●'
-                    } else {
-                        ' '
-                    };
-                    let key = keys.get(feature).copied().unwrap_or(' ');
-                    PickerItem::new(
-                        format!("{mark} {key} {feature}"),
-                        PickerData::Item(feature.clone()),
-                    )
-                })
-                .collect();
-            let hot_keys = offered
-                .iter()
-                .enumerate()
-                .filter_map(|(i, feature)| keys.get(feature).map(|key| (*key, i)))
-                .collect();
-
-            let picker = PickerState::new("Renderer feature", items, false).with_hot_keys(hot_keys);
-            match app.pick_or_set_key(term, picker)? {
-                None => Ok(()),
-                Some(Picked::Item(picked)) => {
-                    app.state.features = toggled(&app.state.features, picked.display());
-                    app.rerender_screens()
-                }
-                Some(Picked::KeySet(key, picked)) => {
-                    set_feature_key(app, picked.display(), key);
-                    Ok(())
+            let mut cursor = 0;
+            loop {
+                let picker =
+                    PickerState::new("Renderer features", feature_items(app, &offered), false)
+                        .assigning_keys()
+                        .with_cursor(cursor);
+                match app.pick_or_set_key(term, picker)? {
+                    None => return Ok(()),
+                    Some(Picked::Item(picked)) => return toggle_feature(app, picked.display()),
+                    Some(Picked::KeySet(key, picked)) => {
+                        let feature = picked.display();
+                        cursor = offered
+                            .iter()
+                            .position(|offered| offered == feature)
+                            .unwrap_or(0);
+                        set_feature_key(app, feature, key);
+                    }
                 }
             }
         }))
@@ -453,19 +438,52 @@ impl OpTrait for RendererFeatures {
     }
 }
 
-/// Make `key` toggle `feature` from now on, in this session and, by saving it to
-/// the config file, the next.
-fn set_feature_key(app: &mut App, feature: &str, key: char) {
-    app.state.feature_keys.retain(|_, held| *held != key);
-    app.state.feature_keys.insert(feature.to_owned(), key);
+/// Each feature, marked if it is on, beside its key if it has one.
+fn feature_items(app: &App, offered: &[String]) -> Vec<PickerItem> {
+    offered
+        .iter()
+        .map(|feature| {
+            let mark = if app.state.features.contains(feature) {
+                '●'
+            } else {
+                ' '
+            };
+            let key = app.state.feature_keys.get(feature).copied().unwrap_or(' ');
+            PickerItem::new(
+                format!("{mark} {key} {feature}"),
+                PickerData::Item(feature.clone()),
+            )
+        })
+        .collect()
+}
 
-    let path = app.state.config.path.clone();
-    match crate::config_edit::set_feature_key(&path, feature, Some(key)) {
-        Ok(()) => app.display_info(format!(
-            "{key} toggles {feature} (saved to {})",
-            path.display()
-        )),
-        Err(e) => app.display_error(e.to_string()),
+pub(crate) fn toggle_feature(app: &mut App, feature: &str) -> Res<()> {
+    app.state.features = toggled(&app.state.features, feature);
+    app.rerender_screens()
+}
+
+/// Make `key` toggle `feature` at the top level, in this session and, by saving
+/// it to the config file, the next. `feature`'s own key unsets it, and a key
+/// bound already is refused.
+fn set_feature_key(app: &mut App, feature: &str, key: char) {
+    let key = if app.state.feature_keys.get(feature) == Some(&key) {
+        None
+    } else if app.state.config.bindings.binds_at_top_level(key) {
+        app.display_error(format!("{key} is bound already"));
+        return;
+    } else {
+        Some(key)
+    };
+
+    app.state
+        .feature_keys
+        .retain(|name, held| name != feature && Some(*held) != key);
+    if let Some(key) = key {
+        app.state.feature_keys.insert(feature.to_owned(), key);
+    }
+
+    if let Err(e) = crate::config_edit::set_feature_key(&app.state.config.path, feature, key) {
+        app.display_error(e.to_string());
     }
 }
 

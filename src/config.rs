@@ -32,8 +32,6 @@ pub(crate) struct PickerBindingsConfig {
     pub done: Vec<String>,
     #[serde(default)]
     pub cancel: Vec<String>,
-    #[serde(default)]
-    pub set_key: Vec<String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -347,7 +345,6 @@ pub struct PickerBindings {
     pub previous: Vec<Vec<(KeyModifiers, KeyCode)>>,
     pub done: Vec<Vec<(KeyModifiers, KeyCode)>>,
     pub cancel: Vec<Vec<(KeyModifiers, KeyCode)>>,
-    pub set_key: Vec<Vec<(KeyModifiers, KeyCode)>>,
 }
 
 impl TryFrom<PickerBindingsConfig> for PickerBindings {
@@ -360,7 +357,6 @@ impl TryFrom<PickerBindingsConfig> for PickerBindings {
         let previous = parse_picker_keys(&config.previous, "picker.previous", &mut bad_bindings);
         let done = parse_picker_keys(&config.done, "picker.done", &mut bad_bindings);
         let cancel = parse_picker_keys(&config.cancel, "picker.cancel", &mut bad_bindings);
-        let set_key = parse_picker_keys(&config.set_key, "picker.set_key", &mut bad_bindings);
 
         if !bad_bindings.is_empty() {
             return Err(Error::Bindings {
@@ -373,7 +369,6 @@ impl TryFrom<PickerBindingsConfig> for PickerBindings {
             previous,
             done,
             cancel,
-            set_key,
         })
     }
 }
@@ -417,6 +412,7 @@ pub fn init_config(path: Option<PathBuf>) -> Res<Config> {
         .map_err(Error::Config)?;
     let bindings = Bindings::try_from(bindings_config.menus)?;
     let picker_bindings = PickerBindings::try_from(bindings_config.picker)?;
+    check_feature_keys(&general.diff_renderer.feature_keys, &bindings)?;
 
     Ok(Config {
         path: config_path,
@@ -425,6 +421,24 @@ pub fn init_config(path: Option<PathBuf>) -> Res<Config> {
         bindings,
         picker_bindings,
     })
+}
+
+/// A feature's key is a top-level key, so one that is bound already would do two
+/// things.
+fn check_feature_keys(feature_keys: &BTreeMap<String, char>, bindings: &Bindings) -> Res<()> {
+    let taken: Vec<String> = feature_keys
+        .iter()
+        .filter(|(_, key)| bindings.binds_at_top_level(**key))
+        .map(|(feature, key)| {
+            format!("- general.diff_renderer.feature_keys.{feature} = {key} (bound already)")
+        })
+        .collect();
+    if !taken.is_empty() {
+        return Err(Error::Bindings {
+            bad_key_bindings: taken,
+        });
+    }
+    Ok(())
 }
 
 pub fn config_path() -> PathBuf {
