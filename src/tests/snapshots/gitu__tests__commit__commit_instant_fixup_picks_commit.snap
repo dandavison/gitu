@@ -15,11 +15,11 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-────────────────────────────────────────────────────────────────────────────────|
-$ git commit --fixup d5b0e9e4d77bd304a7dbbf857cf10f6647cc903d                   |
-[main 3423524] fixup! add alpha.txt                                             |
- Author: Author Name <author@email.com>                                         |
- 1 file changed, 1 insertion(+), 1 deletion(-)                                  |
-$ git rebase -i -q --autostash --keep-empty --autosquash                        |
-d5b0e9e4d77bd304a7dbbf857cf10f6647cc903d^                                       |
-styles_hash: 27485b0270807e83
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: ba8ccaa27e37dd5a

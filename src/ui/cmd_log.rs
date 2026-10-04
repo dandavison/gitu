@@ -12,8 +12,15 @@ pub(crate) fn layout_cmd_log<'a>(
     log: &CmdLog,
     config: &Config,
     width: usize,
+    debug: bool,
 ) {
-    if log.is_empty() {
+    if log.is_empty()
+        || (!debug
+            && log
+                .entries
+                .iter()
+                .all(|entry| matches!(&*entry.read().unwrap(), CmdLogEntry::Cmd { .. })))
+    {
         return;
     }
 
@@ -21,6 +28,9 @@ pub(crate) fn layout_cmd_log<'a>(
 
     layout.col(opts(), |layout| {
         for entry in &log.entries {
+            if !debug && matches!(&*entry.read().unwrap(), CmdLogEntry::Cmd { .. }) {
+                continue;
+            }
             layout_entry(layout, entry, config);
         }
     });

@@ -95,6 +95,7 @@ fn layout_panels<'a>(layout: &mut UiTree<'a>, state: &'a State, size: (u16, u16)
         &state.current_cmd_log,
         &state.config,
         size.0 as usize,
+        state.debug,
     );
     layout_prompt(layout, state, size.0 as usize);
     layout_picker(layout, state, size.0 as usize);

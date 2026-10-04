@@ -36,6 +36,10 @@ pub struct Args {
     #[clap(long, action)]
     pub log: bool,
 
+    /// Show external command output in the message area.
+    #[clap(long, action)]
+    pub debug: bool,
+
     #[clap(long, action)]
     /// Print version
     pub version: bool,
