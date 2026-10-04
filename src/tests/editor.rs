@@ -148,10 +148,11 @@ fn renderer_features_offers_the_configured_ones() {
 }
 
 /// The features the user defined for themselves are theirs to choose from too,
-/// without their having to name them to gitu as well.
+/// by a pattern rather than one by one.
 #[test]
-fn renderer_features_offers_those_defined_in_git_config() {
+fn renderer_features_offers_those_in_git_config_a_pattern_matches() {
     let mut ctx = setup_clone!();
+    ctx.config().general.diff_renderer.features = vec!["*".into()];
     run(
         &ctx.dir,
         &["git", "config", "delta.my-theme.syntax-theme", "Nord"],

@@ -642,11 +642,8 @@ mod tests {
         (dir, config)
     }
 
-    /// A feature the user defined as `[delta "name"]` is offered without their
-    /// having to name it in gitu's config as well.
-    #[test]
-    fn features_defined_in_git_config_are_offered() {
-        let (_dir, git_config) = git_config_of(
+    fn features_config() -> (temp_dir::TempDir, git2::Config) {
+        git_config_of(
             "[delta]\n\
              \tnavigate = true\n\
              [delta \"my-theme\"]\n\
@@ -654,21 +651,44 @@ mod tests {
              \tsyntax-theme = Nord\n\
              [delta \"boxed\"]\n\
              \thunk-header-style = box\n",
-        );
-
-        assert_eq!(
-            offered_features(&["side-by-side".into()], &git_config).unwrap(),
-            ["side-by-side", "boxed", "my-theme"]
-        );
+        )
     }
 
-    /// A feature named in both places is one feature, kept where gitu put it.
+    fn offered(configured: &[&str], git_config: &git2::Config) -> Vec<String> {
+        let configured: Vec<String> = configured.iter().copied().map(String::from).collect();
+        offered_features(&configured, git_config).unwrap()
+    }
+
+    /// A theme collection included into git config defines dozens of features,
+    /// so the ones offered are the ones named.
     #[test]
-    fn a_feature_named_in_both_places_is_offered_once() {
+    fn features_defined_in_git_config_are_offered_only_when_named() {
+        let (_dir, git_config) = features_config();
+
+        assert_eq!(offered(&["side-by-side"], &git_config), ["side-by-side"]);
+    }
+
+    /// A pattern names the features defined in git config that it matches.
+    #[test]
+    fn a_pattern_offers_the_features_in_git_config_it_matches() {
+        let (_dir, git_config) = features_config();
+
+        assert_eq!(
+            offered(&["side-by-side", "*"], &git_config),
+            ["side-by-side", "boxed", "my-theme"]
+        );
+        assert_eq!(offered(&["my-*"], &git_config), ["my-theme"]);
+        assert_eq!(offered(&["?oxed"], &git_config), ["boxed"]);
+    }
+
+    /// A feature named in both places is one feature, kept where it was first
+    /// named.
+    #[test]
+    fn a_feature_named_twice_is_offered_once() {
         let (_dir, git_config) = git_config_of("[delta \"side-by-side\"]\n\twidth = 100\n");
 
         assert_eq!(
-            offered_features(&["side-by-side".into(), "line-numbers".into()], &git_config).unwrap(),
+            offered(&["side-by-side", "line-numbers", "*"], &git_config),
             ["side-by-side", "line-numbers"]
         );
     }
