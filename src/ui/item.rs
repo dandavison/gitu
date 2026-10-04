@@ -27,25 +27,14 @@ pub(crate) fn layout_item<'a>(
     config: &Config,
     base: Style,
 ) {
+    let style = &config.style;
+
     if let Some(rendered) = &item.rendered {
         for (text, span_style) in rendered.iter() {
             layout_span(layout, (text.as_str().into(), base.patch(*span_style)));
         }
         return;
     }
-
-    layout_item_data(layout, item, config, base);
-}
-
-/// Lays out an [`Item`] from its data, as gitu describes it, whether or not a
-/// renderer drew it.
-pub(crate) fn layout_item_data<'a>(
-    layout: &mut UiTree<'a>,
-    item: &'a Item,
-    config: &Config,
-    base: Style,
-) {
-    let style = &config.style;
 
     match &item.data {
         ItemData::Raw(content) => {

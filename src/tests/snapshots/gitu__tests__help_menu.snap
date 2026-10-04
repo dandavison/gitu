@@ -3,7 +3,7 @@ source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
 ────────────────────────────────────────────────────────────────────────────────|
- Help                                 Submenu           On branch main          |
+ Commands                             Submenus          Section                 |
  Y                Show Refs           b   Branch        tab Fold                |
  g+s              Status              c   Commit                                |
  |                Renderer features   f   Fetch                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  alt+h/alt+left   Parent section                                                |
  g+g              Top                                                           |
  G                Bottom                                                        |
-styles_hash: b2f854947d48e3e2
+styles_hash: a254dde074423202

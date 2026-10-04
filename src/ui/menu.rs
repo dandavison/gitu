@@ -1,10 +1,8 @@
 use std::borrow::Cow;
 
-use crate::item_data::ItemData;
 use crate::menu::Menu;
 use crate::menu::arg::Arg;
 use crate::style::Style;
-use crate::ui::item::{layout_item, layout_item_data};
 use crate::ui::layout::opts;
 use crate::ui::{self, UiTree, layout_line, layout_span, repeat_chars};
 use crate::{app::State, config::Config, ops::Op};
@@ -85,11 +83,11 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
             // Column 1: Main menu commands
             if !non_menu_binds.is_empty() {
                 layout.col(opts(), |layout| {
-                    layout_line(
-                        layout,
-                        pending.menu.to_string().into(),
-                        Style::from(&style.menu.heading),
-                    );
+                    let heading = match pending.menu {
+                        Menu::Root | Menu::Help => "Commands".into(),
+                        menu => menu.to_string(),
+                    };
+                    layout_line(layout, heading.into(), Style::from(&style.menu.heading));
 
                     layout_keybinds_table(
                         layout,
@@ -113,7 +111,7 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
             if !menu_binds.is_empty() || !feature_binds.is_empty() {
                 layout.col(opts(), |layout| {
                     if !menu_binds.is_empty() {
-                        layout_line(layout, "Submenu".into(), Style::from(&style.menu.heading));
+                        layout_line(layout, "Submenus".into(), Style::from(&style.menu.heading));
 
                         layout_keybinds_table(
                             layout,
@@ -144,22 +142,11 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
             // Column 3: Target commands and arguments
             layout.col(opts(), |layout| {
                 if !target_binds.is_empty() {
-                    layout.row(opts(), |layout| {
-                        // A renderer draws a diff's rows for the width of the
-                        // screen, in gutters and panels, which this column
-                        // would clip to a fragment.
-                        let is_diff_row = matches!(
-                            item.data,
-                            ItemData::Delta { .. }
-                                | ItemData::Hunk { .. }
-                                | ItemData::HunkLine { .. }
-                        );
-                        if is_diff_row {
-                            layout_item_data(layout, item, config, Style::new());
-                        } else {
-                            layout_item(layout, item, config, Style::new());
-                        }
-                    });
+                    layout_line(
+                        layout,
+                        item.data.kind().into(),
+                        Style::from(&style.menu.heading),
+                    );
 
                     layout_keybinds_table(
                         layout,

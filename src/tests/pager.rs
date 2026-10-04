@@ -1019,7 +1019,7 @@ fn the_help_menu_heads_its_columns_by_what_is_in_them() {
     ctx.update(&mut app, keys("?"));
     assert_eq!(menu_headings(&ctx), ["Commands", "Submenus", "Hunk"]);
 
-    ctx.update(&mut app, keys("<esc>j?"));
+    ctx.update(&mut app, keys("<esc><ctrl+j>?"));
     assert_eq!(menu_headings(&ctx), ["Commands", "Submenus", "Line"]);
 }
 

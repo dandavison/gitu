@@ -86,6 +86,30 @@ pub(crate) struct BlameFile {
 }
 
 impl ItemData {
+    /// What kind of thing the row is, as a heading for the commands that act
+    /// on it.
+    pub(crate) fn kind(&self) -> &'static str {
+        match self {
+            ItemData::Raw(_) | ItemData::HunkLine { .. } | ItemData::BlameCodeLine { .. } => "Line",
+            ItemData::AllUnstaged(_) => "Unstaged changes",
+            ItemData::AllStaged(_) => "Staged changes",
+            ItemData::AllUntracked(_) => "Untracked files",
+            ItemData::Reference { kind, .. } => match kind {
+                Ref::Tag(_) => "Tag",
+                Ref::Head(_) | Ref::Remote(_) => "Branch",
+            },
+            ItemData::Commit { .. }
+            | ItemData::RebaseTodo { .. }
+            | ItemData::BlameHeader { .. } => "Commit",
+            ItemData::Untracked(_) | ItemData::Delta { .. } => "File",
+            ItemData::Hunk { .. } => "Hunk",
+            ItemData::Stash { .. } => "Stash",
+            ItemData::Header(_) => "Section",
+            ItemData::BranchStatus(..) => "Branch",
+            ItemData::Error(_) => "Error",
+        }
+    }
+
     pub(crate) fn is_section(&self) -> bool {
         matches!(
             self,
