@@ -109,8 +109,9 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
 
             // Column 2: Submenus, and the keys toggling renderer features
             if !menu_binds.is_empty() || !feature_binds.is_empty() {
+                let has_submenus = !menu_binds.is_empty();
                 layout.col(opts(), |layout| {
-                    if !menu_binds.is_empty() {
+                    if has_submenus {
                         layout_line(layout, "Submenus".into(), Style::from(&style.menu.heading));
 
                         layout_keybinds_table(
@@ -133,6 +134,9 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
                     }
 
                     if !feature_binds.is_empty() {
+                        if has_submenus {
+                            layout_line(layout, " ".into(), Style::new());
+                        }
                         layout_line(layout, "Features".into(), Style::from(&style.menu.heading));
                         layout_keybinds_table(layout, config, feature_binds);
                     }

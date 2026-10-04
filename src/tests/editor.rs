@@ -209,6 +209,13 @@ fn the_help_menu_lists_feature_keys() {
     );
 }
 
+#[test]
+fn the_help_menu_sets_feature_keys_apart_from_submenus() {
+    let mut ctx = setup_clone!();
+    with_feature_key(&mut ctx, "side-by-side", 'x');
+    snapshot!(ctx, "?");
+}
+
 /// A key that does something already keeps doing it.
 #[test]
 fn a_configured_feature_key_that_is_already_bound_is_a_config_error() {

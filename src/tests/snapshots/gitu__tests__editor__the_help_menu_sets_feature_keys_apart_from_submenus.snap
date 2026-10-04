@@ -1,0 +1,25 @@
+---
+source: src/tests/editor.rs
+expression: ctx.redact_buffer()
+---
+────────────────────────────────────────────────────────────────────────────────|
+ Commands                             Submenus          Section                 |
+ Y                Show Refs           b   Branch        tab Fold                |
+ g+s              Status              c   Commit                                |
+ |                Renderer features   f   Fetch                                 |
+ backtab          Fold all            h/? Help                                  |
+ U                Diff context        l   Log                                   |
+ :                Edit git command    m   Merge                                 |
+ _                Files               M   Remote                                |
+ k/up             Up                  F   Pull                                  |
+ j/down           Down                P   Push                                  |
+ ctrl+k/ctrl+up   Up line             r   Rebase                                |
+ ctrl+j/ctrl+down Down line           X   Reset                                 |
+ shift+up         Select up           V   Revert                                |
+ shift+down       Select down         A   Cherry-pick                           |
+ alt+k/alt+up     Prev section        z   Stash                                 |
+ alt+j/alt+down   Next section                                                  |
+ alt+h/alt+left   Parent section      Features                                  |
+ g+g              Top                 x side-by-side                            |
+ G                Bottom                                                        |
+styles_hash: 3716a68634c08868
