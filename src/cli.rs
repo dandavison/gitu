@@ -28,6 +28,10 @@ pub struct Args {
     #[clap(long, action, verbatim_doc_comment)]
     pub pager: bool,
 
+    /// With --pager, print what fits on one screen and exit, as less's --quit-if-one-screen.
+    #[clap(long, action, requires = "pager")]
+    pub quit_if_one_screen: bool,
+
     /// Enable logging to 'gitu.log'
     #[clap(long, action)]
     pub log: bool,

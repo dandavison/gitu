@@ -111,11 +111,26 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
         Rc::new(repo),
         term.size().map_err(Error::Term)?,
         args,
-        config,
+        Arc::clone(&config),
         true,
         piped,
     )?;
 
+    if args.quit_if_one_screen && app.print_if_one_screen(term)? {
+        return Ok(app.state.exit_code);
+    }
+
+    if args.print {
+        return run_app(&mut app, args, term);
+    }
+
+    term.setup_term(&config).map_err(Error::Term)?;
+    let result = run_app(&mut app, args, term);
+    term.reset_term(&config).map_err(Error::Term)?;
+    result
+}
+
+fn run_app(app: &mut app::App, args: &cli::Args, term: &mut Term) -> Res<i32> {
     if let Some(keys_string) = &args.keys {
         let ("", keys) = key_parser::parse_keys(keys_string).expect("Couldn't parse keys") else {
             panic!("Couldn't parse keys");

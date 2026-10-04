@@ -4,7 +4,7 @@ use crossterm::{
     QueueableCommand,
     cursor::{self, MoveTo},
     event::{DisableMouseCapture, EnableMouseCapture, Event},
-    style::{Attribute, Colors, Print, SetAttribute, SetColors},
+    style::{Attribute, Colors, Print, ResetColor, SetAttribute, SetColors},
     terminal::{
         Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
         enable_raw_mode,
@@ -156,6 +156,19 @@ impl TermBackend {
             }
             TermBackend::Test { buffer, .. } => {
                 buffer.link = uri.map(str::to_owned);
+                Ok(())
+            }
+        }
+    }
+
+    pub(crate) fn queue_newline(&mut self) -> Res<()> {
+        match self {
+            TermBackend::Crossterm(t) => {
+                crossterm::queue!(t, ResetColor, SetAttribute(Attribute::Reset), Print("\n"))
+                    .map_err(Error::Term)
+            }
+            TermBackend::Test { buffer, .. } => {
+                buffer.cursor = (0, buffer.cursor.1 + 1);
                 Ok(())
             }
         }

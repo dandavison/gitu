@@ -324,9 +324,17 @@ impl App {
         Ok(())
     }
 
-    /// Prints the screen and says so if it fits on the terminal.
-    pub fn print_if_one_screen(&self, _term: &mut Term) -> Res<bool> {
-        Ok(false)
+    /// Prints the screen, and says so, if it fits on the terminal with a row
+    /// to spare for the shell's prompt: less's `--quit-if-one-screen`.
+    pub fn print_if_one_screen(&self, term: &mut Term) -> Res<bool> {
+        let screen = self.state.screens.last().unwrap();
+        let (_, rows) = term.size().map_err(Error::Term)?;
+        if !screen.fits_in(rows.saturating_sub(1).into()) {
+            return Ok(false);
+        }
+
+        screen::print_screen(term, screen)?;
+        Ok(true)
     }
 
     pub fn stage_redraw(&mut self) {

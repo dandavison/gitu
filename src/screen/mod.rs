@@ -2,7 +2,8 @@ use crate::config::StyleConfig;
 use crate::error::Error;
 use crate::search::RunText;
 use crate::style::Style;
-use crate::ui::layout::{LayoutTree, opts};
+use crate::term::TermBackend;
+use crate::ui::layout::{LayoutTree, Payload, opts};
 use crate::ui::{UiTree, layout_span};
 use crate::{
     Res,
@@ -16,7 +17,7 @@ use regex::{Regex, RegexBuilder};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashSet;
-use std::iter::successors;
+use std::iter::{self, successors};
 use std::ops::RangeInclusive;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -844,6 +845,15 @@ impl Screen {
         lines.min(limit)
     }
 
+    /// Whether every row, folded or not, fits in `rows`.
+    pub(crate) fn fits_in(&self, rows: usize) -> bool {
+        let mut height = 0;
+        (0..self.items.len()).all(|item_i| {
+            height += self.item_height(item_i);
+            height <= rows
+        })
+    }
+
     /// Whether the screen renders no lines at all, e.g. the log of a branch
     /// with no commits.
     fn is_empty(&self) -> bool {
@@ -1259,6 +1269,26 @@ pub(crate) fn layout_screen<'a>(layout: &mut UiTree<'a>, screen: &'a Screen, hid
             layout_item(layout, screen, hide_cursor, view);
         }
     });
+}
+
+/// Every row, folded or not, printed where the terminal's cursor is rather
+/// than drawn as a frame, so that it stays in the scrollback.
+pub(crate) fn print_screen(term: &mut TermBackend, screen: &Screen) -> Res<()> {
+    for item in &screen.items {
+        let mut layout = UiTree::new();
+        layout.row(opts(), |layout| {
+            ui::item::layout_item(layout, item, &screen.config, Style::new())
+        });
+
+        for computed in layout.compute([screen.size.0, 1]).iter() {
+            if let Payload::Leaf(span) = computed.data {
+                ui::print_span(term, span, iter::empty(), Style::new())?;
+            }
+        }
+        term.queue_newline()?;
+    }
+
+    term.flush().map_err(Error::Term)
 }
 
 fn layout_item<'a>(layout: &mut UiTree<'a>, screen: &'a Screen, hide_cursor: bool, line: ItemView) {

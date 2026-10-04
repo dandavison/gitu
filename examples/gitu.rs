@@ -2,9 +2,9 @@ use clap::Parser;
 use gitu::{
     Res,
     cli::{self, Args, Commands},
-    config::{self, Config},
+    config,
     error::Error,
-    term::{self, Term},
+    term,
 };
 use log::LevelFilter;
 use std::{backtrace::Backtrace, fmt::Display, panic, process, sync::Arc};
@@ -40,24 +40,12 @@ pub fn main() -> Res<()> {
         eprintln!("trace: \n{}", Backtrace::force_capture());
     }));
 
-    log::debug!("Initializing terminal backend");
-    let mut term = term::backend();
-
-    if !args.print {
-        term.setup_term(&config_ref).map_err(Error::Term)?;
-    }
-
-    let result = setup_term_and_run(&mut term, config_ref.clone(), &args);
-    term.reset_term(&config_ref).map_err(Error::Term)?;
+    log::debug!("Starting app");
+    let result = gitu::run(config_ref, &args, &mut term::backend());
 
     // A sequence editor that hands nothing back exits non-zero, so git calls
     // the rebase off.
     process::exit(result?);
-}
-
-fn setup_term_and_run(term: &mut Term, config: Arc<Config>, args: &Args) -> Res<i32> {
-    log::debug!("Starting app");
-    gitu::run(config, args, term)
 }
 
 fn print_err<T, E: Display>(result: Result<T, E>) {

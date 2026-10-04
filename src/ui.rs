@@ -354,7 +354,7 @@ fn print_spans(
     Ok(())
 }
 
-fn print_span(
+pub(crate) fn print_span(
     term: &mut TermBackend,
     span: &Span,
     matches: impl Iterator<Item = Range<usize>>,

@@ -1,0 +1,26 @@
+---
+source: src/tests/pager.rs
+assertion_line: 969
+expression: ctx.redact_buffer()
+---
+modified   firstfile                                                            |
+@@ -1,2 +1,2 @@                                                                 |
+-testing                                                                        |
++changed                                                                        |
+ testtest                                                                       |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: e5760a6fdb0a09b3
