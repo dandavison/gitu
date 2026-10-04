@@ -1,8 +1,9 @@
 use std::borrow::Cow;
 
+use crate::item_data::ItemData;
 use crate::menu::arg::Arg;
 use crate::style::Style;
-use crate::ui::item::layout_item;
+use crate::ui::item::{layout_item, layout_item_data};
 use crate::ui::layout::opts;
 use crate::ui::{self, UiTree, layout_line, layout_span, repeat_chars};
 use crate::{app::State, config::Config, ops::Op};
@@ -120,7 +121,20 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
             layout.col(opts(), |layout| {
                 if !target_binds.is_empty() {
                     layout.row(opts(), |layout| {
-                        layout_item(layout, item, config, Style::new());
+                        // A renderer draws a diff's rows for the width of the
+                        // screen, in gutters and panels, which this column
+                        // would clip to a fragment.
+                        let is_diff_row = matches!(
+                            item.data,
+                            ItemData::Delta { .. }
+                                | ItemData::Hunk { .. }
+                                | ItemData::HunkLine { .. }
+                        );
+                        if is_diff_row {
+                            layout_item_data(layout, item, config, Style::new());
+                        } else {
+                            layout_item(layout, item, config, Style::new());
+                        }
                     });
 
                     layout_keybinds_table(
