@@ -73,6 +73,7 @@ pub(crate) fn create_diff_items(
     commit: Option<String>,
 ) -> Vec<Item> {
     if config.general.diff_renderer.enabled
+        && !diff.text.is_empty()
         && let Some(items) = create_rendered_diff_items(
             config,
             params,
@@ -1019,6 +1020,27 @@ mod tests {
             2,
             "both content lines of the diff are still there"
         );
+    }
+
+    /// A clean worktree has empty staged and unstaged diffs; running the
+    /// renderer on them costs a process start each and draws nothing.
+    #[test]
+    fn an_empty_diff_does_not_run_the_renderer() {
+        let dir = temp_dir::TempDir::new().unwrap();
+        let ran = dir.child("ran");
+        let mut config = crate::config::init_test_config().unwrap();
+        config.general.diff_renderer.enabled = true;
+        config.general.diff_renderer.command = vec![
+            "sh".into(),
+            "-c".into(),
+            r#"touch "$0""#.into(),
+            ran.to_string_lossy().into_owned(),
+        ];
+
+        let items = create_diff_items(&config, &Default::default(), &diff_from(""), 0, false, None);
+
+        assert!(items.is_empty());
+        assert!(!ran.exists(), "the renderer ran");
     }
 
     /// However many rows a line wraps to, they are still one line: each is a
