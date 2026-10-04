@@ -178,6 +178,18 @@ fn a_feature_key_is_a_letter_once_something_is_typed() {
     assert_eq!(&*app.state.features, ["line-numbers".to_string()]);
 }
 
+/// Each feature's key is shown beside it, and setting one says whose it will be.
+#[test]
+fn the_list_shows_feature_keys_and_asks_for_one() {
+    let mut ctx = setup_clone!();
+    ctx.config()
+        .general
+        .diff_renderer
+        .feature_keys
+        .insert("line-numbers".into(), 'l');
+    snapshot!(ctx, "|<ctrl+t>");
+}
+
 /// A key set from the list works at once, and is saved to the user's config
 /// file for next time, beside what was already there.
 #[test]

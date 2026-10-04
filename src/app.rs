@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::io::Read;
 use std::io::Write;
@@ -35,6 +36,7 @@ use crate::menu::PendingMenu;
 use crate::ops::Op;
 use crate::picker::PickerData;
 use crate::picker::PickerState;
+use crate::picker::{Picked, PickerStatus};
 use crate::prompt;
 use crate::rebase_todo::RebaseTodo;
 use crate::screen;
@@ -69,6 +71,8 @@ pub(crate) struct State {
     /// How much of a file to ask git for around each change (`-U8`, `-W`),
     /// chosen in-session. `None` is git's own default.
     pub context: Option<Rc<str>>,
+    /// The keys that toggle renderer features, as configured and as set since.
+    pub feature_keys: BTreeMap<String, char>,
     pub clipboard: Option<Clipboard>,
     needs_redraw: bool,
     file_watcher: Option<FileWatcher>,
@@ -149,6 +153,7 @@ impl App {
         let mut app = Self {
             state: State {
                 repo,
+                feature_keys: config.general.diff_renderer.feature_keys.clone(),
                 config,
                 pending_keys: vec![],
                 enable_async_cmds,
@@ -779,6 +784,20 @@ impl App {
     /// }
     /// ```
     pub fn pick(&mut self, term: &mut Term, picker_state: PickerState) -> Res<Option<PickerData>> {
+        Ok(self
+            .pick_or_set_key(term, picker_state)?
+            .map(|picked| match picked {
+                Picked::Item(data) => data,
+                Picked::KeySet(..) => unreachable!("only a picker with hot keys sets keys"),
+            }))
+    }
+
+    /// [`App::pick`], for a picker whose items can be given keys.
+    pub(crate) fn pick_or_set_key(
+        &mut self,
+        term: &mut Term,
+        picker_state: PickerState,
+    ) -> Res<Option<Picked>> {
         self.state.picker = Some(picker_state);
         let result = self.handle_picker(term);
 
@@ -834,7 +853,7 @@ impl App {
         }
     }
 
-    fn handle_picker(&mut self, term: &mut Term) -> Res<Option<PickerData>> {
+    fn handle_picker(&mut self, term: &mut Term) -> Res<Option<Picked>> {
         self.redraw_now(term)?;
 
         loop {
@@ -842,12 +861,15 @@ impl App {
             self.handle_event(term, event)?;
 
             if let Some(ref picker) = self.state.picker {
-                if picker.is_done() {
-                    // User selected an item
-                    return Ok(picker.selected().map(|item| item.data.clone()));
-                } else if picker.is_cancelled() {
+                let selected = || picker.selected().map(|item| item.data.clone());
+                match *picker.status() {
+                    PickerStatus::Done => return Ok(selected().map(Picked::Item)),
+                    PickerStatus::KeySet(key) => {
+                        return Ok(selected().map(|data| Picked::KeySet(key, data)));
+                    }
                     // User cancelled - this is not an error
-                    return Ok(None);
+                    PickerStatus::Cancelled => return Ok(None),
+                    PickerStatus::Active => (),
                 }
             }
 
@@ -863,8 +885,23 @@ impl App {
         if let Some(ref mut picker) = self.state.picker {
             let bindings = &self.state.config.picker_bindings;
             let key_combo = vec![(key.modifiers, key.code)];
+            let typed = match (key.code, key.modifiers) {
+                (
+                    event::KeyCode::Char(c),
+                    event::KeyModifiers::NONE | event::KeyModifiers::SHIFT,
+                ) => Some(c),
+                _ => None,
+            };
 
-            if bindings.next.iter().any(|b| b == &key_combo) {
+            if picker.key_target().is_some() {
+                match typed {
+                    Some(c) => picker.set_key(c),
+                    None if bindings.cancel.iter().any(|b| b == &key_combo) => {
+                        picker.stop_setting_key()
+                    }
+                    None => (),
+                }
+            } else if bindings.next.iter().any(|b| b == &key_combo) {
                 picker.next();
             } else if bindings.previous.iter().any(|b| b == &key_combo) {
                 picker.previous();
@@ -872,7 +909,9 @@ impl App {
                 picker.done();
             } else if bindings.cancel.iter().any(|b| b == &key_combo) {
                 picker.cancel();
-            } else {
+            } else if bindings.set_key.iter().any(|b| b == &key_combo) {
+                picker.start_setting_key();
+            } else if !typed.is_some_and(|c| picker.press_hot_key(c)) {
                 // Text input - delegate to text state
                 picker.input_state.handle_key_event(key);
                 picker.update_filter();

@@ -514,6 +514,7 @@ dependencies = [
  "temp-env",
  "tinyvec",
  "toml",
+ "toml_edit",
  "tree-sitter",
  "tree-sitter-bash",
  "tree-sitter-c",

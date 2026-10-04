@@ -1,13 +1,84 @@
 //! Changes gitu makes to the user's config file, leaving everything else in it
 //! as they wrote it.
 
-use crate::Res;
-use std::path::Path;
+use crate::{Res, error::Error};
+use std::{fs, io, path::Path};
+use toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value};
 
 /// Make `key` toggle `feature` from `renderer_features`, taking it from any
 /// feature that had it.
-pub(crate) fn set_feature_key(_path: &Path, _feature: &str, _key: char) -> Res<()> {
-    Ok(())
+pub(crate) fn set_feature_key(path: &Path, feature: &str, key: char) -> Res<()> {
+    edit(path, |doc| {
+        let feature_keys = feature_keys(doc);
+        let key = key.to_string();
+        let holders: Vec<String> = feature_keys
+            .as_table_like()
+            .expect("feature_keys is a table")
+            .iter()
+            .filter(|(_, held)| held.as_str() == Some(&key))
+            .map(|(holder, _)| holder.to_owned())
+            .collect();
+
+        let table = feature_keys
+            .as_table_like_mut()
+            .expect("feature_keys is a table");
+        for holder in holders {
+            table.remove(&holder);
+        }
+        table.insert(feature, toml_edit::value(key));
+
+        // An inline table holds no comments, so normalising its spacing loses
+        // nothing; a section's entries keep theirs.
+        if let Some(inline) = feature_keys.as_inline_table_mut() {
+            inline.fmt();
+        }
+    })
+}
+
+/// Rewrite the file at `path` with `change` made to it. Writing goes through a
+/// link rather than replacing it, and a missing file is created.
+fn edit(path: &Path, change: impl FnOnce(&mut DocumentMut)) -> Res<()> {
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(Error::EditConfig(e.to_string())),
+    };
+    let mut doc: DocumentMut = text
+        .parse()
+        .map_err(|e: toml_edit::TomlError| Error::EditConfig(e.to_string()))?;
+
+    change(&mut doc);
+
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir).map_err(|e| Error::EditConfig(e.to_string()))?;
+    }
+    fs::write(path, doc.to_string()).map_err(|e| Error::EditConfig(e.to_string()))
+}
+
+/// `general.diff_renderer.feature_keys`, made if missing: as dotted keys under
+/// `[general]`, the way gitu's own default config writes it.
+fn feature_keys(doc: &mut DocumentMut) -> &mut Item {
+    let general = table_in(doc.as_table_mut(), "general", Table::new);
+    let diff_renderer = table_in(general, "diff_renderer", || {
+        let mut dotted = Table::new();
+        dotted.set_dotted(true);
+        dotted
+    });
+    diff_renderer
+        .entry("feature_keys")
+        .or_insert_with(|| Item::Value(Value::InlineTable(InlineTable::new())))
+}
+
+fn table_in<'a>(
+    parent: &'a mut dyn TableLike,
+    key: &str,
+    new: impl FnOnce() -> Table,
+) -> &'a mut dyn TableLike {
+    parent
+        .entry(key)
+        .or_insert_with(|| Item::Table(new()))
+        .as_table_like_mut()
+        .expect("config sections are tables")
 }
 
 #[cfg(test)]
@@ -59,6 +130,20 @@ mod tests {
             assert!(written.contains(line), "lost {line:?} from:\n{written}");
         }
         assert_eq!(feature_keys(&path), [("side-by-side".into(), 's')]);
+    }
+
+    #[test]
+    fn comments_among_the_keys_are_kept() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.toml");
+        let mine = "[general.diff_renderer.feature_keys]\n\
+                    line-numbers = \"l\"  # mine\n";
+        fs::write(&path, mine).unwrap();
+
+        set_feature_key(&path, "side-by-side", 's').unwrap();
+
+        let written = fs::read_to_string(&path).unwrap();
+        assert!(written.starts_with(mine), "{written}");
     }
 
     #[test]

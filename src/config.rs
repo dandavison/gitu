@@ -32,6 +32,8 @@ pub(crate) struct PickerBindingsConfig {
     pub done: Vec<String>,
     #[serde(default)]
     pub cancel: Vec<String>,
+    #[serde(default)]
+    pub set_key: Vec<String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -345,6 +347,7 @@ pub struct PickerBindings {
     pub previous: Vec<Vec<(KeyModifiers, KeyCode)>>,
     pub done: Vec<Vec<(KeyModifiers, KeyCode)>>,
     pub cancel: Vec<Vec<(KeyModifiers, KeyCode)>>,
+    pub set_key: Vec<Vec<(KeyModifiers, KeyCode)>>,
 }
 
 impl TryFrom<PickerBindingsConfig> for PickerBindings {
@@ -357,6 +360,7 @@ impl TryFrom<PickerBindingsConfig> for PickerBindings {
         let previous = parse_picker_keys(&config.previous, "picker.previous", &mut bad_bindings);
         let done = parse_picker_keys(&config.done, "picker.done", &mut bad_bindings);
         let cancel = parse_picker_keys(&config.cancel, "picker.cancel", &mut bad_bindings);
+        let set_key = parse_picker_keys(&config.set_key, "picker.set_key", &mut bad_bindings);
 
         if !bad_bindings.is_empty() {
             return Err(Error::Bindings {
@@ -369,6 +373,7 @@ impl TryFrom<PickerBindingsConfig> for PickerBindings {
             previous,
             done,
             cancel,
+            set_key,
         })
     }
 }

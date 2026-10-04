@@ -23,6 +23,14 @@ impl PickerData {
     }
 }
 
+/// What a picker whose items can be given keys ended with.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Picked {
+    Item(PickerData),
+    /// The item was given this key, rather than picked.
+    KeySet(char, PickerData),
+}
+
 /// An item in the picker list
 #[derive(Debug, Clone, PartialEq)]
 pub struct PickerItem {
@@ -57,6 +65,8 @@ pub enum PickerStatus {
     Done,
     /// User cancelled
     Cancelled,
+    /// User gave the selected item this key
+    KeySet(char),
 }
 
 /// State of the picker component
@@ -79,6 +89,11 @@ pub struct PickerState {
     allow_custom_input: bool,
     /// Custom input item (separate from items list)
     custom_input_item: Option<PickerItem>,
+    /// Keys that pick an item before anything is typed, by item index. Only a
+    /// picker that has them can have keys set.
+    hot_keys: Option<Vec<(char, usize)>>,
+    /// Whether the next key typed is the selected item's new key.
+    setting_key: bool,
 }
 
 pub(crate) struct PickerParams<'a> {
@@ -106,9 +121,59 @@ impl PickerState {
             status: PickerStatus::Active,
             allow_custom_input,
             custom_input_item: None,
+            hot_keys: None,
+            setting_key: false,
         };
         state.update_filter();
         state
+    }
+
+    /// Let `hot_keys` pick their items, and let keys be set.
+    pub(crate) fn with_hot_keys(mut self, hot_keys: Vec<(char, usize)>) -> Self {
+        self.hot_keys = Some(hot_keys);
+        self
+    }
+
+    /// Pick the item `key` is the hot key of, if nothing is typed yet: once
+    /// something is, a letter is part of the filter.
+    pub(crate) fn press_hot_key(&mut self, key: char) -> bool {
+        if !self.pattern().is_empty() {
+            return false;
+        }
+        let Some(&(_, index)) = self
+            .hot_keys
+            .iter()
+            .flatten()
+            .find(|(hot_key, _)| *hot_key == key)
+        else {
+            return false;
+        };
+
+        self.cursor = index;
+        self.done();
+        true
+    }
+
+    /// Take the next key typed as the selected item's.
+    pub(crate) fn start_setting_key(&mut self) {
+        self.setting_key = self.hot_keys.is_some()
+            && self
+                .selected()
+                .is_some_and(|item| matches!(item.data, PickerData::Item(_)));
+    }
+
+    pub(crate) fn stop_setting_key(&mut self) {
+        self.setting_key = false;
+    }
+
+    /// The item whose key is being set, if one is.
+    pub(crate) fn key_target(&self) -> Option<&PickerItem> {
+        self.setting_key.then(|| self.selected()).flatten()
+    }
+
+    pub(crate) fn set_key(&mut self, key: char) {
+        self.setting_key = false;
+        self.status = PickerStatus::KeySet(key);
     }
 
     /// Create a picker showing only local branches by shorthand name.

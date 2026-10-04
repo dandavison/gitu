@@ -5,7 +5,7 @@ use crate::{
     error::Error,
     item_data::ItemData,
     menu::PendingMenu,
-    picker::{PickerData, PickerItem, PickerState},
+    picker::{Picked, PickerData, PickerItem, PickerState},
     screen::NavMode,
     term::Term,
 };
@@ -411,33 +411,61 @@ impl OpTrait for RendererFeatures {
                 return Ok(());
             }
 
+            let keys = &app.state.feature_keys;
             let items = offered
                 .iter()
                 .map(|feature| {
                     let mark = if app.state.features.contains(feature) {
-                        "● "
+                        '●'
                     } else {
-                        "  "
+                        ' '
                     };
+                    let key = keys.get(feature).copied().unwrap_or(' ');
                     PickerItem::new(
-                        format!("{mark}{feature}"),
+                        format!("{mark} {key} {feature}"),
                         PickerData::Item(feature.clone()),
                     )
                 })
                 .collect();
+            let hot_keys = offered
+                .iter()
+                .enumerate()
+                .filter_map(|(i, feature)| keys.get(feature).map(|key| (*key, i)))
+                .collect();
 
-            let picked = app.pick(term, PickerState::new("Renderer feature", items, false))?;
-            let Some(picked) = picked else {
-                return Ok(());
-            };
-
-            app.state.features = toggled(&app.state.features, picked.display());
-            app.rerender_screens()
+            let picker = PickerState::new("Renderer feature", items, false).with_hot_keys(hot_keys);
+            match app.pick_or_set_key(term, picker)? {
+                None => Ok(()),
+                Some(Picked::Item(picked)) => {
+                    app.state.features = toggled(&app.state.features, picked.display());
+                    app.rerender_screens()
+                }
+                Some(Picked::KeySet(key, picked)) => {
+                    set_feature_key(app, picked.display(), key);
+                    Ok(())
+                }
+            }
         }))
     }
 
     fn display(&self, _state: &State) -> String {
         "Renderer features".into()
+    }
+}
+
+/// Make `key` toggle `feature` from now on, in this session and, by saving it to
+/// the config file, the next.
+fn set_feature_key(app: &mut App, feature: &str, key: char) {
+    app.state.feature_keys.retain(|_, held| *held != key);
+    app.state.feature_keys.insert(feature.to_owned(), key);
+
+    let path = app.state.config.path.clone();
+    match crate::config_edit::set_feature_key(&path, feature, key) {
+        Ok(()) => app.display_info(format!(
+            "{key} toggles {feature} (saved to {})",
+            path.display()
+        )),
+        Err(e) => app.display_error(e.to_string()),
     }
 }
 

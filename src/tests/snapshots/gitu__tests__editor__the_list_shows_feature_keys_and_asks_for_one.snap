@@ -11,9 +11,9 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- 2/2   Renderer feature › █                                                     |
+ 2/2   Key for side-by-side › █                                                 |
 ▌    side-by-side                                                               |
-     line-numbers                                                               |
+   l line-numbers                                                               |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 3dabb8cecece42e5
+styles_hash: df4728bd73b87223

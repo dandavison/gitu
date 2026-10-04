@@ -28,6 +28,13 @@ pub(crate) fn layout_picker<'a>(
         layout_span(layout, (status_text.into(), info_style));
 
         // Prompt with separator (like regular prompt)
+        if let Some(target) = state.key_target() {
+            let prompt = format!("Key for {}", target.data.display());
+            layout_span(layout, (prompt.into(), prompt_style));
+            layout_span(layout, (" › ".into(), prompt_style));
+            layout_cursor(layout, "");
+            return;
+        }
         layout_span(layout, (state.prompt_text.as_ref().into(), prompt_style));
         layout_span(layout, (" › ".into(), prompt_style));
         let (before, at_cursor, after) = state.input_state.split_at_cursor();
