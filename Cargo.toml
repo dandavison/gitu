@@ -1,7 +1,7 @@
 [package]
 name = "delta-gitu"
 description = "An experimental fork of gitu (a git client inspired by Magit), published as a library for delta to embed"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/dandavison/gitu"
