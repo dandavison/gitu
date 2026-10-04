@@ -5,9 +5,12 @@ use crate::{Res, error::Error};
 use std::{fs, io, path::Path};
 use toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value};
 
-/// Make `key` toggle `feature` from `renderer_features`, taking it from any
-/// feature that had it.
-pub(crate) fn set_feature_key(path: &Path, feature: &str, key: char) -> Res<()> {
+/// Make `key` toggle `feature`, taking it from any feature that had it; or,
+/// with `None`, give `feature` no key.
+pub(crate) fn set_feature_key(path: &Path, feature: &str, key: Option<char>) -> Res<()> {
+    let Some(key) = key else {
+        return Ok(());
+    };
     edit(path, |doc| {
         let feature_keys = feature_keys(doc);
         let key = key.to_string();
@@ -103,7 +106,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("gitu/config.toml");
 
-        set_feature_key(&path, "side-by-side", 's').unwrap();
+        set_feature_key(&path, "side-by-side", Some('s')).unwrap();
 
         assert_eq!(feature_keys(&path), [("side-by-side".into(), 's')]);
     }
@@ -123,7 +126,7 @@ mod tests {
                     root.discard = [\"k\"]\n";
         fs::write(&path, mine).unwrap();
 
-        set_feature_key(&path, "side-by-side", 's').unwrap();
+        set_feature_key(&path, "side-by-side", Some('s')).unwrap();
 
         let written = fs::read_to_string(&path).unwrap();
         for line in mine.lines() {
@@ -140,10 +143,22 @@ mod tests {
                     line-numbers = \"l\"  # mine\n";
         fs::write(&path, mine).unwrap();
 
-        set_feature_key(&path, "side-by-side", 's').unwrap();
+        set_feature_key(&path, "side-by-side", Some('s')).unwrap();
 
         let written = fs::read_to_string(&path).unwrap();
         assert!(written.starts_with(mine), "{written}");
+    }
+
+    #[test]
+    fn a_feature_given_no_key_loses_it() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.toml");
+
+        set_feature_key(&path, "side-by-side", Some('s')).unwrap();
+        set_feature_key(&path, "line-numbers", Some('l')).unwrap();
+        set_feature_key(&path, "side-by-side", None).unwrap();
+
+        assert_eq!(feature_keys(&path), [("line-numbers".into(), 'l')]);
     }
 
     #[test]
@@ -151,9 +166,9 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("config.toml");
 
-        set_feature_key(&path, "side-by-side", 's').unwrap();
-        set_feature_key(&path, "line-numbers", 'l').unwrap();
-        set_feature_key(&path, "line-numbers", 's').unwrap();
+        set_feature_key(&path, "side-by-side", Some('s')).unwrap();
+        set_feature_key(&path, "line-numbers", Some('l')).unwrap();
+        set_feature_key(&path, "line-numbers", Some('s')).unwrap();
 
         assert_eq!(feature_keys(&path), [("line-numbers".into(), 's')]);
     }
@@ -167,7 +182,7 @@ mod tests {
         fs::write(&target, "[general]\n").unwrap();
         std::os::unix::fs::symlink(&target, &link).unwrap();
 
-        set_feature_key(&link, "side-by-side", 's').unwrap();
+        set_feature_key(&link, "side-by-side", Some('s')).unwrap();
 
         assert!(fs::symlink_metadata(&link).unwrap().is_symlink());
         assert_eq!(feature_keys(&target), [("side-by-side".into(), 's')]);

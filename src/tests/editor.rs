@@ -1,4 +1,5 @@
 use super::*;
+use std::path::{Path, PathBuf};
 
 fn setup_scroll(mut ctx: TestContext) -> (TestContext, crate::app::App) {
     for file in ["file-1", "file-2", "file-3"] {
@@ -147,79 +148,149 @@ fn renderer_features_offers_the_configured_ones() {
     snapshot!(setup_clone!(), "|");
 }
 
-/// A feature's key toggles it straight from the list, so `| s` is the whole of
-/// it.
+fn with_feature_key(ctx: &mut TestContext, feature: &str, key: char) {
+    ctx.config()
+        .general
+        .diff_renderer
+        .feature_keys
+        .insert(feature.into(), key);
+}
+
+/// A config file of the test's own, holding `text`, for setting a key to write
+/// to.
+fn config_file(ctx: &mut TestContext, text: &str) -> (temp_dir::TempDir, PathBuf) {
+    let dir = temp_dir::TempDir::new().unwrap();
+    let path = dir.path().join("config.toml");
+    if !text.is_empty() {
+        fs::write(&path, text).unwrap();
+    }
+    ctx.config().path = path.clone();
+    (dir, path)
+}
+
+fn saved_feature_keys(path: &Path) -> Vec<(String, char)> {
+    crate::config::init_config(Some(path.to_owned()))
+        .unwrap()
+        .general
+        .diff_renderer
+        .feature_keys
+        .into_iter()
+        .collect()
+}
+
+/// A feature's key is a top-level key: it toggles the feature without `|`.
 #[test]
 fn a_feature_key_toggles_its_feature() {
     let mut ctx = setup_clone!();
-    ctx.config()
-        .general
-        .diff_renderer
-        .feature_keys
-        .insert("side-by-side".into(), 's');
+    with_feature_key(&mut ctx, "side-by-side", 'x');
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("|s"));
+    ctx.update(&mut app, keys("x"));
     assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
+
+    ctx.update(&mut app, keys("x"));
+    assert!(app.state.features.is_empty());
 }
 
-/// Once something is typed, a letter is part of a filter, not a key.
+/// A key that does something already keeps doing it.
 #[test]
-fn a_feature_key_is_a_letter_once_something_is_typed() {
+fn a_configured_feature_key_that_is_already_bound_is_a_config_error() {
+    let dir = temp_dir::TempDir::new().unwrap();
+    let path = dir.path().join("config.toml");
+    fs::write(
+        &path,
+        "[general]\ndiff_renderer.feature_keys = { side-by-side = \"s\" }\n",
+    )
+    .unwrap();
+
+    assert!(crate::config::init_config(Some(path)).is_err());
+}
+
+/// The list is moved through, not searched: letters are keys.
+#[test]
+fn the_feature_list_is_moved_through_with_the_arrows() {
     let mut ctx = setup_clone!();
-    ctx.config()
-        .general
-        .diff_renderer
-        .feature_keys
-        .insert("side-by-side".into(), 'i');
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("|li<enter>"));
+    ctx.update(&mut app, keys("|<down><enter>"));
     assert_eq!(&*app.state.features, ["line-numbers".to_string()]);
 }
 
-/// Each feature's key is shown beside it, and setting one says whose it will be.
+/// Each feature's key is written beside it.
 #[test]
-fn the_list_shows_feature_keys_and_asks_for_one() {
+fn the_feature_list_shows_feature_keys() {
     let mut ctx = setup_clone!();
-    ctx.config()
-        .general
-        .diff_renderer
-        .feature_keys
-        .insert("line-numbers".into(), 'l');
-    snapshot!(ctx, "|<ctrl+t>");
+    with_feature_key(&mut ctx, "line-numbers", 'x');
+    snapshot!(ctx, "|");
 }
 
-/// A key set from the list works at once, and is saved to the user's config
-/// file for next time, beside what was already there.
+/// In the list, a letter becomes the selected feature's key. It works at once,
+/// and is saved to the user's config file beside what was already there.
 #[test]
-fn a_feature_key_set_from_the_list_is_used_and_saved() {
+fn a_letter_in_the_feature_list_sets_the_selected_features_key() {
     let mut ctx = setup_clone!();
-    let dir = temp_dir::TempDir::new().unwrap();
-    let path = dir.path().join("config.toml");
-    std::fs::write(&path, "# mine\n[general]\nvisit_context_lines = true\n").unwrap();
-    ctx.config().path = path.clone();
+    let (_dir, path) = config_file(&mut ctx, "# mine\n[general]\nvisit_context_lines = true\n");
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("|side<ctrl+t>s"));
+    ctx.update(&mut app, keys("|x<esc>"));
     assert!(
         app.state.features.is_empty(),
         "setting a key toggles nothing"
     );
 
-    ctx.update(&mut app, keys("|s"));
+    ctx.update(&mut app, keys("x"));
     assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
 
-    assert!(
-        std::fs::read_to_string(&path)
-            .unwrap()
-            .starts_with("# mine\n")
-    );
-    let saved = crate::config::init_config(Some(path)).unwrap();
-    assert_eq!(
-        saved.general.diff_renderer.feature_keys.get("side-by-side"),
-        Some(&'s')
-    );
+    assert!(fs::read_to_string(&path).unwrap().starts_with("# mine\n"));
+    assert_eq!(saved_feature_keys(&path), [("side-by-side".into(), 'x')]);
+}
+
+#[test]
+fn the_same_letter_again_unsets_the_key() {
+    let mut ctx = setup_clone!();
+    let (_dir, path) = config_file(&mut ctx, "");
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("|xx<esc>x"));
+    assert!(app.state.features.is_empty());
+    assert_eq!(saved_feature_keys(&path), []);
+}
+
+#[test]
+fn another_letter_replaces_the_key() {
+    let mut ctx = setup_clone!();
+    let (_dir, path) = config_file(&mut ctx, "");
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("|xy<esc>x"));
+    assert!(app.state.features.is_empty());
+
+    ctx.update(&mut app, keys("y"));
+    assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
+    assert_eq!(saved_feature_keys(&path), [("side-by-side".into(), 'y')]);
+}
+
+#[test]
+fn a_key_set_for_one_feature_is_taken_from_another() {
+    let mut ctx = setup_clone!();
+    let (_dir, path) = config_file(&mut ctx, "");
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("|x<down>x<esc>x"));
+    assert_eq!(&*app.state.features, ["line-numbers".to_string()]);
+    assert_eq!(saved_feature_keys(&path), [("line-numbers".into(), 'x')]);
+}
+
+/// A letter that already does something at the top level stays as it is.
+#[test]
+fn a_letter_bound_at_the_top_level_is_refused() {
+    let mut ctx = setup_clone!();
+    let (_dir, path) = config_file(&mut ctx, "");
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("|s<esc>"));
+    assert!(app.state.feature_keys.is_empty());
+    assert!(!path.exists());
 }
 
 /// The features the user defined for themselves are theirs to choose from too,
@@ -234,7 +305,7 @@ fn renderer_features_offers_those_in_git_config_a_pattern_matches() {
     );
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("|my-theme<enter>"));
+    ctx.update(&mut app, keys("|<enter>"));
     assert_eq!(&*app.state.features, ["my-theme".to_string()]);
 }
 

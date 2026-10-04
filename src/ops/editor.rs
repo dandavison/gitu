@@ -460,7 +460,7 @@ fn set_feature_key(app: &mut App, feature: &str, key: char) {
     app.state.feature_keys.insert(feature.to_owned(), key);
 
     let path = app.state.config.path.clone();
-    match crate::config_edit::set_feature_key(&path, feature, key) {
+    match crate::config_edit::set_feature_key(&path, feature, Some(key)) {
         Ok(()) => app.display_info(format!(
             "{key} toggles {feature} (saved to {})",
             path.display()
