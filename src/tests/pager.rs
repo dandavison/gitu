@@ -1002,3 +1002,38 @@ fn a_patch_longer_than_one_screen_is_not_printed() {
     assert!(!app.print_if_one_screen(&mut ctx.term).unwrap());
     assert!(ctx.physical_screen().trim().is_empty());
 }
+
+/// The help menu names the row its target commands act on as gitu describes
+/// it, not as the renderer drew it: a rendered row is drawn for the full width
+/// of the screen, and in a column of the menu it is clipped to a fragment.
+#[test]
+fn the_help_menu_names_a_rendered_row_as_gitu_describes_it() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
+    ctx.config().general.diff_renderer.enabled = true;
+    ctx.config().general.diff_renderer.command = hunk_header_renderer();
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(&mut app, keys("?"));
+
+    let buffer = ctx.redact_buffer();
+    let menu = buffer.split_once('─').map_or("", |(_, menu)| menu);
+    assert!(menu.contains("@@ -1,2 +1,2 @@"), "{buffer}");
+    assert!(!menu.contains("rendered"), "{buffer}");
+}
+
+/// [`osc_1717_passthrough`], drawing each hunk header its own way as delta
+/// does, and saying so, so that the row gitu folds the hunk on is the
+/// renderer's.
+fn hunk_header_renderer() -> Vec<String> {
+    osc_1717_passthrough()
+        .into_iter()
+        .map(|arg| {
+            arg.replace(
+                r#"old=a[1];new=b[1];print;next}"#,
+                r#"old=a[1];new=b[1];printf "\033]1717;1;h;%d;;%s\033\\rendered hunk %d\n",new,file,new;next}"#,
+            )
+        })
+        .collect()
+}
