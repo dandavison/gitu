@@ -324,6 +324,11 @@ impl App {
         Ok(())
     }
 
+    /// Prints the screen and says so if it fits on the terminal.
+    pub fn print_if_one_screen(&self, _term: &mut Term) -> Res<bool> {
+        Ok(false)
+    }
+
     pub fn stage_redraw(&mut self) {
         self.state.needs_redraw = true;
     }

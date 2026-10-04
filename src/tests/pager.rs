@@ -952,3 +952,38 @@ fn blank_rows_at_the_bottom(buffer: &str) -> usize {
         .take_while(|row| row.trim_end_matches(['|', ' ']).is_empty())
         .count()
 }
+
+/// `--quit-if-one-screen`, as less's: a patch that fits on the terminal is
+/// printed onto it, so that it is still there once gitu has exited.
+#[test]
+fn a_patch_that_fits_on_one_screen_is_printed() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
+
+    let app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.term.clear().unwrap();
+    ctx.term.queue_move_cursor(0, 0).unwrap();
+
+    assert!(app.print_if_one_screen(&mut ctx.term).unwrap());
+    insta::assert_snapshot!(ctx.redact_buffer());
+}
+
+#[test]
+fn a_patch_longer_than_one_screen_is_not_printed() {
+    let mut ctx = setup_clone!();
+    let lines = |prefix: &str| {
+        (1..=20)
+            .map(|i| format!("{prefix} {i}\n"))
+            .collect::<String>()
+    };
+    commit(&ctx.dir, "firstfile", &lines("old"));
+    fs::write(ctx.dir.join("firstfile"), lines("new")).unwrap();
+
+    let app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.term.clear().unwrap();
+    ctx.term.queue_move_cursor(0, 0).unwrap();
+
+    assert!(!app.print_if_one_screen(&mut ctx.term).unwrap());
+    assert!(ctx.physical_screen().trim().is_empty());
+}
