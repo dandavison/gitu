@@ -69,7 +69,7 @@ diff_renderer.command = ["delta", "--color-only", "--true-color", "always"]
 # not delta's built-in features. A feature is free to restructure the diff
 # however it likes: Gitu maps each rendered row back to its patch line from the
 # metadata the renderer emits, not from how the row looks.
-diff_renderer.features = ["side-by-side", "line-numbers"]
+diff_renderer.features = ["side-by-side", "line-numbers", "keep-plus-minus-markers"]
 
 # Top-level keys that toggle features, e.g. `{ side-by-side = "x" }`. A key
 # already bound at the top level is refused. In the `renderer_features` list, a
