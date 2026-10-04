@@ -285,8 +285,8 @@ impl OpTrait for FilePatterns {
     }
 }
 
-/// Drop the file under the cursor from the view, as if it were not in the
-/// patch. The frequent case, and the one worth a keystroke: the noise is in
+/// Drop the file whose header is under the cursor from the view, as if it were
+/// not in the patch. The frequent case, and the one worth a keystroke: the noise is in
 /// front of you and it goes away.
 pub(crate) struct HideFile;
 impl OpTrait for HideFile {
@@ -328,13 +328,10 @@ fn ask_for(
     app.rerender_screens()
 }
 
-/// The file a row belongs to, where it belongs to one.
+/// The file a row is the header of.
 fn file_of(target: &ItemData) -> Option<String> {
-    let (diff, file_i) = match target {
-        ItemData::Delta { diff, file_i, .. }
-        | ItemData::Hunk { diff, file_i, .. }
-        | ItemData::HunkLine { diff, file_i, .. } => (diff, file_i),
-        _ => return None,
+    let ItemData::Delta { diff, file_i, .. } = target else {
+        return None;
     };
 
     let header = &diff.file_diffs[*file_i].header;

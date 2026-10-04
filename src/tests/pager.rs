@@ -324,12 +324,27 @@ fn hiding_the_file_under_the_cursor_drops_it_from_the_view() {
     two_changed_files(&ctx);
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
-    ctx.update(&mut app, keys("-j"));
+    ctx.update(&mut app, keys("kdj"));
 
     let buffer = ctx.redact_buffer();
     assert!(!buffer.contains("alpha"), "{buffer}");
     assert!(buffer.contains("beta"), "{buffer}");
     assert!(offers(&app, Op::Stage));
+}
+
+/// Like `d` in the rebase list, `d` acts on the row under the cursor: within a
+/// file's hunks there is no file there to drop.
+#[test]
+fn hiding_a_file_needs_the_cursor_on_its_header() {
+    let mut ctx = setup_clone!();
+    two_changed_files(&ctx);
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(&mut app, keys("d"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("alpha"), "{buffer}");
+    assert!(buffer.contains("beta"), "{buffer}");
 }
 
 /// The paths are the user's to say, in git's own language less the magic: a
@@ -355,7 +370,7 @@ fn the_files_asked_for_come_back_for_editing() {
     two_changed_files(&ctx);
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
-    ctx.update(&mut app, keys("-_"));
+    ctx.update(&mut app, keys("kd_"));
     assert!(
         ctx.redact_buffer().contains("Files: › !a.rs"),
         "{}",
@@ -434,7 +449,7 @@ fn a_view_that_is_not_what_git_asked_for_says_what_it_is() {
         ctx.redact_buffer()
     );
 
-    ctx.update(&mut app, keys("-"));
+    ctx.update(&mut app, keys("kd"));
 
     assert!(
         ctx.redact_buffer()
