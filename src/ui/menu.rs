@@ -133,7 +133,7 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
                     }
 
                     if !feature_binds.is_empty() {
-                        layout_line(layout, "Feature".into(), Style::from(&style.menu.heading));
+                        layout_line(layout, "Features".into(), Style::from(&style.menu.heading));
                         layout_keybinds_table(layout, config, feature_binds);
                     }
                 });

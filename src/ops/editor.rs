@@ -414,7 +414,7 @@ impl OpTrait for RendererFeatures {
             let mut cursor = 0;
             loop {
                 let picker =
-                    PickerState::new("Renderer features", feature_items(app, &offered), false)
+                    PickerState::new("Features", feature_items(app, &offered), false)
                         .assigning_keys()
                         .with_cursor(cursor);
                 match app.pick_or_set_key(term, picker)? {
