@@ -1003,11 +1003,12 @@ fn a_patch_longer_than_one_screen_is_not_printed() {
     assert!(ctx.physical_screen().trim().is_empty());
 }
 
-/// The help menu names the row its target commands act on as gitu describes
-/// it, not as the renderer drew it: a rendered row is drawn for the full width
-/// of the screen, and in a column of the menu it is clipped to a fragment.
+/// The help menu's columns are headed by what is in them: commands, submenus,
+/// and the commands that act on the row under the cursor, headed by the kind of
+/// row it is. The row itself, as a renderer drew it, would be clipped to a
+/// fragment in a column.
 #[test]
-fn the_help_menu_names_a_rendered_row_as_gitu_describes_it() {
+fn the_help_menu_heads_its_columns_by_what_is_in_them() {
     let mut ctx = setup_clone!();
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
@@ -1016,11 +1017,22 @@ fn the_help_menu_names_a_rendered_row_as_gitu_describes_it() {
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
     ctx.update(&mut app, keys("?"));
+    assert_eq!(menu_headings(&ctx), ["Commands", "Submenus", "Hunk"]);
 
+    ctx.update(&mut app, keys("<esc>j?"));
+    assert_eq!(menu_headings(&ctx), ["Commands", "Submenus", "Line"]);
+}
+
+/// The words on the first row of the menu, below its separator.
+fn menu_headings(ctx: &TestContext) -> Vec<String> {
     let buffer = ctx.redact_buffer();
-    let menu = buffer.split_once('─').map_or("", |(_, menu)| menu);
-    assert!(menu.contains("@@ -1,2 +1,2 @@"), "{buffer}");
-    assert!(!menu.contains("rendered"), "{buffer}");
+    let mut rows = buffer.lines().skip_while(|row| !row.starts_with('─'));
+    let headings = rows.nth(1).unwrap_or_default();
+    headings
+        .trim_end_matches('|')
+        .split_whitespace()
+        .map(String::from)
+        .collect()
 }
 
 /// [`osc_1717_passthrough`], drawing each hunk header its own way as delta
