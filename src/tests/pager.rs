@@ -1189,3 +1189,63 @@ pub(super) fn draws_lines_of(app: &App, file: &str) -> bool {
             if diff.file_diffs[*file_i].header.new_file.fmt(&diff.text) == file)
     })
 }
+
+/// The colour of the cell where `text` is first drawn.
+fn colour_of(ctx: &TestContext, text: &str) -> Option<crate::style::Color> {
+    let crate::term::TermBackend::Test { buffer, .. } = &ctx.term else {
+        unreachable!();
+    };
+    let screen = ctx.physical_screen();
+    let row = screen.lines().position(|row| row.contains(text))?;
+    let column = screen.lines().nth(row)?.find(text)?;
+    let column = screen.lines().nth(row)?[..column].chars().count();
+    Some(buffer.cells[row * buffer.width as usize + column].fg)
+}
+
+/// The colours a commit's format asks for are what the user sees, as they are
+/// with `git show` in a terminal: put again, the command is asked for colour,
+/// and the patch is parsed without it.
+#[test]
+fn the_colours_a_commits_format_asks_for_are_kept() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "show", "--format=%C(blue)%an%C(reset)"]);
+
+    assert_eq!(
+        colour_of(&ctx, "Author Name"),
+        Some(crate::style::Color::Indexed(4)),
+        "{}",
+        ctx.redact_buffer()
+    );
+    ctx.update(&mut app, keys("<ctrl+j>"));
+    assert!(matches!(
+        app.screen().get_selected_item().data,
+        crate::item_data::ItemData::HunkLine { .. } | crate::item_data::ItemData::Hunk { .. }
+    ));
+}
+
+/// A piped patch keeps the colours it arrived with above its diff too.
+#[test]
+fn a_piped_patch_keeps_the_colours_of_its_commit() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+    let patch = run(
+        &ctx.dir,
+        &[
+            "git",
+            "show",
+            "--color=always",
+            "--format=%C(blue)%an%C(reset)",
+        ],
+    );
+
+    ctx.init_app_with_patch(patch);
+
+    assert_eq!(
+        colour_of(&ctx, "Author Name"),
+        Some(crate::style::Color::Indexed(4)),
+        "{}",
+        ctx.redact_buffer()
+    );
+}
