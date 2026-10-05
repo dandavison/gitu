@@ -175,6 +175,7 @@ fn rendered_diff_items(
 ) -> Vec<Item> {
     use crate::diff_renderer::LineKind;
 
+    let index = crate::diff_renderer::DiffIndex::of(diff);
     // Per file and per hunk: the renderer's own header rows (`f`, `h`) to display
     // in place of gitu's, and per hunk the content-line items. The renderer's
     // blank spacer rows are dropped.
@@ -185,6 +186,9 @@ fn rendered_diff_items(
     let mut file_header: Option<(usize, &str)> = None;
     let mut next_file = 0;
     let mut content_by_hunk: HashMap<(usize, usize), Vec<Item>> = HashMap::new();
+    // Per hunk: its id and where each of its content lines is, worked out once
+    // rather than for each of its rows.
+    let mut hunk_lines = HashMap::new();
     // The content line the previous row belonged to; a row repeating it is a
     // wrapped continuation of it. Cleared by every other kind of row, so only a
     // consecutive run counts as one line.
@@ -221,7 +225,7 @@ fn rendered_diff_items(
                 if line.text.trim().is_empty() {
                     continue;
                 }
-                if let Some(key) = crate::diff_renderer::resolve_hunk(diff, first) {
+                if let Some(key) = index.hunk(first) {
                     headers_by_hunk
                         .entry(key)
                         .or_default()
@@ -229,9 +233,7 @@ fn rendered_diff_items(
                 }
             }
             LineKind::Context | LineKind::Added | LineKind::Deleted => {
-                let Some((file_i, hunk_i, line_i)) =
-                    crate::diff_renderer::resolve_line(diff, first)
-                else {
+                let Some((file_i, hunk_i, line_i)) = index.line(first) else {
                     continue;
                 };
                 // A fused side-by-side change row also carries its replacement, so
@@ -239,11 +241,23 @@ fn rendered_diff_items(
                 let line_indices = line
                     .records
                     .iter()
-                    .filter_map(|meta| crate::diff_renderer::resolve_line(diff, meta))
+                    .filter_map(|meta| index.line(meta))
                     .filter(|(f, h, _)| (*f, *h) == (file_i, hunk_i))
                     .map(|(_, _, li)| li)
                     .collect();
-                let hunk_hash = hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]);
+                let (hunk_hash, line_ranges) =
+                    hunk_lines.entry((file_i, hunk_i)).or_insert_with(|| {
+                        let lines =
+                            highlight::line_range_iterator(diff.hunk_content(file_i, hunk_i))
+                                .map(|(range, _)| range)
+                                .collect::<Vec<_>>();
+                        (
+                            hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]),
+                            lines,
+                        )
+                    });
+                let hunk_hash = *hunk_hash;
+                let line_range = line_ranges.get(line_i).cloned().unwrap_or_default();
                 let rows = content_by_hunk.entry((file_i, hunk_i)).or_default();
 
                 // A renderer that wraps a long line emits a row per screen line,
@@ -263,10 +277,6 @@ fn rendered_diff_items(
                     continue;
                 }
 
-                let line_range = highlight::line_range_iterator(diff.hunk_content(file_i, hunk_i))
-                    .nth(line_i)
-                    .map(|(range, _)| range)
-                    .unwrap_or_default();
                 rows.push(Item {
                     id: hunk_hash,
                     depth: depth + 2,

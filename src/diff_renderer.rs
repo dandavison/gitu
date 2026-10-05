@@ -20,6 +20,7 @@ use crate::git::diff::Diff;
 use crate::style::{Color, Modifier, Style};
 use anstyle_parse::{DefaultCharAccumulator, Params, Parser, Perform};
 use regex::Regex;
+use std::collections::HashMap;
 use std::io::Write;
 use std::mem;
 use std::ops::Range;
@@ -46,7 +47,7 @@ pub(crate) const COMMIT_RECORD_FORMAT: &str = "%x1b]1717;1;C;;;%H%x1b\\";
 /// (spec §12), which the host may display in place of drawing its own. `Commit`
 /// (`C`) marks the first row of a commit in rendered log output; it carries the
 /// commit id in the record's last field, where a diff row carries its file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum LineKind {
     Context,
     Added,
@@ -157,53 +158,102 @@ pub(crate) struct ParsedOutput {
     pub protocol_version: Option<u32>,
 }
 
-/// Resolve a rendered line's OSC-1717 identity to its position in the parsed
-/// diff: `(file_index, hunk_index, line_index)`, where `line_index` indexes the
-/// hunk's content lines (as [`crate::items`] does). This is the bridge that lets
-/// staging operate on a freely-restructured render — the parsed diff stays the
-/// source of truth; the metadata only says which content line a row is.
-///
-/// Additions and context match on the new-file line number; deletions match on
-/// the old-file line number (two consecutive deletions share a new-file number,
-/// so only the old-file number distinguishes them — spec §5.3).
-pub(crate) fn resolve_line(diff: &Diff, meta: &LineMetadata) -> Option<(usize, usize, usize)> {
-    for (file_index, file_diff) in diff.file_diffs.iter().enumerate() {
-        let new_path = file_diff.header.new_file.fmt(&diff.text);
-        let old_path = file_diff.header.old_file.fmt(&diff.text);
-        if meta.file != new_path && meta.file != old_path {
-            continue;
-        }
+/// Where each content line and hunk of a diff is, by what an OSC-1717 record
+/// says of it, so that each rendered row is placed without searching the diff
+/// for it. This is the bridge that lets staging operate on a freely
+/// restructured render: the parsed diff stays the source of truth, and the
+/// metadata only says which content line a row is.
+pub(crate) struct DiffIndex {
+    /// The first file of each path, old or new. A record names its file by
+    /// path, and a path that a log of patches repeats is taken to be the first.
+    files: HashMap<String, usize>,
+    /// `(hunk_index, line_index)` by file, kind and line number, where
+    /// `line_index` indexes the hunk's content lines (as [`crate::items`]
+    /// does).
+    lines: HashMap<(usize, LineKind, u32), (usize, usize)>,
+    /// `hunk_index` by file and the hunk's first new-file line.
+    hunks: HashMap<(usize, u32), usize>,
+}
 
-        for (hunk_index, hunk) in file_diff.hunks.iter().enumerate() {
-            let content = &diff.text[hunk.content.range.clone()];
-            let mut new_num = hunk.header.new_line_start;
-            let mut old_num = hunk.header.old_line_start;
+impl DiffIndex {
+    pub(crate) fn of(diff: &Diff) -> Self {
+        let mut index = Self {
+            files: HashMap::new(),
+            lines: HashMap::new(),
+            hunks: HashMap::new(),
+        };
 
-            for (line_index, line) in content.split_inclusive('\n').enumerate() {
-                let found = match (meta.kind, line.chars().next()) {
-                    (LineKind::Added, Some('+')) => new_num == meta.new_line,
-                    (LineKind::Deleted, Some('-')) => Some(old_num) == meta.old_line,
-                    (LineKind::Context, Some(' ')) => new_num == meta.new_line,
-                    _ => false,
-                };
-                if found {
-                    return Some((file_index, hunk_index, line_index));
-                }
+        for (file_index, file_diff) in diff.file_diffs.iter().enumerate() {
+            for path in [&file_diff.header.new_file, &file_diff.header.old_file] {
+                index
+                    .files
+                    .entry(path.fmt(&diff.text).to_string())
+                    .or_insert(file_index);
+            }
 
-                match line.chars().next() {
-                    Some('+') => new_num += 1,
-                    Some('-') => old_num += 1,
-                    Some('\\') => {} // "\ No newline at end of file": not a real line.
-                    _ => {
-                        new_num += 1;
-                        old_num += 1;
+            for (hunk_index, hunk) in file_diff.hunks.iter().enumerate() {
+                index
+                    .hunks
+                    .entry((file_index, hunk.header.new_line_start))
+                    .or_insert(hunk_index);
+
+                let content = &diff.text[hunk.content.range.clone()];
+                let mut new_num = hunk.header.new_line_start;
+                let mut old_num = hunk.header.old_line_start;
+                for (line_index, line) in content.split_inclusive('\n').enumerate() {
+                    let key = match line.chars().next() {
+                        Some('+') => Some((LineKind::Added, new_num)),
+                        Some('-') => Some((LineKind::Deleted, old_num)),
+                        Some(' ') => Some((LineKind::Context, new_num)),
+                        _ => None,
+                    };
+                    if let Some((kind, num)) = key {
+                        index
+                            .lines
+                            .entry((file_index, kind, num))
+                            .or_insert((hunk_index, line_index));
+                    }
+
+                    match line.chars().next() {
+                        Some('+') => new_num += 1,
+                        Some('-') => old_num += 1,
+                        Some('\\') => {} // "\ No newline at end of file": not a real line.
+                        _ => {
+                            new_num += 1;
+                            old_num += 1;
+                        }
                     }
                 }
             }
         }
-        return None; // File matched but the line wasn't found; don't scan others.
+
+        index
     }
-    None
+
+    /// A content line's position: `(file_index, hunk_index, line_index)`.
+    /// Additions and context match on the new-file line number; deletions match
+    /// on the old-file line number (two consecutive deletions share a new-file
+    /// number, so only the old-file number distinguishes them — spec §5.3).
+    pub(crate) fn line(&self, meta: &LineMetadata) -> Option<(usize, usize, usize)> {
+        let file = *self.files.get(&meta.file)?;
+        let num = match meta.kind {
+            LineKind::Deleted => meta.old_line?,
+            LineKind::Added | LineKind::Context => meta.new_line,
+            _ => return None,
+        };
+        let &(hunk, line) = self.lines.get(&(file, meta.kind, num))?;
+        Some((file, hunk, line))
+    }
+
+    /// An `h` (hunk-header) record's hunk: `(file_index, hunk_index)`, by its
+    /// `new_line`, the hunk's first new-file line. Lets the host render the
+    /// renderer's hunk header as the anchor for that hunk (collapse, whole-hunk
+    /// staging) instead of drawing `@@`.
+    pub(crate) fn hunk(&self, meta: &LineMetadata) -> Option<(usize, usize)> {
+        let file = *self.files.get(&meta.file)?;
+        let &hunk = self.hunks.get(&(file, meta.new_line))?;
+        Some((file, hunk))
+    }
 }
 
 /// The first file at or after `from` that the file-header record `meta` names.
@@ -212,26 +262,6 @@ pub(crate) fn resolve_file(diff: &Diff, meta: &LineMetadata, from: usize) -> Opt
         let header = &diff.file_diffs[file_index].header;
         meta.file == header.new_file.fmt(&diff.text) || meta.file == header.old_file.fmt(&diff.text)
     })
-}
-
-/// Resolve an `h` (hunk-header) record to `(file_index, hunk_index)` by matching
-/// its file and its `new_line` (the hunk's first new-file line) against the parsed
-/// diff's hunk headers. Lets the host render the renderer's hunk header as the
-/// anchor for that hunk (collapse, whole-hunk staging) instead of drawing `@@`.
-pub(crate) fn resolve_hunk(diff: &Diff, meta: &LineMetadata) -> Option<(usize, usize)> {
-    for (file_index, file_diff) in diff.file_diffs.iter().enumerate() {
-        if meta.file != file_diff.header.new_file.fmt(&diff.text)
-            && meta.file != file_diff.header.old_file.fmt(&diff.text)
-        {
-            continue;
-        }
-        let hunk_index = file_diff
-            .hunks
-            .iter()
-            .position(|hunk| hunk.header.new_line_start == meta.new_line)?;
-        return Some((file_index, hunk_index));
-    }
-    None
 }
 
 /// `command` as a process to start in `dir`, with `{width}` substituted and the
@@ -974,7 +1004,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_line_maps_identity_to_content_line() {
+    fn the_index_places_a_content_line_by_its_identity() {
         let text = "diff --git a/src/foo.rs b/src/foo.rs\n\
                     index 1a2b3c4..5d6e7f8 100644\n\
                     --- a/src/foo.rs\n\
@@ -985,7 +1015,7 @@ mod tests {
                     -    let old2 = 2;\n\
                     +    let new = 1;\n\
                     \x20ctx();\n";
-        let diff = diff_from(text);
+        let index = DiffIndex::of(&diff_from(text));
         let m = |kind, new_line, old_line| LineMetadata {
             kind,
             new_line,
@@ -994,29 +1024,20 @@ mod tests {
         };
 
         // Content lines, in order: 0=context fn a, 1=del old, 2=del old2, 3=add new, 4=context ctx.
-        assert_eq!(
-            resolve_line(&diff, &m(LineKind::Context, 8, None)),
-            Some((0, 0, 0))
-        );
+        assert_eq!(index.line(&m(LineKind::Context, 8, None)), Some((0, 0, 0)));
         // Consecutive deletions share new-line 9; only old-line tells them apart.
         assert_eq!(
-            resolve_line(&diff, &m(LineKind::Deleted, 9, Some(9))),
+            index.line(&m(LineKind::Deleted, 9, Some(9))),
             Some((0, 0, 1))
         );
         assert_eq!(
-            resolve_line(&diff, &m(LineKind::Deleted, 9, Some(10))),
+            index.line(&m(LineKind::Deleted, 9, Some(10))),
             Some((0, 0, 2))
         );
-        assert_eq!(
-            resolve_line(&diff, &m(LineKind::Added, 9, None)),
-            Some((0, 0, 3))
-        );
-        assert_eq!(
-            resolve_line(&diff, &m(LineKind::Context, 10, None)),
-            Some((0, 0, 4))
-        );
+        assert_eq!(index.line(&m(LineKind::Added, 9, None)), Some((0, 0, 3)));
+        assert_eq!(index.line(&m(LineKind::Context, 10, None)), Some((0, 0, 4)));
         // Unknown file / missing line resolve to None.
-        assert_eq!(resolve_line(&diff, &m(LineKind::Added, 999, None)), None);
+        assert_eq!(index.line(&m(LineKind::Added, 999, None)), None);
     }
 
     #[test]
@@ -1033,7 +1054,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_hunk_matches_on_new_line_start() {
+    fn the_index_places_a_hunk_by_its_first_new_line() {
         let text = "diff --git a/f.rs b/f.rs\n\
                     index 1..2 100644\n\
                     --- a/f.rs\n\
@@ -1044,16 +1065,16 @@ mod tests {
                     @@ -40,2 +40,2 @@\n\
                     -c\n\
                     +d\n";
-        let diff = diff_from(text);
+        let index = DiffIndex::of(&diff_from(text));
         let h = |new_line| LineMetadata {
             kind: LineKind::HunkHeader,
             new_line,
             old_line: None,
             file: "f.rs".into(),
         };
-        assert_eq!(resolve_hunk(&diff, &h(8)), Some((0, 0)));
-        assert_eq!(resolve_hunk(&diff, &h(40)), Some((0, 1)));
-        assert_eq!(resolve_hunk(&diff, &h(999)), None);
+        assert_eq!(index.hunk(&h(8)), Some((0, 0)));
+        assert_eq!(index.hunk(&h(40)), Some((0, 1)));
+        assert_eq!(index.hunk(&h(999)), None);
     }
 
     #[test]
