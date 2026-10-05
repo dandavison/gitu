@@ -34,6 +34,8 @@ pub(crate) struct Snapshot {
     pub done: bool,
     /// What git said when it exited unsuccessfully having written nothing.
     pub refused: Option<String>,
+    /// Whether the command exited unsuccessfully, whatever it wrote.
+    pub failed: bool,
 }
 
 struct Shared {
@@ -154,6 +156,7 @@ impl Stream {
             rendered,
             done,
             refused: state.refused.clone(),
+            failed: false,
         }
     }
 }
@@ -367,6 +370,35 @@ mod tests {
         assert!(snapshot.done);
         assert_eq!(snapshot.text, "a\n");
         assert_eq!(snapshot.rendered, None);
+    }
+
+    /// A command whose output is already drawn, as a log command piping into
+    /// delta is, needs no renderer: its own rows are shown as they arrive.
+    #[test]
+    fn without_a_renderer_the_first_rows_arrive_before_the_command_finishes() {
+        let writer = command(&["sh", "-c", r#"printf 'a\nb\n'; sleep 3; printf 'c\n'"#]);
+        let started = Instant::now();
+        let stream = Stream::start(Input::Command(writer), None, 1_000).unwrap();
+
+        stream.wait_for(2);
+        let snapshot = stream.snapshot();
+
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert!(!snapshot.done);
+        assert_eq!(snapshot.text, "a\nb\n");
+    }
+
+    #[test]
+    fn a_command_that_fails_having_written_says_so() {
+        let snapshot = finished(
+            Input::Command(command(&["sh", "-c", "echo out; exit 3"])),
+            None,
+            1_000,
+        );
+
+        assert!(snapshot.failed);
+        assert_eq!(snapshot.refused, None);
+        assert_eq!(snapshot.text, "out\n");
     }
 
     #[test]
