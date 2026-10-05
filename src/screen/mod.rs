@@ -96,6 +96,26 @@ fn has_uppercase(query: &str) -> bool {
 /// fill, and the renderer features and context chosen in-session.
 pub(crate) type RefreshItems = Box<dyn Fn(RenderParams) -> Res<Vec<Item>>>;
 
+/// [`RefreshItems`] for a screen whose items can be shown before they are all
+/// drawn.
+pub(crate) type RefreshStreamed = Box<dyn Fn(RenderParams) -> Res<Items>>;
+
+/// A screen's items: those there are now, and, while the rest are still being
+/// drawn, how to have all of them once they are.
+pub(crate) struct Items {
+    pub(crate) now: Vec<Item>,
+    pub(crate) later: Option<Later>,
+}
+
+/// All of a screen's items once the rest are drawn; `None` until then.
+pub(crate) type Later = Box<dyn FnMut() -> Option<Res<Vec<Item>>>>;
+
+impl From<Vec<Item>> for Items {
+    fn from(now: Vec<Item>) -> Self {
+        Self { now, later: None }
+    }
+}
+
 pub(crate) struct Screen {
     pub(crate) size: (u16, u16),
     /// The keymap this screen imposes while it is on top, if it isn't the
@@ -123,7 +143,9 @@ pub(crate) struct Screen {
     /// can put again. Shared with the closure that rebuilds the screen, so that
     /// editing it is what the next rebuild asks.
     pub(crate) git_command: Option<Rc<RefCell<crate::calling_process::GitCommand>>>,
-    refresh_items: RefreshItems,
+    refresh_items: RefreshStreamed,
+    /// How to have all of the items, while some are still being drawn.
+    later: Option<Later>,
     items: Vec<Item>,
     /// Memoized `item_height`, indexed like `items`. Dropped by `invalidate`.
     item_heights: RefCell<Vec<Option<u16>>>,
@@ -136,6 +158,18 @@ impl Screen {
         config: Arc<Config>,
         params: RenderParams,
         refresh_items: RefreshItems,
+    ) -> Res<Self> {
+        Self::streamed(
+            config,
+            params,
+            Box::new(move |params| refresh_items(params).map(Items::from)),
+        )
+    }
+
+    pub(crate) fn streamed(
+        config: Arc<Config>,
+        params: RenderParams,
+        refresh_items: RefreshStreamed,
     ) -> Res<Self> {
         let collapsed = config
             .general
@@ -158,13 +192,16 @@ impl Screen {
             context: params.context,
             git_command: None,
             refresh_items,
+            later: None,
             items: vec![],
             item_heights: RefCell::new(vec![]),
             collapsed,
             search: None,
         };
 
-        screen.items = fill_empty((screen.refresh_items)(screen.params())?);
+        let Items { now, later } = (screen.refresh_items)(screen.params())?;
+        screen.items = fill_empty(now);
+        screen.later = later;
 
         // TODO Maybe this should be done on update. Better keep track of toggled sections rather than collapsed then.
         screen.collapsed.extend(
@@ -500,7 +537,9 @@ impl Screen {
         // The rebuilt items are a different diff; the lines that were selected
         // are no longer the same lines.
         self.anchor = None;
-        self.items = fill_empty((self.refresh_items)(self.params())?);
+        let Items { now, later } = (self.refresh_items)(self.params())?;
+        self.items = fill_empty(now);
+        self.later = later;
 
         self.invalidate();
         self.update_cursor();
@@ -531,6 +570,22 @@ impl Screen {
     /// are; a re-render that lays the same diff out differently moves them.
     /// What does not move is where a row sits in the patch, so that is what is
     /// restored.
+    /// Take all of the items once the rest are drawn, and say whether it did.
+    /// The cursor keeps its place in the list. The rows drawn first are the
+    /// first rows of all of them, so that is the same row, unless the cursor
+    /// had already gone past what was drawn.
+    pub(crate) fn finish(&mut self) -> Res<bool> {
+        let Some(items) = self.later.as_mut().and_then(|later| later()) else {
+            return Ok(false);
+        };
+        self.later = None;
+        self.items = fill_empty(items?);
+
+        self.invalidate();
+        self.update_cursor();
+        Ok(true)
+    }
+
     pub(crate) fn refresh_keeping_position(&mut self) -> Res<()> {
         let was_on = diff_position(&self.get_selected_item().data);
         self.refresh()?;
@@ -949,6 +1004,11 @@ impl Screen {
 
     pub(crate) fn is_collapsed(&self, item: &Item) -> bool {
         self.collapsed.contains(&item.id)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn items(&self) -> &[Item] {
+        &self.items
     }
 
     /// The text of each row, for asserting on what a screen shows.

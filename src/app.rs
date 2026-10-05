@@ -106,6 +106,7 @@ impl App {
                     Rc::clone(&repo),
                     params,
                     paged,
+                    enable_async_cmds,
                 )?]
             }
             Some(cli::Commands::Show { ref reference }) => {
@@ -238,6 +239,9 @@ impl App {
             self.update_screens()?;
         }
 
+        let finished = self.finish_screens();
+        self.handle_result(finished)?;
+
         let handle_pending_cmd_result = self.handle_pending_cmd();
         self.handle_result(handle_pending_cmd_result)?;
 
@@ -245,6 +249,19 @@ impl App {
             self.redraw_now(term)?;
         }
 
+        Ok(())
+    }
+
+    /// Give each screen whose rows were still being drawn all of them, once
+    /// they are.
+    fn finish_screens(&mut self) -> Res<()> {
+        let mut finished = false;
+        for screen in &mut self.state.screens {
+            finished |= screen.finish()?;
+        }
+        if finished {
+            self.stage_redraw();
+        }
         Ok(())
     }
 

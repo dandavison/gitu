@@ -46,7 +46,7 @@ impl Capped {
 /// last whole line where it has no diff in it. The last hunk is dropped whether
 /// or not it was in fact complete: the line counts in its header say how long it
 /// should be, and re-parsing the patch to find out is work for one line of it.
-fn whole(text: &str) -> &str {
+pub(crate) fn whole(text: &str) -> &str {
     let (mut file, mut hunk, mut line) = (None, None, 0);
     let mut offset = 0;
 

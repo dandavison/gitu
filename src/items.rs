@@ -72,17 +72,46 @@ pub(crate) fn create_diff_items(
     default_collapsed: bool,
     commit: Option<String>,
 ) -> Vec<Item> {
-    if config.general.diff_renderer.enabled
-        && !diff.text.is_empty()
-        && let Some(items) = create_rendered_diff_items(
+    let rendered = (config.general.diff_renderer.enabled && !diff.text.is_empty())
+        .then(|| {
+            crate::diff_renderer::run(
+                &config.general.diff_renderer.command,
+                Some(&diff.text),
+                params,
+                None,
+            )
+        })
+        .flatten();
+    drawn_diff_items(
+        config,
+        diff,
+        rendered.as_deref(),
+        depth,
+        default_collapsed,
+        commit,
+    )
+}
+
+/// The items for a diff the renderer has drawn as `rendered`, or gitu's own
+/// when it did not draw it (or drew it without OSC-1717 records).
+pub(crate) fn drawn_diff_items(
+    config: &Config,
+    diff: &Rc<Diff>,
+    rendered: Option<&str>,
+    depth: usize,
+    default_collapsed: bool,
+    commit: Option<String>,
+) -> Vec<Item> {
+    if let Some(items) = rendered.and_then(|rendered| {
+        create_rendered_diff_items(
             config,
-            params,
+            rendered,
             diff,
             depth,
             default_collapsed,
             commit.clone(),
         )
-    {
+    }) {
         return items;
     }
     create_builtin_diff_items(
@@ -95,27 +124,20 @@ pub(crate) fn create_diff_items(
     .collect()
 }
 
-/// Render the diff through the OSC-1717 renderer and lay its rows out under
-/// gitu's own file/hunk structure (so collapse, navigation and file/hunk/line
-/// staging keep working). Each rendered content row is mapped back to its
-/// content-line coordinates via its metadata; decoration rows are dropped.
-/// Returns `None` (fall back to built-in) if the renderer doesn't speak the
-/// protocol.
+/// Lay the OSC-1717 renderer's drawing of the diff out under gitu's own
+/// file/hunk structure (so collapse, navigation and file/hunk/line staging keep
+/// working). Each rendered content row is mapped back to its content-line
+/// coordinates via its metadata; decoration rows are dropped. Returns `None`
+/// (fall back to built-in) if the renderer doesn't speak the protocol.
 fn create_rendered_diff_items(
     config: &Config,
-    params: &RenderParams,
+    output: &str,
     diff: &Rc<Diff>,
     depth: usize,
     default_collapsed: bool,
     commit: Option<String>,
 ) -> Option<Vec<Item>> {
-    let output = crate::diff_renderer::run(
-        &config.general.diff_renderer.command,
-        Some(&diff.text),
-        params,
-        None,
-    )?;
-    let parsed = crate::diff_renderer::parse_ansi_lines(&output);
+    let parsed = crate::diff_renderer::parse_ansi_lines(output);
     parsed.protocol_version?; // Not an OSC-1717 renderer: fall back to built-in.
 
     // The handshake says the renderer speaks the protocol, not that it said

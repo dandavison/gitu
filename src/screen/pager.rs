@@ -7,20 +7,20 @@
 //! what it writes to a pager, so the text is stripped of ANSI before it is
 //! parsed; the colours in the view are the renderer's, applied afterwards.
 
-use super::Screen;
+use super::{Items, Screen};
 use crate::style::{Modifier, Style};
 use crate::{
     Res,
     calling_process::GitCommand,
-    capped_input::Capped,
     config::Config,
     error::Error,
     git::diff::{Diff, DiffType},
     gitu_diff,
     items::{self, Item, RenderParams},
+    stream::{Input, Snapshot, Stream},
 };
 use git2::Repository;
-use std::{cell::RefCell, io::Read, process::Stdio, rc::Rc, sync::Arc, thread};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 /// What git handed gitu as its pager: its output, and the argv of the command
 /// that produced it where gitu could find it.
@@ -28,7 +28,7 @@ pub struct Paged {
     pub text: String,
     pub git_argv: Option<Vec<String>>,
     /// Whether reading the input stopped at the byte limit rather than at its
-    /// end (see [`Capped`]).
+    /// end (see [`crate::capped_input::Capped`]).
     pub truncated: bool,
 }
 
@@ -37,14 +37,21 @@ pub(crate) fn create(
     repo: Rc<Repository>,
     params: RenderParams,
     paged: Paged,
+    streaming: bool,
 ) -> Res<Screen> {
     let source = Source::of(paged, &config.general.hide);
     let git_command = source.git_command();
 
-    let mut screen = Screen::new(
+    let mut screen = Screen::streamed(
         Arc::clone(&config),
         params,
-        Box::new(move |params: RenderParams| source.items(&config, &repo, &params)),
+        Box::new(move |params: RenderParams| {
+            if streaming {
+                source.first_items(&config, &repo, &params)
+            } else {
+                source.items(&config, &repo, &params).map(Items::from)
+            }
+        }),
     )?;
     screen.git_command = git_command;
 
@@ -66,7 +73,7 @@ enum Source {
     /// A patch gitu found no command for: a saved patch file, another repo's,
     /// one piped in from a process already gone. It stays as it came, and gitu
     /// structures it.
-    Patch { diff: Rc<Diff>, truncated: bool },
+    Patch { text: String, truncated: bool },
     /// Output with no diff in it: a log, a blame, a grep, a man page. gitu has
     /// no structure of its own to impose, so the renderer draws it and what it
     /// says about the rows it drew decides what they are.
@@ -106,12 +113,7 @@ impl Source {
         }
 
         Source::Patch {
-            diff: Rc::new(Diff {
-                file_diffs,
-                text,
-                diff_type: DiffType::TreeToTree,
-                commit: None,
-            }),
+            text,
             truncated: paged.truncated,
         }
     }
@@ -124,100 +126,174 @@ impl Source {
         }
     }
 
+    /// All of the rows, once the renderer has drawn all of them.
     fn items(&self, config: &Config, repo: &Repository, params: &RenderParams) -> Res<Vec<Item>> {
-        let limit = config.general.max_input_bytes;
-        let (diff, mut items, truncated) = match self {
-            Source::Live { git, found } => {
-                let line = git.borrow().line(params.context.as_deref());
-                let asked = ask_git(&git.borrow(), repo, params.context.as_deref(), limit)?;
-                (
-                    Rc::new(asked.diff),
-                    asked_rows(&line, found),
-                    asked.truncated,
-                )
-            }
-            Source::Patch { diff, truncated } => (Rc::clone(diff), Vec::new(), *truncated),
-            Source::Unstructured { text, truncated } => {
-                let mut items = rows(config, repo, params, text);
-                items.extend(truncated_rows(*truncated, limit));
-                return Ok(items);
-            }
-        };
+        let (stream, shape) = self.start(config, repo, params)?;
+        stream.wait_for(usize::MAX);
+        built(config, repo, params, &shape, stream.snapshot())
+    }
 
-        // What came back has no diff in it: a log, a blame, a grep, a man page.
-        // gitu has no structure of its own to impose, so the renderer draws it.
-        if diff.file_diffs.is_empty() {
-            items.extend(rows(config, repo, params, &diff.text));
-        } else {
-            items.extend(preamble_items(config, params, &diff.text));
-            items.extend(diff_items(config, params, &diff));
+    /// The rows as soon as the renderer has drawn two screenfuls of them, as a
+    /// pager shows the first screen of a pipeline, and all of them once it has
+    /// drawn the rest.
+    fn first_items(
+        &self,
+        config: &Arc<Config>,
+        repo: &Rc<Repository>,
+        params: &RenderParams,
+    ) -> Res<Items> {
+        let (stream, shape) = self.start(config, repo, params)?;
+        stream.wait_for(2 * params.size.1 as usize);
+        let snapshot = stream.snapshot();
+        let done = snapshot.done;
+        let now = built(config, repo, params, &shape, snapshot)?;
+        if done {
+            return Ok(now.into());
         }
 
-        items.extend(truncated_rows(truncated, limit));
-        Ok(items)
+        let (config, repo, params) = (Arc::clone(config), Rc::clone(repo), params.clone());
+        Ok(Items {
+            now,
+            later: Some(Box::new(move || {
+                stream
+                    .is_done()
+                    .then(|| built(&config, &repo, &params, &shape, stream.snapshot()))
+            })),
+        })
+    }
+
+    /// Start the output through the renderer: the command put again, or the
+    /// text that arrived.
+    fn start(
+        &self,
+        config: &Config,
+        repo: &Repository,
+        params: &RenderParams,
+    ) -> Res<(Stream, Shape)> {
+        let (input, shape) = match self {
+            Source::Live { git, found } => {
+                let git = git.borrow();
+                let mut command = git.command(params.context.as_deref());
+                command.current_dir(repo.workdir().ok_or(Error::NoRepoWorkdir)?);
+                let shape = Shape::Diff {
+                    diff_type: git.diff_type(),
+                    named_commit: true,
+                    asked: asked_rows(&git.line(params.context.as_deref()), found),
+                    truncated: false,
+                };
+                (Input::Command(command), shape)
+            }
+            Source::Patch { text, truncated } => {
+                let shape = Shape::Diff {
+                    diff_type: DiffType::TreeToTree,
+                    named_commit: false,
+                    asked: Vec::new(),
+                    truncated: *truncated,
+                };
+                (Input::Text(text.clone()), shape)
+            }
+            Source::Unstructured { text, truncated } => (
+                Input::Text(text.clone()),
+                Shape::Rows {
+                    truncated: *truncated,
+                },
+            ),
+        };
+
+        let renderer = config
+            .general
+            .diff_renderer
+            .enabled
+            .then(|| {
+                crate::diff_renderer::renderer_command(
+                    &config.general.diff_renderer.command,
+                    params,
+                    None,
+                )
+            })
+            .flatten();
+        let stream = Stream::start(input, renderer, config.general.max_input_bytes)
+            .map_err(Error::GitDiff)?;
+        Ok((stream, shape))
     }
 }
 
-/// What putting the command again said, and whether it was still saying it when
-/// reading stopped.
-struct Asked {
-    diff: Diff,
-    truncated: bool,
+/// What the output is taken to be, and what is said about it besides.
+enum Shape {
+    /// A patch, or what may be one: what the command put again says is
+    /// classified on every ask.
+    Diff {
+        diff_type: DiffType,
+        /// Whether its first line names the commit it is of, as `git show`'s
+        /// does.
+        named_commit: bool,
+        /// The row saying what is being asked, if that is not git's question.
+        asked: Vec<Item>,
+        /// Whether the input it came from was already cut short.
+        truncated: bool,
+    },
+    /// Output with no diff in it, which the renderer draws.
+    Rows { truncated: bool },
 }
 
-/// Put the command again, for however much of the file around each change is
-/// being asked for now, reading it to the same limit as the piped input.
-fn ask_git(git: &GitCommand, repo: &Repository, context: Option<&str>, limit: u64) -> Res<Asked> {
-    let mut child = git
-        .command(context)
-        .current_dir(repo.workdir().ok_or(Error::NoRepoWorkdir)?)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(Error::GitDiff)?;
-
-    // Read stderr on its own thread: a command filling that pipe while gitu is
-    // reading stdout would otherwise deadlock.
-    let mut pipe = child.stderr.take().expect("stderr was piped");
-    let complaint = thread::spawn(move || {
-        let mut said = String::new();
-        let _ = pipe.read_to_string(&mut said);
-        said
-    });
-
-    let output = Capped::read(child.stdout.take().expect("stdout was piped"), limit)
-        .map_err(Error::GitDiff)?;
-    if output.truncated {
-        // The rest of it is not going to be read, so it is not left to be
-        // written either.
-        let _ = child.kill();
+/// The rows for what the output and the renderer have produced so far.
+fn built(
+    config: &Config,
+    repo: &Repository,
+    params: &RenderParams,
+    shape: &Shape,
+    snapshot: Snapshot,
+) -> Res<Vec<Item>> {
+    if let Some(refused) = snapshot.refused {
+        return Err(Error::GitRefusedTheCommand(refused));
     }
+    let limit = config.general.max_input_bytes;
+    // Without a renderer, or with one that failed, the text is drawn as it
+    // arrived.
+    let drawn = snapshot.rendered.as_deref().unwrap_or(&snapshot.text);
 
-    let status = child.wait().map_err(Error::GitDiff)?;
-    // A command the user can edit is a command the user can get wrong, and an
-    // empty screen does not say what git thought of it. (`git diff --exit-code`
-    // answers with a status too, and a killed command has one as well, so a
-    // command that answered at all is taken to have worked.)
-    if !status.success() && output.text.is_empty() {
-        let complaint = complaint.join().unwrap_or_default();
-        return Err(Error::GitRefusedTheCommand(
-            complaint.lines().next().unwrap_or_default().to_owned(),
-        ));
-    }
-
-    let text = output.text;
-    Ok(Asked {
-        diff: Diff {
-            file_diffs: gitu_diff::Parser::new(&text)
+    let (mut items, truncated) = match shape {
+        Shape::Rows { truncated } => (rows(repo, drawn), *truncated),
+        Shape::Diff {
+            diff_type,
+            named_commit,
+            asked,
+            truncated,
+        } => {
+            let mut items = asked.clone();
+            let file_diffs = gitu_diff::Parser::new(&snapshot.text)
                 .parse_diff()
-                .unwrap_or_default(),
-            diff_type: git.diff_type(),
-            commit: commit_named_by(&text),
-            text,
-        },
-        truncated: output.truncated,
-    })
+                .unwrap_or_default();
+            // What came back has no diff in it: a log, a blame, a grep, a man
+            // page. gitu has no structure of its own to impose, so the renderer
+            // draws it.
+            if file_diffs.is_empty() {
+                items.extend(rows(repo, drawn));
+            } else {
+                let diff = Rc::new(Diff {
+                    file_diffs,
+                    diff_type: diff_type.clone(),
+                    commit: named_commit
+                        .then(|| commit_named_by(&snapshot.text))
+                        .flatten(),
+                    text: snapshot.text.clone(),
+                });
+                items.extend(preamble_items(config, params, &diff.text));
+                items.extend(items::drawn_diff_items(
+                    config,
+                    &diff,
+                    snapshot.rendered.as_deref(),
+                    0,
+                    false,
+                    None,
+                ));
+            }
+            (items, *truncated)
+        }
+    };
+
+    items.extend(truncated_rows(truncated || snapshot.truncated, limit));
+    Ok(items)
 }
 
 /// One line saying what is being asked, and only when that is not what git was
@@ -262,12 +338,11 @@ fn dim_row(text: String) -> Item {
     }
 }
 
-/// Text the renderer draws and gitu does not structure. A renderer that says
+/// Text the renderer drew, which gitu does not structure. A renderer that says
 /// which commit a row belongs to has turned it into a log; one that says
 /// nothing has just drawn it.
-fn rows(config: &Config, repo: &Repository, params: &RenderParams, text: &str) -> Vec<Item> {
-    let rendered = render(config, params, text);
-    items::rendered_log_items(repo, &rendered).unwrap_or_else(|| items::plain_rows(&rendered))
+fn rows(repo: &Repository, drawn: &str) -> Vec<Item> {
+    items::rendered_log_items(repo, drawn).unwrap_or_else(|| items::plain_rows(drawn))
 }
 
 /// The commit a patch from `git show` is of, named in its first line.
@@ -294,10 +369,6 @@ fn preamble_items(config: &Config, params: &RenderParams, text: &str) -> Vec<Ite
     };
 
     items::plain_rows(&render(config, params, &text[..end]))
-}
-
-fn diff_items(config: &Config, params: &RenderParams, diff: &Rc<Diff>) -> Vec<Item> {
-    items::create_diff_items(config, params, diff, 0, false, None)
 }
 
 /// `text` as the renderer draws it, or as it arrived when there is no renderer
@@ -364,6 +435,7 @@ mod tests {
                 context: None,
             },
             paged(patch, None),
+            false,
         )
         .unwrap()
     }

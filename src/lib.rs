@@ -22,6 +22,7 @@ mod prompt;
 mod rebase_todo;
 mod screen;
 mod search;
+mod stream;
 pub mod style;
 mod syntax_parser;
 pub mod term;

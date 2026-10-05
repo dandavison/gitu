@@ -234,6 +234,37 @@ pub(crate) fn resolve_hunk(diff: &Diff, meta: &LineMetadata) -> Option<(usize, u
     None
 }
 
+/// `command` as a process to start in `dir`, with `{width}` substituted and the
+/// environment that tells it the width, the protocol, and the features in force.
+pub(crate) fn renderer_command(
+    command: &[String],
+    params: &crate::items::RenderParams,
+    dir: Option<&Path>,
+) -> Option<Command> {
+    let width = params.width();
+    let (program, args) = command.split_first()?;
+    let args: Vec<String> = args
+        .iter()
+        .map(|arg| arg.replace("{width}", &width.to_string()))
+        .collect();
+
+    let mut command = Command::new(program);
+    command
+        .args(&args)
+        .env("OSC1717", OSC1717_ADVERTISED)
+        .env("COLUMNS", width.to_string());
+
+    if let Some(features) = feature_overlay(&params.features) {
+        command.env(FEATURES_VAR, features);
+    }
+
+    if let Some(dir) = dir {
+        command.current_dir(dir);
+    }
+
+    Some(command)
+}
+
 /// Run `command` in `dir`, feeding it `input` on stdin (a diff to render; the
 /// log command takes none) and returning its stdout. `None` if the command can't
 /// be spawned or exits non-zero.
@@ -252,18 +283,9 @@ pub(crate) fn run(
     params: &crate::items::RenderParams,
     dir: Option<&Path>,
 ) -> Option<String> {
-    let width = params.width();
-    let (program, args) = command.split_first()?;
-    let args: Vec<String> = args
-        .iter()
-        .map(|arg| arg.replace("{width}", &width.to_string()))
-        .collect();
-
-    let mut command = Command::new(program);
+    let program = command.first()?;
+    let mut command = renderer_command(command, params, dir)?;
     command
-        .args(&args)
-        .env("OSC1717", OSC1717_ADVERTISED)
-        .env("COLUMNS", width.to_string())
         .stdin(if input.is_some() {
             Stdio::piped()
         } else {
@@ -271,14 +293,6 @@ pub(crate) fn run(
         })
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
-
-    if let Some(features) = feature_overlay(&params.features) {
-        command.env(FEATURES_VAR, features);
-    }
-
-    if let Some(dir) = dir {
-        command.current_dir(dir);
-    }
 
     let mut child = command
         .spawn()

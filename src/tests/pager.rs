@@ -7,6 +7,7 @@
 
 use super::*;
 use crate::{app::App, ops::Op};
+use std::time::{Duration, Instant};
 
 #[test]
 fn a_working_tree_patch_admits_stage_and_not_unstage() {
@@ -1130,4 +1131,56 @@ fn what_git_piped_is_read_when_its_command_was_not_found() {
     let paged = crate::paged(input, None, 1_000).unwrap();
 
     assert_eq!(paged.text, "diff --git a/f b/f\n");
+}
+
+/// As git's pager, gitu draws the first screen once the renderer has drawn it,
+/// as less does with a pipeline, and the rest once the renderer has drawn that.
+#[test]
+fn the_first_screen_is_drawn_before_the_renderer_finishes() {
+    let mut ctx = setup_clone!();
+    let lines = |prefix: &str, n: usize| {
+        (1..=n)
+            .map(|i| format!("{prefix} {i}\n"))
+            .collect::<String>()
+    };
+    commit(&ctx.dir, "a.rs", &lines("old a", 60));
+    commit(&ctx.dir, "b.rs", "old b\n");
+    fs::write(ctx.dir.join("a.rs"), lines("new a", 60)).unwrap();
+    fs::write(ctx.dir.join("b.rs"), "new b\n").unwrap();
+    ctx.config().general.diff_renderer.enabled = true;
+    // Drawing a.rs's first rows, then pausing before the rest.
+    ctx.config().general.diff_renderer.command = osc_1717_passthrough()
+        .into_iter()
+        .map(|arg| arg.replace("BEGIN{", "NR==80{fflush(); system(\"sleep 3\")}\nBEGIN{"))
+        .collect();
+
+    let started = Instant::now();
+    let mut app = ctx.init_app_streaming_as_pager_of(&["git", "diff"]);
+
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "{:?}",
+        started.elapsed()
+    );
+    assert!(draws_lines_of(&app, "a.rs"));
+    assert!(
+        !draws_lines_of(&app, "b.rs"),
+        "drawn before the renderer reached it"
+    );
+
+    while !draws_lines_of(&app, "b.rs") {
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "the rest never arrived"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+        app.update(&mut ctx.term, None).unwrap();
+    }
+}
+
+fn draws_lines_of(app: &App, file: &str) -> bool {
+    app.screen().items().iter().any(|item| {
+        matches!(&item.data, crate::item_data::ItemData::HunkLine { diff, file_i, .. }
+            if diff.file_diffs[*file_i].header.new_file.fmt(&diff.text) == file)
+    })
 }

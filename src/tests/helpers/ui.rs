@@ -102,6 +102,31 @@ impl TestContext {
         self.init_app_paged_at(path, paged)
     }
 
+    /// [`Self::init_app_as_pager_of`], drawing the first screen while the rest
+    /// is still being drawn, as gitu does outside tests.
+    pub fn init_app_streaming_as_pager_of(&mut self, cmd: &[&str]) -> App {
+        let text = crate::tests::helpers::run(&self.dir, cmd);
+        let paged = self.piped(
+            text,
+            Some(cmd.iter().map(|arg| (*arg).to_owned()).collect()),
+        );
+        let mut app = App::create(
+            Rc::new(Repository::open(&self.dir).unwrap()),
+            self.size,
+            &Args {
+                pager: true,
+                ..Default::default()
+            },
+            Arc::clone(&self.config),
+            true,
+            Some(paged),
+        )
+        .unwrap();
+
+        app.redraw_now(&mut self.term).unwrap();
+        app
+    }
+
     /// Start gitu on piped text no command of git's is known to have produced.
     pub fn init_app_with_patch(&mut self, patch: String) -> App {
         let paged = self.piped(patch, None);
