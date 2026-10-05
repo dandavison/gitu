@@ -783,7 +783,7 @@ fn rendered_context_lines_are_visited_when_configured() {
 
 /// A renderer that changes nothing but speaks the protocol, so its rows carry
 /// the metadata that makes them content lines rather than plain text.
-fn osc_1717_passthrough() -> Vec<String> {
+pub(super) fn osc_1717_passthrough() -> Vec<String> {
     [
         "awk",
         r#"
@@ -1148,11 +1148,7 @@ fn the_first_screen_is_drawn_before_the_renderer_finishes() {
     fs::write(ctx.dir.join("a.rs"), lines("new a", 60)).unwrap();
     fs::write(ctx.dir.join("b.rs"), "new b\n").unwrap();
     ctx.config().general.diff_renderer.enabled = true;
-    // Drawing a.rs's first rows, then pausing before the rest.
-    ctx.config().general.diff_renderer.command = osc_1717_passthrough()
-        .into_iter()
-        .map(|arg| arg.replace("BEGIN{", "NR==80{fflush(); system(\"sleep 3\")}\nBEGIN{"))
-        .collect();
+    ctx.config().general.diff_renderer.command = pausing_renderer();
 
     let started = Instant::now();
     let mut app = ctx.init_app_streaming_as_pager_of(&["git", "diff"]);
@@ -1178,7 +1174,16 @@ fn the_first_screen_is_drawn_before_the_renderer_finishes() {
     }
 }
 
-fn draws_lines_of(app: &App, file: &str) -> bool {
+/// [`osc_1717_passthrough`], drawing its first 80 rows and then pausing for
+/// three seconds before the rest.
+pub(super) fn pausing_renderer() -> Vec<String> {
+    osc_1717_passthrough()
+        .into_iter()
+        .map(|arg| arg.replace("BEGIN{", "NR==80{fflush(); system(\"sleep 3\")}\nBEGIN{"))
+        .collect()
+}
+
+pub(super) fn draws_lines_of(app: &App, file: &str) -> bool {
     app.screen().items().iter().any(|item| {
         matches!(&item.data, crate::item_data::ItemData::HunkLine { diff, file_i, .. }
             if diff.file_diffs[*file_i].header.new_file.fmt(&diff.text) == file)

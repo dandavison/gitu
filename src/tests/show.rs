@@ -1,10 +1,12 @@
 //! The commit view: a commit's header over its diff.
 
+use super::pager::draws_lines_of;
 use super::*;
 use crate::{
     app::App,
     cli::{Args, Commands},
 };
+use std::time::{Duration, Instant};
 
 fn show_head(ctx: &mut TestContext) -> App {
     let args = Args {
@@ -58,4 +60,52 @@ fn a_failing_show_renderer_leaves_the_built_in_header() {
 
     let buffer = ctx.redact_buffer();
     assert!(buffer.contains("Author:"), "{buffer}");
+}
+
+/// The commit view is drawn once the renderer has drawn its first screen, and
+/// the rest of the diff once it has drawn that.
+#[test]
+fn the_commit_view_is_drawn_before_the_renderer_finishes() {
+    let mut ctx = setup_clone!();
+    let lines = |prefix: &str| {
+        (1..=60)
+            .map(|i| format!("{prefix} {i}\n"))
+            .collect::<String>()
+    };
+    commit(&ctx.dir, "a.rs", &lines("old a"));
+    commit(&ctx.dir, "b.rs", "old b\n");
+    fs::write(ctx.dir.join("a.rs"), lines("new a")).unwrap();
+    fs::write(ctx.dir.join("b.rs"), "new b\n").unwrap();
+    run(&ctx.dir, &["git", "commit", "-am", "change both"]);
+    ctx.config().general.diff_renderer.enabled = true;
+    ctx.config().general.diff_renderer.command = super::pager::pausing_renderer();
+
+    let started = Instant::now();
+    let args = Args {
+        command: Some(Commands::Show {
+            reference: "HEAD".into(),
+        }),
+        ..Default::default()
+    };
+    let mut app = ctx.init_app_streaming_with_args(args);
+
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "{:?}",
+        started.elapsed()
+    );
+    assert!(draws_lines_of(&app, "a.rs"));
+    assert!(
+        !draws_lines_of(&app, "b.rs"),
+        "drawn before the renderer reached it"
+    );
+
+    while !draws_lines_of(&app, "b.rs") {
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "the rest never arrived"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+        app.update(&mut ctx.term, None).unwrap();
+    }
 }

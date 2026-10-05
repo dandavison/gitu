@@ -110,16 +110,27 @@ impl TestContext {
             text,
             Some(cmd.iter().map(|arg| (*arg).to_owned()).collect()),
         );
+        let args = Args {
+            pager: true,
+            ..Default::default()
+        };
+        self.init_app_streaming(args, Some(paged))
+    }
+
+    /// [`Self::init_app_with_args`], drawing the first screen while the rest
+    /// is still being drawn, as gitu does outside tests.
+    pub fn init_app_streaming_with_args(&mut self, args: Args) -> App {
+        self.init_app_streaming(args, None)
+    }
+
+    fn init_app_streaming(&mut self, args: Args, paged: Option<Paged>) -> App {
         let mut app = App::create(
             Rc::new(Repository::open(&self.dir).unwrap()),
             self.size,
-            &Args {
-                pager: true,
-                ..Default::default()
-            },
+            &args,
             Arc::clone(&self.config),
             true,
-            Some(paged),
+            paged,
         )
         .unwrap();
 
