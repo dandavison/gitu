@@ -274,7 +274,12 @@ impl Screen {
 
     fn move_next(&mut self, nav_mode: NavMode) {
         self.cursor = self.find_next(nav_mode);
-        self.scroll_fit_end();
+        // Moving by line scrolls as a pager does, just far enough to keep the
+        // cursor in view; moving by section shows the section whole.
+        match nav_mode {
+            NavMode::IncludeSubLines => self.scroll_to_end_of(self.cursor),
+            NavMode::Normal | NavMode::Siblings { .. } => self.scroll_fit_end(),
+        }
         self.scroll_fit_start();
     }
 
@@ -301,7 +306,16 @@ impl Screen {
             return;
         }
 
-        let last = self.last_selected();
+        self.scroll_to_end_of(self.last_selected());
+    }
+
+    /// Scrolls down until item `last` ends on screen, keeping
+    /// `BOTTOM_CONTEXT_LINES` below it.
+    fn scroll_to_end_of(&mut self, last: usize) {
+        if self.items.is_empty() {
+            return;
+        }
+
         let at_last_line = Scroll {
             item_anchor: last,
             offset: self.item_height(last).saturating_sub(1),
