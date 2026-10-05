@@ -731,13 +731,14 @@ fn paging_past_a_commit_taller_than_the_screen_reaches_the_end() {
     );
 }
 
-/// A context line carries no change, so by default the cursor passes over it:
-/// every line-level op needs something to act on.
+/// A context line carries no change, so with `visit_context_lines` off the
+/// cursor passes over it, onto what a line-level op can act on.
 #[test]
-fn context_lines_are_not_visited_by_default() {
+fn context_lines_are_skipped_when_configured() {
     let mut ctx = setup_clone!();
     commit(&ctx.dir, "firstfile", "one\ntwo\nthree\n");
     fs::write(ctx.dir.join("firstfile"), "one\nCHANGED\nthree\n").unwrap();
+    ctx.config().general.visit_context_lines = false;
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
     ctx.update(&mut app, keys("<ctrl+j>"));
@@ -746,13 +747,12 @@ fn context_lines_are_not_visited_by_default() {
 }
 
 /// Reading a patch is line-by-line, and skipping the unchanged lines makes the
-/// cursor jump. `visit_context_lines` stops on all of them.
+/// cursor jump, so by default it stops on all of them.
 #[test]
-fn context_lines_are_visited_when_configured() {
+fn context_lines_are_visited_by_default() {
     let mut ctx = setup_clone!();
     commit(&ctx.dir, "firstfile", "one\ntwo\nthree\n");
     fs::write(ctx.dir.join("firstfile"), "one\nCHANGED\nthree\n").unwrap();
-    ctx.config().general.visit_context_lines = true;
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
 
