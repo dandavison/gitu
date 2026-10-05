@@ -7,7 +7,7 @@
 //! what it writes to a pager, so the text is stripped of ANSI before it is
 //! parsed; the colours in the view are the renderer's, applied afterwards.
 
-use super::{Items, Screen};
+use super::{Items, Screen, streamed_items};
 use crate::style::{Modifier, Style};
 use crate::{
     Res,
@@ -142,22 +142,9 @@ impl Source {
         params: &RenderParams,
     ) -> Res<Items> {
         let (stream, shape) = self.start(config, repo, params)?;
-        stream.wait_for(2 * params.size.1 as usize);
-        let snapshot = stream.snapshot();
-        let done = snapshot.done;
-        let now = built(config, repo, params, &shape, snapshot)?;
-        if done {
-            return Ok(now.into());
-        }
-
-        let (config, repo, params) = (Arc::clone(config), Rc::clone(repo), params.clone());
-        Ok(Items {
-            now,
-            later: Some(Box::new(move || {
-                stream
-                    .is_done()
-                    .then(|| built(&config, &repo, &params, &shape, stream.snapshot()))
-            })),
+        let (config, repo, built_params) = (Arc::clone(config), Rc::clone(repo), params.clone());
+        streamed_items(stream, params, move |snapshot| {
+            built(&config, &repo, &built_params, &shape, snapshot)
         })
     }
 

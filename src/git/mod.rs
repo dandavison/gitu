@@ -207,25 +207,27 @@ pub(crate) fn status(dir: &Path) -> Res<status::Status> {
     Ok(status::Status::from_str(&text).unwrap())
 }
 
-pub(crate) fn show(repo: &Repository, reference: &str, context: Option<&str>) -> Res<Diff> {
-    let text = String::from_utf8_lossy(
-        &Command::new("git")
-            .current_dir(repo.workdir().expect("Bare repos unhandled"))
-            .arg("show")
-            .args(context)
-            .arg(reference)
-            .output()
-            .map_err(Error::GitShow)?
-            .stdout,
-    )
-    .into_owned();
+/// `git show` of `reference`, asking for `context` around each change.
+pub(crate) fn show_command(repo: &Repository, reference: &str, context: Option<&str>) -> Command {
+    let mut command = Command::new("git");
+    command
+        .current_dir(repo.workdir().expect("Bare repos unhandled"))
+        .arg("show")
+        .args(context)
+        .arg(reference);
+    command
+}
 
-    Ok(Diff {
-        file_diffs: gitu_diff::Parser::new(&text).parse_diff().unwrap(),
+/// The diff `git show` of `reference` wrote as `text`.
+pub(crate) fn shown(reference: &str, text: String) -> Diff {
+    Diff {
+        file_diffs: gitu_diff::Parser::new(&text)
+            .parse_diff()
+            .unwrap_or_default(),
         diff_type: DiffType::TreeToTree,
         text,
         commit: Some(reference.to_string()),
-    })
+    }
 }
 
 #[derive(Debug, Clone)]

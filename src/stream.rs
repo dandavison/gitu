@@ -214,7 +214,13 @@ fn read(
             Ok(0) | Err(_) => break,
             Ok(read) => read,
         };
-        let keep = read.min((limit + 1 - total) as usize);
+        let keep = read.min(
+            limit
+                .saturating_add(1)
+                .saturating_sub(total)
+                .try_into()
+                .unwrap_or(usize::MAX),
+        );
         total += keep as u64;
         let chunk = &buffer[..keep];
 
@@ -380,6 +386,14 @@ mod tests {
         assert!(snapshot.done);
         assert!(snapshot.truncated);
         assert_eq!(snapshot.text, PATCH);
+    }
+
+    #[test]
+    fn there_need_be_no_limit() {
+        let snapshot = finished(Input::Text("a\n".into()), None, u64::MAX);
+
+        assert!(snapshot.done);
+        assert_eq!(snapshot.text, "a\n");
     }
 
     #[test]

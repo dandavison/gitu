@@ -10,7 +10,9 @@ use crate::{
 };
 use git2::Repository;
 
-use super::Screen;
+use super::{Screen, streamed_items};
+use crate::error::Error;
+use crate::stream::{Input, Stream};
 
 pub(crate) fn create(
     config: Arc<Config>,
@@ -19,12 +21,13 @@ pub(crate) fn create(
     reference: String,
     target: Option<(String, u32)>,
 ) -> Res<Screen> {
-    let mut screen = Screen::new(
+    // A target has to be found among the rows, so they are all drawn first.
+    let wait_for_all = target.is_some();
+    let mut screen = Screen::streamed(
         Arc::clone(&config),
         params,
         Box::new(move |params: RenderParams| {
             let commit = git::show_summary(repo.as_ref(), &reference)?;
-            let show = git::show(repo.as_ref(), &reference, params.context.as_deref())?;
 
             // The header as the user's show command draws it, its first row
             // heading the commit; or gitu's own.
@@ -60,7 +63,7 @@ pub(crate) fn create(
                     ),
                 };
 
-            Ok(iter::once(Item {
+            let header: Vec<Item> = iter::once(Item {
                 id: hash(["commit_section", &commit.hash]),
                 depth: 0,
                 data: ItemData::Header(SectionHeader::Commit(commit.hash.clone())),
@@ -69,15 +72,45 @@ pub(crate) fn create(
             })
             .chain(details)
             .chain([items::blank_line()])
-            .chain(items::create_diff_items(
-                &config,
-                &params,
-                &Rc::new(show),
-                0,
-                false,
-                Some(commit.hash.clone()),
-            ))
-            .collect())
+            .collect();
+
+            let renderer = config
+                .general
+                .diff_renderer
+                .enabled
+                .then(|| {
+                    crate::diff_renderer::renderer_command(
+                        &config.general.diff_renderer.command,
+                        &params,
+                        None,
+                    )
+                })
+                .flatten();
+            let show = git::show_command(&repo, &reference, params.context.as_deref());
+            let stream =
+                Stream::start(Input::Command(show), renderer, u64::MAX).map_err(Error::GitShow)?;
+
+            let config = Arc::clone(&config);
+            let reference = reference.clone();
+            let params = RenderParams {
+                streaming: params.streaming && !wait_for_all,
+                ..params
+            };
+            streamed_items(stream, &params, move |snapshot| {
+                let diff = Rc::new(git::shown(&reference, snapshot.text));
+                Ok(header
+                    .iter()
+                    .cloned()
+                    .chain(items::drawn_diff_items(
+                        &config,
+                        &diff,
+                        snapshot.rendered.as_deref(),
+                        0,
+                        false,
+                        Some(commit.hash.clone()),
+                    ))
+                    .collect())
+            })
         }),
     )?;
 

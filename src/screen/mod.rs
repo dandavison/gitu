@@ -1,6 +1,7 @@
 use crate::config::StyleConfig;
 use crate::error::Error;
 use crate::search::RunText;
+use crate::stream::{Snapshot, Stream};
 use crate::style::Style;
 use crate::term::TermBackend;
 use crate::ui::layout::{LayoutTree, Payload, opts};
@@ -109,6 +110,34 @@ pub(crate) struct Items {
 
 /// All of a screen's items once the rest are drawn; `None` until then.
 pub(crate) type Later = Box<dyn FnMut() -> Option<Res<Vec<Item>>>>;
+
+/// The items `build` makes of what `stream` has produced: once it has
+/// `params`' first two screenfuls to show (or all of it, when not streaming),
+/// and all of them, as [`Items::later`], once it is done.
+pub(crate) fn streamed_items(
+    stream: Stream,
+    params: &RenderParams,
+    build: impl Fn(Snapshot) -> Res<Vec<Item>> + 'static,
+) -> Res<Items> {
+    stream.wait_for(if params.streaming {
+        2 * params.size.1 as usize
+    } else {
+        usize::MAX
+    });
+    let snapshot = stream.snapshot();
+    let done = snapshot.done;
+    let now = build(snapshot)?;
+    if done {
+        return Ok(now.into());
+    }
+
+    Ok(Items {
+        now,
+        later: Some(Box::new(move || {
+            stream.is_done().then(|| build(stream.snapshot()))
+        })),
+    })
+}
 
 impl From<Vec<Item>> for Items {
     fn from(now: Vec<Item>) -> Self {
