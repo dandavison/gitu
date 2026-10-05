@@ -85,6 +85,8 @@ pub struct GeneralConfig {
     pub diff_renderer: DiffRendererConfig,
     #[serde(default)]
     pub log_renderer: LogRendererConfig,
+    #[serde(default)]
+    pub show_renderer: ShowRendererConfig,
 }
 
 #[derive(Default, Debug, Deserialize)]
@@ -113,6 +115,14 @@ pub struct LogRendererConfig {
     /// ANSI-colored output becomes the log view; a `{commit}` token must appear
     /// in the format so each commit's rows can be identified (see
     /// [`crate::diff_renderer::COMMIT_RECORD_FORMAT`]).
+    #[serde(default)]
+    pub command: Vec<String>,
+}
+
+#[derive(Default, Debug, Deserialize)]
+pub struct ShowRendererConfig {
+    #[serde(default)]
+    pub enabled: bool,
     #[serde(default)]
     pub command: Vec<String>,
 }

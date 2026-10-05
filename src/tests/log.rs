@@ -283,6 +283,27 @@ fn paging_lands_on_a_commit_of_the_new_page() {
     assert_eq!(top, selected_summary(&app), "paging back missed the commit");
 }
 
+/// A renderer that marks commits itself, as delta does for rows matching its
+/// `commit-regex`, makes the `{commit}` token unnecessary: the format can be a
+/// named one shared with the user's own aliases.
+#[test]
+fn a_log_whose_renderer_marks_commits_needs_no_commit_token() {
+    let mut ctx = setup(setup_clone!());
+    ctx.config().general.log_renderer.enabled = true;
+    ctx.config().general.log_renderer.command = [
+        "sh",
+        "-c",
+        r#"git log --format='▸ %h %s' "$@" | awk '/^▸ /{printf "\033]1717;1;C;;;%s\033\\", $2} {print}'"#,
+        "gitu",
+    ]
+    .map(String::from)
+    .to_vec();
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("ll"));
+    selected_summary(&app);
+}
+
 fn selected_summary(app: &crate::app::App) -> String {
     match &app.state.screens.last().unwrap().get_selected_item().data {
         ItemData::Commit { summary, .. } => summary.clone(),

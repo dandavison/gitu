@@ -34,6 +34,7 @@ mod remote;
 mod reset;
 mod reverse;
 mod search;
+mod show;
 mod stage;
 mod stash;
 mod status;
