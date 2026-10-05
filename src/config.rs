@@ -112,9 +112,10 @@ pub struct LogRendererConfig {
     #[serde(default)]
     pub enabled: bool,
     /// Log command as `[executable, ...args]`, run in the repository. Its
-    /// ANSI-colored output becomes the log view; a `{commit}` token must appear
-    /// in the format so each commit's rows can be identified (see
-    /// [`crate::diff_renderer::COMMIT_RECORD_FORMAT`]).
+    /// ANSI-colored output becomes the log view. Each commit's rows are
+    /// identified by commit records, which a `{commit}` token in the format
+    /// emits (see [`crate::diff_renderer::COMMIT_RECORD_FORMAT`]), or a renderer
+    /// the output is piped through.
     #[serde(default)]
     pub command: Vec<String>,
 }
@@ -123,6 +124,8 @@ pub struct LogRendererConfig {
 pub struct ShowRendererConfig {
     #[serde(default)]
     pub enabled: bool,
+    /// Command as `[executable, ...args]`, run in the repository with the
+    /// commit appended. Its ANSI-colored output is the commit view's header.
     #[serde(default)]
     pub command: Vec<String>,
 }

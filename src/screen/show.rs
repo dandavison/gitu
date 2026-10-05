@@ -6,7 +6,7 @@ use crate::{
     config::Config,
     git,
     item_data::{ItemData, SectionHeader},
-    items::{self, Item, hash},
+    items::{self, Item, RenderedRow, hash},
 };
 use git2::Repository;
 
@@ -25,21 +25,49 @@ pub(crate) fn create(
         Box::new(move |params: RenderParams| {
             let commit = git::show_summary(repo.as_ref(), &reference)?;
             let show = git::show(repo.as_ref(), &reference, params.context.as_deref())?;
-            let details = commit.details.lines();
+
+            // The header as the user's show command draws it, its first row
+            // heading the commit; or gitu's own.
+            let (heading, details): (Option<RenderedRow>, Vec<Item>) =
+                match items::rendered_show_header(&config, &repo, &params, &commit.hash) {
+                    Some(rows) => {
+                        let mut rows = rows.into_iter();
+                        let heading = rows.next();
+                        let details = rows
+                            .map(|row| Item {
+                                id: hash(["commit", &commit.hash]),
+                                depth: 1,
+                                unselectable: true,
+                                rendered: Some(Rc::new(row)),
+                                ..Default::default()
+                            })
+                            .collect();
+                        (heading, details)
+                    }
+                    None => (
+                        None,
+                        commit
+                            .details
+                            .lines()
+                            .map(|line| Item {
+                                id: hash(["commit", &commit.hash]),
+                                depth: 1,
+                                unselectable: true,
+                                data: ItemData::Raw(line.to_string()),
+                                ..Default::default()
+                            })
+                            .collect(),
+                    ),
+                };
 
             Ok(iter::once(Item {
                 id: hash(["commit_section", &commit.hash]),
                 depth: 0,
                 data: ItemData::Header(SectionHeader::Commit(commit.hash.clone())),
+                rendered: heading.map(Rc::new),
                 ..Default::default()
             })
-            .chain(details.into_iter().map(|line| Item {
-                id: hash(["commit", &commit.hash]),
-                depth: 1,
-                unselectable: true,
-                data: ItemData::Raw(line.to_string()),
-                ..Default::default()
-            }))
+            .chain(details)
             .chain([items::blank_line()])
             .chain(items::create_diff_items(
                 &config,

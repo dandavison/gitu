@@ -84,10 +84,12 @@ diff_renderer.feature_keys = {}
 #
 # A commit may take as many rows as the format prints (blank separators, a stat,
 # a graph): Gitu keeps them one unit — one commit per cursor stop, folded and
-# operated on together — by identifying them from a marker the format emits.
-# The `{commit}` token, which must appear in the format, is substituted with git
-# format directives emitting that marker (an OSC-1717 commit record); if it is
-# missing, Gitu falls back to the built-in log.
+# operated on together — by identifying them from a marker in the output (an
+# OSC-1717 commit record). A `{commit}` token in the format is substituted with
+# git format directives emitting it. Without the token, the output must be
+# piped through a renderer that emits it, as delta does for rows matching its
+# `commit-regex`; then the format can be a named one (`--pretty=<name>`) shared
+# with your own aliases. Output with no markers falls back to the built-in log.
 #
 # A `{width}` token is substituted as for `diff_renderer`, so the output can be
 # piped through a renderer that reflows, e.g.:
@@ -97,6 +99,16 @@ log_renderer.command = [
   "git", "log", "--color=always", "--date=relative",
   "--format={commit}%n%n▸ %h %C(blue)%an %C(blue)%ar%C(auto)%d%C(reset)%n%n    %C(green)%s%C(auto)",
 ]
+
+# Draw the commit view's header (above a commit's diff) with a command of your
+# own instead of Gitu's Author/Date/message. The command is run in the
+# repository with the commit appended, and the first row of its ANSI-colored
+# output heads the commit. `{width}` is substituted as for `diff_renderer`.
+# With a named format it can match your log renderer, showing the whole
+# message, e.g.:
+#   show_renderer.command = ["sh", "-c", "git show -s --color=always --pretty=commit-format-full \"$@\" | delta", "gitu"]
+show_renderer.enabled = false
+show_renderer.command = []
 
 # When to prompt for discard confirmation. Options:
 # "line"  - always prompt even for individual lines (default),

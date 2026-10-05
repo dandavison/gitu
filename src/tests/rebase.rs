@@ -158,6 +158,28 @@ fn rebase_todo_shows_the_log_renderer_rows() {
     );
 }
 
+/// A renderer that marks commits itself names them as the format printed them,
+/// usually abbreviated; the todo's commits are still drawn with their rows.
+#[test]
+fn rebase_todo_shows_rows_a_renderer_marked_by_abbreviated_commit() {
+    let mut ctx = setup_todo(setup_clone!());
+    ctx.config().general.log_renderer.enabled = true;
+    ctx.config().general.log_renderer.command = [
+        "sh",
+        "-c",
+        r#"git log --format='▸ %h %s' "$@" | awk '/^▸ /{printf "\033]1717;1;C;;;%s\033\\", $2} {print}'"#,
+        "gitu",
+    ]
+    .map(String::from)
+    .to_vec();
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys(OPEN_TODO));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("▸"), "{buffer}");
+}
+
 #[test]
 fn rebase_todo_redraws_moved_renderer_hyperlinks() {
     let mut ctx = setup_todo(setup_clone!());

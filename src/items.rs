@@ -360,6 +360,42 @@ fn split_at_name(
     (rows, anchor, below)
 }
 
+/// The commit view's header as the configured show command
+/// (`general.show_renderer`) draws it for `commit`, without the blank rows
+/// around it. `None`, for gitu to draw its own, when there is no such command,
+/// or it fails or prints nothing.
+pub(crate) fn rendered_show_header(
+    config: &Config,
+    repo: &Repository,
+    params: &RenderParams,
+    commit: &str,
+) -> Option<Vec<RenderedRow>> {
+    let renderer = &config.general.show_renderer;
+    if !renderer.enabled {
+        return None;
+    }
+
+    let command: Vec<String> = renderer
+        .command
+        .iter()
+        .cloned()
+        .chain([commit.to_owned()])
+        .collect();
+    let dir = repo.workdir().unwrap_or_else(|| repo.path());
+    let output = crate::diff_renderer::run(&command, None, params, Some(dir))?;
+    let parsed = crate::diff_renderer::parse_ansi_lines(&output);
+
+    let is_blank = |line: &&crate::diff_renderer::ParsedLine| line.text.trim().is_empty();
+    let start = parsed.lines.iter().position(|line| !is_blank(&line))?;
+    let end = parsed.lines.iter().rposition(|line| !is_blank(&line))?;
+    Some(
+        parsed.lines[start..=end]
+            .iter()
+            .map(rendered_spans)
+            .collect(),
+    )
+}
+
 /// Colored text as one row per line, keeping the colors it arrived with. For
 /// output that offers no structure to navigate — a grep, a blame, a plain
 /// `diff -u`, anything that isn't a git patch — this is all there is to show.
@@ -786,10 +822,19 @@ pub(crate) fn rendered_commit_rows(
         return HashMap::new();
     }
 
+    // A renderer states the commit as git printed it, which is abbreviated in
+    // most log formats, so it is resolved to the full id the todo uses.
     rendered_commits(config, repo, params, revs)
         .unwrap_or_default()
         .into_iter()
-        .filter_map(|block| Some((block.oid?, block.rows)))
+        .filter_map(|block| {
+            let commit = repo
+                .revparse_single(&block.oid?)
+                .ok()?
+                .peel_to_commit()
+                .ok()?;
+            Some((commit.id().to_string(), block.rows))
+        })
         .collect()
 }
 
