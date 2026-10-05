@@ -46,6 +46,7 @@ use std::{
 };
 use term::Term;
 
+use crate::calling_process::GitCommand;
 use crate::capped_input::Capped;
 use crate::config::Config;
 use crate::screen::pager::Paged;
@@ -161,7 +162,23 @@ fn read_piped_input(git_argv: Option<Vec<String>>, limit: u64) -> Res<Paged> {
         return Err(Error::PagerWithoutInput);
     }
 
-    let input = Capped::read(io::stdin(), limit).map_err(Error::ReadPipedInput)?;
+    paged(io::stdin(), git_argv, limit)
+}
+
+/// What git piped, unless gitu found the command that produced it: then gitu
+/// asks git again itself (see [`screen::pager`]), and reading the output would
+/// only wait for git to write what is discarded. git, left blocked on a full
+/// pipe, ends with SIGPIPE when gitu exits, as it does when less quits early.
+fn paged(input: impl io::Read, git_argv: Option<Vec<String>>, limit: u64) -> Res<Paged> {
+    if git_argv.clone().and_then(GitCommand::of).is_some() {
+        return Ok(Paged {
+            text: String::new(),
+            truncated: false,
+            git_argv,
+        });
+    }
+
+    let input = Capped::read(input, limit).map_err(Error::ReadPipedInput)?;
     Ok(Paged {
         text: input.text,
         truncated: input.truncated,

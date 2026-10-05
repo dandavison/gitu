@@ -1090,3 +1090,44 @@ fn file_header_renderer() -> Vec<String> {
         })
         .collect()
 }
+
+/// Input that says whether it was read.
+struct Watched<'a> {
+    text: &'a [u8],
+    read: &'a std::cell::Cell<bool>,
+}
+
+impl std::io::Read for Watched<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.read.set(true);
+        self.text.read(buf)
+    }
+}
+
+/// Once gitu has found the command git ran, it asks git again itself and
+/// discards what git piped, so it does not wait for git to write it.
+#[test]
+fn what_git_piped_is_not_read_when_its_command_was_found() {
+    let read = std::cell::Cell::new(false);
+    let input = Watched {
+        text: b"diff --git a/f b/f\n",
+        read: &read,
+    };
+
+    crate::paged(input, Some(vec!["git".into(), "diff".into()]), 1_000).unwrap();
+
+    assert!(!read.get());
+}
+
+#[test]
+fn what_git_piped_is_read_when_its_command_was_not_found() {
+    let read = std::cell::Cell::new(false);
+    let input = Watched {
+        text: b"diff --git a/f b/f\n",
+        read: &read,
+    };
+
+    let paged = crate::paged(input, None, 1_000).unwrap();
+
+    assert_eq!(paged.text, "diff --git a/f b/f\n");
+}
