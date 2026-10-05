@@ -1510,6 +1510,24 @@ mod tests {
         .unwrap()
     }
 
+    /// Moving line by line scrolls as a pager does: just far enough to keep the
+    /// cursor in view, even onto a section too long to show whole.
+    #[test]
+    fn moving_by_line_onto_a_section_scrolls_no_further_than_the_cursor() {
+        let spec: Vec<(usize, bool)> = [(0, true), (1, false), (1, false), (1, false), (0, true)]
+            .into_iter()
+            .chain([(1, false); 10])
+            .collect();
+        let mut screen = tree_screen(&spec, (80, 8));
+
+        for _ in 0..4 {
+            screen.select_next(NavMode::IncludeSubLines);
+        }
+
+        assert_eq!(screen.cursor, 4);
+        assert_eq!(screen.scroll.item_anchor, 0, "the view jumped");
+    }
+
     /// section 0
     ///   leaf 1
     ///   section 2
