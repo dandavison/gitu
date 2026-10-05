@@ -36,6 +36,9 @@ pub(crate) struct RenderParams {
     /// How much of a file to ask git for around each change (`-U8`, `-W`),
     /// chosen in-session. `None` is git's own default.
     pub context: Option<Rc<str>>,
+    /// Whether rows may be shown before they are all drawn, the rest following
+    /// when they are. Off in tests, which want a screen all there at once.
+    pub streaming: bool,
 }
 
 impl RenderParams {

@@ -37,7 +37,6 @@ pub(crate) fn create(
     repo: Rc<Repository>,
     params: RenderParams,
     paged: Paged,
-    streaming: bool,
 ) -> Res<Screen> {
     let source = Source::of(paged, &config.general.hide);
     let git_command = source.git_command();
@@ -46,7 +45,7 @@ pub(crate) fn create(
         Arc::clone(&config),
         params,
         Box::new(move |params: RenderParams| {
-            if streaming {
+            if params.streaming {
                 source.first_items(&config, &repo, &params)
             } else {
                 source.items(&config, &repo, &params).map(Items::from)
@@ -433,9 +432,9 @@ mod tests {
                 size: (80, 20),
                 features: Rc::from([]),
                 context: None,
+                streaming: false,
             },
             paged(patch, None),
-            false,
         )
         .unwrap()
     }

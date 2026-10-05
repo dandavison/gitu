@@ -139,6 +139,7 @@ pub(crate) struct Screen {
     /// How much context to ask git for, pushed down from the app as the
     /// features are.
     pub(crate) context: Option<Rc<str>>,
+    streaming: bool,
     /// The command this screen is showing the output of, where it is one gitu
     /// can put again. Shared with the closure that rebuilds the screen, so that
     /// editing it is what the next rebuild asks.
@@ -190,6 +191,7 @@ impl Screen {
             config,
             features: params.features,
             context: params.context,
+            streaming: params.streaming,
             git_command: None,
             refresh_items,
             later: None,
@@ -228,6 +230,7 @@ impl Screen {
             size: self.size,
             features: Rc::clone(&self.features),
             context: self.context.clone(),
+            streaming: self.streaming,
         }
     }
 
@@ -1429,6 +1432,7 @@ mod tests {
                 size,
                 features: Rc::from([]),
                 context: None,
+                streaming: false,
             },
             Box::new(move |_params| {
                 Ok((0..item_count)
@@ -1455,6 +1459,7 @@ mod tests {
                 size,
                 features: Rc::from([]),
                 context: None,
+                streaming: false,
             },
             Box::new(move |_params| {
                 Ok(spec
@@ -1618,6 +1623,7 @@ mod tests {
                 size: (80, height),
                 features: Rc::from([]),
                 context: None,
+                streaming: false,
             },
             Box::new(move |params: RenderParams| {
                 let rows = if params.features.iter().any(|f| f == rows_per_line) {

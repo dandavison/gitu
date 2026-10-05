@@ -97,6 +97,7 @@ impl App {
             size,
             features: Rc::from([]),
             context: None,
+            streaming: enable_async_cmds,
         };
         let screens = match args.command {
             // `--pager`: git's output is already in hand, with the command it ran.
@@ -106,7 +107,6 @@ impl App {
                     Rc::clone(&repo),
                     params,
                     paged,
-                    enable_async_cmds,
                 )?]
             }
             Some(cli::Commands::Show { ref reference }) => {
@@ -497,6 +497,7 @@ impl App {
             size,
             features: Rc::clone(&self.state.features),
             context: self.state.context.clone(),
+            streaming: self.state.enable_async_cmds,
         }
     }
 
