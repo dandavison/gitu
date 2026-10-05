@@ -32,9 +32,9 @@ verbose_branch_status = true
 #   hide = ["*.pb.go", "*_test.go", "vendor"]
 hide = []
 
-# Stop the cursor on a diff's unchanged lines too. Nothing can be staged there,
-# so they are skipped by default; reading a patch line by line wants them.
-visit_context_lines = false
+# Stop the cursor on a diff's unchanged lines too, as reading a patch line by
+# line wants. Nothing can be staged there; off, the cursor skips them.
+visit_context_lines = true
 
 # Render diffs with an external command (e.g. delta) instead of Gitu's
 # built-in syntax/diff highlighting. The command receives a unified diff on

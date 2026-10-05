@@ -76,9 +76,8 @@ pub struct GeneralConfig {
     /// saying once rather than per session.
     #[serde(default)]
     pub hide: Vec<String>,
-    /// Whether the cursor stops on a diff's unchanged lines. Nothing can be
-    /// staged there, so they are skipped by default; reading a patch line by
-    /// line wants them.
+    /// Whether the cursor stops on a diff's unchanged lines, as reading a patch
+    /// line by line wants. Nothing can be staged there.
     #[serde(default)]
     pub visit_context_lines: bool,
     #[serde(default)]

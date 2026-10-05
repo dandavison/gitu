@@ -164,7 +164,10 @@ fn stage_a_changed_line() {
     fs::write(ctx.dir.join("firstfile"), changed_lines()).unwrap();
 
     let mut app = ctx.init_app();
-    ctx.update(&mut app, keys("jj<tab><ctrl+j><ctrl+j><shift+down>s"));
+    ctx.update(
+        &mut app,
+        keys("jj<tab><ctrl+j><ctrl+j><ctrl+j><shift+down>s"),
+    );
 
     assert_eq!(
         run(&ctx.dir, &["git", "show", ":firstfile"]),
