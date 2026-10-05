@@ -782,12 +782,15 @@ fn rendered_context_lines_are_visited_when_configured() {
 }
 
 /// A renderer that changes nothing but speaks the protocol, so its rows carry
-/// the metadata that makes them content lines rather than plain text.
+/// the metadata that makes them content lines rather than plain text. As git's
+/// pager it is handed git's colours, which it drops, as delta reads through
+/// them.
 pub(super) fn osc_1717_passthrough() -> Vec<String> {
     [
         "awk",
         r#"
         BEGIN{printf "\033]1717;1\033\\\n"}
+        {gsub(/\033\[[0-9;]*m/,"")}
         /^\+\+\+ /{file=substr($0,7);print;next}
         /^--- /{print;next}
         /^@@ /{o=$2;n=$3;sub(/^-/,"",o);sub(/^\+/,"",n);split(o,a,",");split(n,b,",");old=a[1];new=b[1];print;next}
@@ -945,13 +948,19 @@ fn a_coloured_patch_is_cut_back_at_the_same_place() {
 fn a_command_that_says_more_than_the_limit_is_cut_back_too() {
     let mut ctx = setup_clone!();
     two_changed_files(&ctx);
-    ctx.config().general.max_input_bytes = 150;
+    // Into the second file's diff, as git writes it to gitu: in colour.
+    let coloured = run(&ctx.dir, &["git", "-c", "color.ui=always", "diff"]);
+    let limit = coloured.find("a/a_test.rs").unwrap() + 20;
+    ctx.config().general.max_input_bytes = limit as u64;
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
     ctx.update(&mut app, keys("j"));
 
     let buffer = ctx.redact_buffer();
-    assert!(buffer.contains("input truncated at 150 bytes"), "{buffer}");
+    assert!(
+        buffer.contains(&format!("input truncated at {limit} bytes")),
+        "{buffer}"
+    );
     assert!(buffer.contains("alpha"), "{buffer}");
     assert!(!buffer.contains("beta"), "{buffer}");
     assert!(offers(&app, Op::Stage), "what is left is still a patch");

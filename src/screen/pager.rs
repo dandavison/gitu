@@ -99,8 +99,7 @@ impl Source {
             };
         }
 
-        let text = crate::diff_renderer::strip_ansi(&paged.text);
-        let file_diffs = gitu_diff::Parser::new(&text)
+        let file_diffs = gitu_diff::Parser::new(&crate::diff_renderer::strip_ansi(&paged.text))
             .parse_diff()
             .unwrap_or_default();
 
@@ -112,7 +111,7 @@ impl Source {
         }
 
         Source::Patch {
-            text,
+            text: paged.text,
             truncated: paged.truncated,
         }
     }
@@ -247,7 +246,10 @@ fn built(
             truncated,
         } => {
             let mut items = asked.clone();
-            let file_diffs = gitu_diff::Parser::new(&snapshot.text)
+            // The output arrives coloured; the parser reads none of it through
+            // the escapes.
+            let text = crate::diff_renderer::strip_ansi(&snapshot.text);
+            let file_diffs = gitu_diff::Parser::new(&text)
                 .parse_diff()
                 .unwrap_or_default();
             // What came back has no diff in it: a log, a blame, a grep, a man
@@ -259,12 +261,10 @@ fn built(
                 let diff = Rc::new(Diff {
                     file_diffs,
                     diff_type: diff_type.clone(),
-                    commit: named_commit
-                        .then(|| commit_named_by(&snapshot.text))
-                        .flatten(),
-                    text: snapshot.text.clone(),
+                    commit: named_commit.then(|| commit_named_by(&text)).flatten(),
+                    text,
                 });
-                items.extend(preamble_items(config, params, &diff.text));
+                items.extend(preamble_items(config, params, &snapshot.text, &diff.text));
                 items.extend(items::drawn_diff_items(
                     config,
                     &diff,
@@ -345,16 +345,24 @@ fn commit_named_by(text: &str) -> Option<String> {
         .then(|| id.to_owned())
 }
 
-/// The commit a patch opens with, as the renderer draws it. It belongs to no
-/// file, so gitu has no structure to give it. A patch whose first line already
-/// begins a file's diff opens with nothing.
-fn preamble_items(config: &Config, params: &RenderParams, text: &str) -> Vec<Item> {
-    let end = match text.find("\ndiff --git ") {
-        Some(i) if !text.starts_with("diff --git ") => i + 1,
+/// The commit a patch opens with, as the renderer draws it, in the colours it
+/// arrived with. It belongs to no file, so gitu has no structure to give it. A
+/// patch whose first line already begins a file's diff opens with nothing.
+/// `plain` is `coloured` without its colours, line for line.
+fn preamble_items(
+    config: &Config,
+    params: &RenderParams,
+    coloured: &str,
+    plain: &str,
+) -> Vec<Item> {
+    let end = match plain.find("\ndiff --git ") {
+        Some(i) if !plain.starts_with("diff --git ") => i + 1,
         _ => return Vec::new(),
     };
+    let lines = plain[..end].lines().count();
+    let preamble: String = coloured.split_inclusive('\n').take(lines).collect();
 
-    items::plain_rows(&render(config, params, &text[..end]))
+    items::plain_rows(&render(config, params, &preamble))
 }
 
 /// `text` as the renderer draws it, or as it arrived when there is no renderer

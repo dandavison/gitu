@@ -82,11 +82,13 @@ impl GitCommand {
     pub(crate) fn command(&self, context: Option<&str>) -> Command {
         let words = self.words(context);
         let mut command = Command::new(words[0]);
+        // git colours what it writes to a pager, and colours a format asks for
+        // (`%C(blue)`) are the user's: they reach the renderer as they would
+        // in a terminal, and gitu strips them before parsing what comes back.
+        command.args(["-c", "color.ui=always"]);
         command.args(&words[1..=self.subcommand]);
-        // gitu parses what comes back, so an external differ must not stand in
-        // for the patch, and git's colours have to be off however the user has
-        // configured them.
-        command.args(["--no-ext-diff", "--no-color"]);
+        // An external differ must not stand in for the patch gitu parses.
+        command.arg("--no-ext-diff");
         command.args(&words[self.subcommand + 1..]);
         command
     }
@@ -523,9 +525,10 @@ mod tests {
                 "git",
                 "-c",
                 "color.ui=always",
+                "-c",
+                "color.ui=always",
                 "diff",
                 "--no-ext-diff",
-                "--no-color",
                 "main"
             ]
         );
@@ -533,9 +536,10 @@ mod tests {
             rerun(&["git", "diff", "-U10", "main", "--", "src"], Some("-U2")),
             [
                 "git",
+                "-c",
+                "color.ui=always",
                 "diff",
                 "--no-ext-diff",
-                "--no-color",
                 "-U2",
                 "main",
                 "--",
@@ -544,11 +548,25 @@ mod tests {
         );
         assert_eq!(
             rerun(&["git", "diff", "--unified", "10"], Some("-W")),
-            ["git", "diff", "--no-ext-diff", "--no-color", "-W"]
+            [
+                "git",
+                "-c",
+                "color.ui=always",
+                "diff",
+                "--no-ext-diff",
+                "-W"
+            ]
         );
         assert_eq!(
             rerun(&["git", "diff", "--function-context"], Some("-U3")),
-            ["git", "diff", "--no-ext-diff", "--no-color", "-U3"]
+            [
+                "git",
+                "-c",
+                "color.ui=always",
+                "diff",
+                "--no-ext-diff",
+                "-U3"
+            ]
         );
     }
 }
