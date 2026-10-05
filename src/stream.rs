@@ -46,9 +46,12 @@ struct Shared {
 #[derive(Default)]
 struct State {
     input: Vec<u8>,
+    input_rows: usize,
     truncated: bool,
     input_done: bool,
     refused: Option<String>,
+    failed: bool,
+    has_renderer: bool,
     rendered: Option<Vec<u8>>,
     rendered_rows: usize,
     rendered_done: bool,
@@ -58,6 +61,15 @@ struct State {
 impl State {
     fn done(&self) -> bool {
         self.input_done && self.rendered_done
+    }
+
+    /// Rows there are to show: the renderer's, or the input's own without one.
+    fn rows(&self) -> usize {
+        if self.has_renderer {
+            self.rendered_rows
+        } else {
+            self.input_rows
+        }
     }
 }
 
@@ -105,7 +117,10 @@ impl Stream {
         match renderer {
             Some(mut child) => {
                 let stdout = child.stdout.take().expect("stdout was piped");
-                shared.update(|state| state.rendered = Some(Vec::new()));
+                shared.update(|state| {
+                    state.has_renderer = true;
+                    state.rendered = Some(Vec::new());
+                });
                 let shared = Arc::clone(&shared);
                 thread::spawn(move || draw(&shared, stdout, child));
             }
@@ -118,10 +133,10 @@ impl Stream {
         Ok(Self { shared })
     }
 
-    /// Wait until the renderer has drawn `rows` rows, or everything is done.
+    /// Wait until there are `rows` rows to show, or everything is done.
     pub(crate) fn wait_for(&self, rows: usize) {
         let mut state = self.shared.state.lock().unwrap();
-        while !state.done() && state.rendered_rows < rows {
+        while !state.done() && state.rows() < rows {
             state = self.shared.changed.wait(state).unwrap();
         }
     }
@@ -156,7 +171,7 @@ impl Stream {
             rendered,
             done,
             refused: state.refused.clone(),
-            failed: false,
+            failed: state.failed,
         }
     }
 }
@@ -212,6 +227,7 @@ fn read(
         let mut abandoned = false;
         shared.update(|state| {
             state.input.extend_from_slice(chunk);
+            state.input_rows += chunk.iter().filter(|&&byte| byte == b'\n').count();
             abandoned = state.abandoned;
         });
         if total > limit || abandoned {
@@ -222,6 +238,7 @@ fn read(
     drop(sink);
 
     let mut refused = None;
+    let mut failed = false;
     if let Some(mut child) = git {
         if stopped {
             // The rest of it is not going to be read, so it is not left to be
@@ -229,6 +246,7 @@ fn read(
             let _ = child.kill();
         }
         let succeeded = child.wait().is_ok_and(|status| status.success());
+        failed = !succeeded;
         let said = complaint.and_then(|thread| thread.join().ok());
         // A command the user can edit is a command the user can get wrong, and
         // an empty screen does not say what git thought of it. (`git diff
@@ -242,6 +260,7 @@ fn read(
     shared.update(|state| {
         state.truncated = stopped;
         state.refused = refused;
+        state.failed = failed;
         state.input_done = true;
     });
 }
