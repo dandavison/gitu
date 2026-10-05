@@ -273,21 +273,23 @@ fn without_context<'a>(args: impl Iterator<Item = &'a str>) -> Vec<&'a str> {
 /// The argv of the git command gitu is paging the output of, looked for in the
 /// two places it can be: above gitu, which is where git puts its pager, and
 /// beside it, which is where a shell pipeline puts it.
+///
+/// As delta finds its calling process: each ancestor is read on its own, and
+/// for a sibling the process numbered just below gitu is tried first, since a
+/// shell starting a pipeline usually numbers its commands in order. Reading
+/// every process on the machine, which takes most of the time, is the last
+/// resort.
 pub(crate) fn paging_for() -> Option<Vec<String>> {
     let mut system = System::new();
-    system.refresh_processes_specifics(
-        ProcessesToUpdate::All,
-        true,
-        ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always),
-    );
-
     let me = Pid::from_u32(std::process::id());
 
     let mut descendant = me;
+    refresh(&mut system, &[me]);
     for _ in 0..ANCESTORS {
         let Some(ancestor) = system.process(descendant).and_then(Process::parent) else {
             break;
         };
+        refresh(&mut system, &[ancestor]);
         if let Some(argv) = git_argv(&system, ancestor) {
             return Some(argv);
         }
@@ -295,16 +297,37 @@ pub(crate) fn paging_for() -> Option<Vec<String>> {
     }
 
     // `git diff | gitu --pager`: the shell created both, so git is the sibling
-    // of gitu rather than its ancestor. Two of them and there is no telling
-    // which produced the input.
+    // of gitu rather than its ancestor.
     let shell = system.process(me)?.parent()?;
+    let is_sibling = |system: &System, pid: Pid| {
+        pid != me && system.process(pid).and_then(Process::parent) == Some(shell)
+    };
+
+    let previous = Pid::from_u32(std::process::id().checked_sub(1)?);
+    refresh(&mut system, &[previous]);
+    if is_sibling(&system, previous)
+        && let Some(argv) = git_argv(&system, previous)
+    {
+        return Some(argv);
+    }
+
+    // Two of them and there is no telling which produced the input.
+    system.refresh_processes_specifics(ProcessesToUpdate::All, true, command_lines());
     let mut siblings = system
         .processes()
-        .iter()
-        .filter(|(pid, process)| **pid != me && process.parent() == Some(shell))
-        .filter_map(|(pid, _)| git_argv(&system, *pid));
+        .keys()
+        .filter(|&&pid| is_sibling(&system, pid))
+        .filter_map(|&pid| git_argv(&system, pid));
 
     siblings.next().filter(|_| siblings.next().is_none())
+}
+
+fn refresh(system: &mut System, pids: &[Pid]) {
+    system.refresh_processes_specifics(ProcessesToUpdate::Some(pids), true, command_lines());
+}
+
+fn command_lines() -> ProcessRefreshKind {
+    ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always)
 }
 
 /// The argv of `pid`, if it is a git command gitu can put again.
