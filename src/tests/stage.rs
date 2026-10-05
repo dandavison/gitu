@@ -29,6 +29,26 @@ fn stage_all_untracked() {
     snapshot!(ctx, "js");
 }
 
+/// The commands gitu runs, and what they print, are shown only with
+/// `--debug`.
+#[test]
+fn the_commands_run_are_shown_only_with_debug() {
+    for debug in [false, true] {
+        let mut ctx = TestContext::setup_clone(&format!("{}-{debug}", function_name!()));
+        ctx.debug = debug;
+        run(&ctx.dir, &["touch", "file-a"]);
+        let mut app = ctx.init_app();
+
+        ctx.update(&mut app, keys("js"));
+        assert_eq!(
+            ctx.redact_buffer().contains("$ git add"),
+            debug,
+            "{}",
+            ctx.redact_buffer()
+        );
+    }
+}
+
 #[test]
 fn stage_removed_line() {
     let ctx = setup_clone!();

@@ -35,6 +35,9 @@ pub struct TestContext {
     pub dir: PathBuf,
     pub remote_dir: PathBuf,
     pub size: (u16, u16),
+    /// Whether gitu starts with `--debug`, showing the commands it runs and
+    /// their output, which most tests assert on.
+    pub debug: bool,
     config: Arc<Config>,
 }
 
@@ -71,6 +74,7 @@ impl TestContext {
             dir: repo_ctx.dir,
             remote_dir: repo_ctx.remote_dir,
             size,
+            debug: true,
             config: Arc::new(config::init_test_config().unwrap()),
         }
     }
@@ -124,6 +128,10 @@ impl TestContext {
     }
 
     fn init_app_streaming(&mut self, args: Args, paged: Option<Paged>) -> App {
+        let args = Args {
+            debug: self.debug,
+            ..args
+        };
         let mut app = App::create(
             Rc::new(Repository::open(&self.dir).unwrap()),
             self.size,
@@ -175,6 +183,10 @@ impl TestContext {
     }
 
     fn init_app_inner(&mut self, path: PathBuf, args: Args, paged: Option<Paged>) -> App {
+        let args = Args {
+            debug: self.debug,
+            ..args
+        };
         let mut app = App::create(
             Rc::new(Repository::open(path).unwrap()),
             self.size,
