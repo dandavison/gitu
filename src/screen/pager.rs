@@ -185,10 +185,7 @@ impl Source {
             ),
         };
 
-        let renderer = config
-            .general
-            .diff_renderer
-            .enabled
+        let renderer = (!config.general.diff_renderer.command.is_empty())
             .then(|| {
                 crate::diff_renderer::renderer_command(
                     &config.general.diff_renderer.command,
@@ -369,7 +366,7 @@ fn preamble_items(
 /// to draw it — which is also how output that already came through one keeps
 /// the records it came with.
 fn render(config: &Config, params: &RenderParams, text: &str) -> String {
-    if !config.general.diff_renderer.enabled {
+    if config.general.diff_renderer.command.is_empty() {
         return text.to_owned();
     }
 

@@ -75,7 +75,7 @@ pub(crate) fn create_diff_items(
     default_collapsed: bool,
     commit: Option<String>,
 ) -> Vec<Item> {
-    let rendered = (config.general.diff_renderer.enabled && !diff.text.is_empty())
+    let rendered = (!config.general.diff_renderer.command.is_empty() && !diff.text.is_empty())
         .then(|| {
             crate::diff_renderer::run(
                 &config.general.diff_renderer.command,
@@ -406,7 +406,7 @@ pub(crate) fn rendered_show_header(
     commit: &str,
 ) -> Option<Vec<RenderedRow>> {
     let renderer = &config.general.show_renderer;
-    if !renderer.enabled {
+    if renderer.command.is_empty() {
         return None;
     }
 
@@ -853,7 +853,7 @@ pub(crate) fn rendered_commit_rows(
     params: &RenderParams,
     revs: &[String],
 ) -> HashMap<String, Vec<Rc<RenderedRow>>> {
-    if !config.general.log_renderer.enabled || revs.is_empty() {
+    if config.general.log_renderer.command.is_empty() || revs.is_empty() {
         return HashMap::new();
     }
 
@@ -1264,7 +1264,6 @@ mod tests {
     fn a_render_carrying_no_content_records_falls_back_to_the_built_in_one() {
         let diff = diff_from(DIFF);
         let mut config = crate::config::init_test_config().unwrap();
-        config.general.diff_renderer.enabled = true;
         config.general.diff_renderer.command = ["sh", "-c", r"printf '\033]1717;1\033\\\n'"]
             .map(String::from)
             .to_vec();
@@ -1288,7 +1287,6 @@ mod tests {
         let dir = temp_dir::TempDir::new().unwrap();
         let ran = dir.child("ran");
         let mut config = crate::config::init_test_config().unwrap();
-        config.general.diff_renderer.enabled = true;
         config.general.diff_renderer.command = vec![
             "sh".into(),
             "-c".into(),

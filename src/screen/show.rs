@@ -74,10 +74,7 @@ pub(crate) fn create(
             .chain([items::blank_line()])
             .collect();
 
-            let renderer = config
-                .general
-                .diff_renderer
-                .enabled
+            let renderer = (!config.general.diff_renderer.command.is_empty())
                 .then(|| {
                     crate::diff_renderer::renderer_command(
                         &config.general.diff_renderer.command,

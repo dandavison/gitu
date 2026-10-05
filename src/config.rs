@@ -90,8 +90,6 @@ pub struct GeneralConfig {
 
 #[derive(Default, Debug, Deserialize)]
 pub struct DiffRendererConfig {
-    #[serde(default)]
-    pub enabled: bool,
     /// Renderer command as `[executable, ...args]`. It receives a unified diff
     /// on stdin and must emit ANSI-colored output that preserves line structure.
     #[serde(default)]
@@ -108,8 +106,6 @@ pub struct DiffRendererConfig {
 
 #[derive(Default, Debug, Deserialize)]
 pub struct LogRendererConfig {
-    #[serde(default)]
-    pub enabled: bool,
     /// Log command as `[executable, ...args]`, run in the repository. Its
     /// ANSI-colored output becomes the log view. Each commit's rows are
     /// identified by commit records, which a `{commit}` token in the format
@@ -121,8 +117,6 @@ pub struct LogRendererConfig {
 
 #[derive(Default, Debug, Deserialize)]
 pub struct ShowRendererConfig {
-    #[serde(default)]
-    pub enabled: bool,
     /// Command as `[executable, ...args]`, run in the repository with the
     /// commit appended. Its ANSI-colored output is the commit view's header.
     #[serde(default)]

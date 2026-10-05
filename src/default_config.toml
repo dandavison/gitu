@@ -50,11 +50,10 @@ visit_context_lines = true
 # will render into (and COLUMNS is exported), so a reflowing renderer fills the
 # viewport rather than defaulting too narrow over the pipe.
 #
-# The default is structure-preserving so it works either way; a renderer that
-# speaks OSC-1717 can be run freely, e.g.:
+# A structure-preserving command works either way; a renderer that speaks
+# OSC-1717 can be run freely, e.g.:
 #   diff_renderer.command = ["delta", "--side-by-side", "--width", "{width}"]
-diff_renderer.enabled = false
-diff_renderer.command = ["delta", "--color-only", "--true-color", "always"]
+diff_renderer.command = []
 
 # Renderer features that `renderer_features` offers, to turn on and off while
 # viewing a diff. They are passed to the renderer as DELTA_FEATURES=+<names>,
@@ -94,11 +93,7 @@ diff_renderer.feature_keys = {}
 # A `{width}` token is substituted as for `diff_renderer`, so the output can be
 # piped through a renderer that reflows, e.g.:
 #   log_renderer.command = ["sh", "-c", "git log --stat --color=always --format='{commit}%h %s' \"$@\" | delta --width {width}", "gitu"]
-log_renderer.enabled = false
-log_renderer.command = [
-  "git", "log", "--color=always", "--date=relative",
-  "--format={commit}%n%n▸ %h %C(blue)%an %C(blue)%ar%C(auto)%d%C(reset)%n%n    %C(green)%s%C(auto)",
-]
+log_renderer.command = []
 
 # Draw the commit view's header (above a commit's diff) with a command of your
 # own instead of Gitu's Author/Date/message. The command is run in the
@@ -107,7 +102,6 @@ log_renderer.command = [
 # With a named format it can match your log renderer, showing the whole
 # message, e.g.:
 #   show_renderer.command = ["sh", "-c", "git show -s --color=always --pretty=commit-format-full \"$@\" | delta", "gitu"]
-show_renderer.enabled = false
 show_renderer.command = []
 
 # When to prompt for discard confirmation. Options:

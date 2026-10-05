@@ -98,7 +98,6 @@ fn log_empty_branch() {
 /// are absolute so the output doesn't drift with the wall clock.
 pub(super) fn with_log_renderer(mut ctx: TestContext, args: &[&str], format: &str) -> TestContext {
     let config = ctx.config();
-    config.general.log_renderer.enabled = true;
     config.general.log_renderer.command = [&["git", "log", "--color=always", "--date=short"], args]
         .concat()
         .iter()
@@ -242,7 +241,6 @@ fn rendered_log_keeps_the_first_commit_when_the_renderer_greets_on_its_line() {
     // a line with the marker a format puts at the very start (delta does this).
     // The newest commit must still be a commit: selectable, cursor on it.
     let mut ctx = setup(setup_clone!());
-    ctx.config().general.log_renderer.enabled = true;
     ctx.config().general.log_renderer.command = [
         "sh",
         "-c",
@@ -289,7 +287,6 @@ fn paging_lands_on_a_commit_of_the_new_page() {
 #[test]
 fn a_log_whose_renderer_marks_commits_needs_no_commit_token() {
     let mut ctx = setup(setup_clone!());
-    ctx.config().general.log_renderer.enabled = true;
     ctx.config().general.log_renderer.command = [
         "sh",
         "-c",

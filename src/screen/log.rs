@@ -21,7 +21,7 @@ pub(crate) fn create(
         Arc::clone(&config),
         params,
         Box::new(move |params: RenderParams| {
-            if config.general.log_renderer.enabled
+            if !config.general.log_renderer.command.is_empty()
                 && let Some(items) =
                     items::rendered_log(&config, &repo, &params, limit, rev, msg_regex.as_ref())
             {

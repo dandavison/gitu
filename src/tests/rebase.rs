@@ -163,7 +163,6 @@ fn rebase_todo_shows_the_log_renderer_rows() {
 #[test]
 fn rebase_todo_shows_rows_a_renderer_marked_by_abbreviated_commit() {
     let mut ctx = setup_todo(setup_clone!());
-    ctx.config().general.log_renderer.enabled = true;
     ctx.config().general.log_renderer.command = [
         "sh",
         "-c",
@@ -184,7 +183,6 @@ fn rebase_todo_shows_rows_a_renderer_marked_by_abbreviated_commit() {
 fn rebase_todo_redraws_moved_renderer_hyperlinks() {
     let mut ctx = setup_todo(setup_clone!());
     let config = ctx.config();
-    config.general.log_renderer.enabled = true;
     config.general.log_renderer.command = vec![
         "git".into(),
         "log".into(),

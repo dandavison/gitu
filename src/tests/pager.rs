@@ -587,7 +587,6 @@ fn a_key_press_after_staging_everything_does_nothing() {
 #[test]
 fn output_with_no_structure_is_still_rendered() {
     let mut ctx = setup_clone!();
-    ctx.config().general.diff_renderer.enabled = true;
     ctx.config().general.diff_renderer.command =
         ["sed", "s/^/rendered /"].map(String::from).to_vec();
 
@@ -675,7 +674,6 @@ fn a_raw_log_becomes_a_log_view_when_the_renderer_marks_commits() {
         .trim()
         .to_string();
 
-    ctx.config().general.diff_renderer.enabled = true;
     ctx.config().general.diff_renderer.command = [
         "awk",
         r#"/^commit /{printf "\033]1717;1;C;;;%s\033\\", $2} {print}"#,
@@ -713,7 +711,6 @@ fn paging_past_a_commit_taller_than_the_screen_reaches_the_end() {
         &["git", "commit", "-m", &format!("a tall commit\n\n{body}")],
     );
 
-    ctx.config().general.diff_renderer.enabled = true;
     ctx.config().general.diff_renderer.command = [
         "awk",
         r#"/^commit /{printf "\033]1717;1;C;;;%s\033\\", $2} {print}"#,
@@ -770,7 +767,6 @@ fn rendered_context_lines_are_visited_when_configured() {
     commit(&ctx.dir, "firstfile", "one\ntwo\nthree\n");
     fs::write(ctx.dir.join("firstfile"), "one\nCHANGED\nthree\n").unwrap();
     ctx.config().general.visit_context_lines = true;
-    ctx.config().general.diff_renderer.enabled = true;
     ctx.config().general.diff_renderer.command = osc_1717_passthrough();
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
@@ -827,7 +823,6 @@ fn offers(app: &App, op: Op) -> bool {
 #[test]
 fn a_shorter_rendering_still_fills_the_screen() {
     let mut ctx = setup_clone!();
-    ctx.config().general.diff_renderer.enabled = true;
     ctx.config().general.diff_renderer.features = vec!["side-by-side".into()];
     ctx.config().general.diff_renderer.command = fusing_renderer();
 
@@ -1022,7 +1017,6 @@ fn the_help_menu_heads_its_columns_by_what_is_in_them() {
     let mut ctx = setup_clone!();
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
-    ctx.config().general.diff_renderer.enabled = true;
     ctx.config().general.diff_renderer.command = hunk_header_renderer();
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
@@ -1068,7 +1062,6 @@ fn the_renderers_file_header_folds_and_stages_its_file() {
     let mut ctx = setup_clone!();
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
-    ctx.config().general.diff_renderer.enabled = true;
     ctx.config().general.diff_renderer.command = file_header_renderer();
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
@@ -1156,7 +1149,6 @@ fn the_first_screen_is_drawn_before_the_renderer_finishes() {
     commit(&ctx.dir, "b.rs", "old b\n");
     fs::write(ctx.dir.join("a.rs"), lines("new a", 60)).unwrap();
     fs::write(ctx.dir.join("b.rs"), "new b\n").unwrap();
-    ctx.config().general.diff_renderer.enabled = true;
     ctx.config().general.diff_renderer.command = pausing_renderer();
 
     let started = Instant::now();

@@ -20,7 +20,6 @@ fn show_head(ctx: &mut TestContext) -> App {
 
 fn with_show_renderer(ctx: &mut TestContext, command: &[&str]) {
     let config = ctx.config();
-    config.general.show_renderer.enabled = true;
     config.general.show_renderer.command = command.iter().map(|arg| arg.to_string()).collect();
 }
 
@@ -77,7 +76,6 @@ fn the_commit_view_is_drawn_before_the_renderer_finishes() {
     fs::write(ctx.dir.join("a.rs"), lines("new a")).unwrap();
     fs::write(ctx.dir.join("b.rs"), "new b\n").unwrap();
     run(&ctx.dir, &["git", "commit", "-am", "change both"]);
-    ctx.config().general.diff_renderer.enabled = true;
     ctx.config().general.diff_renderer.command = super::pager::pausing_renderer();
 
     let started = Instant::now();

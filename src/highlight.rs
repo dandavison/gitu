@@ -28,7 +28,7 @@ pub(crate) fn highlight_hunk(
     file_index: usize,
     hunk_index: usize,
 ) -> Arc<HunkHighlights> {
-    if config.general.diff_renderer.enabled
+    if !config.general.diff_renderer.command.is_empty()
         && let Some(highlights) = highlights_from_renderer(config, diff, file_index, hunk_index)
     {
         return Arc::new(highlights);
