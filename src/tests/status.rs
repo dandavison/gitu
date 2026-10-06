@@ -1,6 +1,7 @@
 //! Reaching the status screen from wherever gitu is.
 
 use super::*;
+use crate::git::diff::DiffType;
 
 #[test]
 fn status_from_the_log_view() {
@@ -35,4 +36,42 @@ fn status_from_a_paged_patch() {
     assert_eq!(app.state.screens.len(), 1);
     let buffer = ctx.redact_buffer();
     assert!(buffer.contains("add firstfile"), "{buffer}");
+}
+
+#[test]
+fn status_opens_on_the_first_unstaged_file() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "a", "a\n");
+    commit(&ctx.dir, "b", "b\n");
+    fs::write(ctx.dir.join("a"), "staged\n").unwrap();
+    run(&ctx.dir, &["git", "add", "a"]);
+    fs::write(ctx.dir.join("b"), "unstaged\n").unwrap();
+    fs::write(ctx.dir.join("untracked"), "").unwrap();
+
+    let (diff_type, header) = selected_file(&ctx.init_app());
+    assert_eq!(diff_type, DiffType::WorkdirToIndex);
+    assert!(header.starts_with("diff --git a/b b/b"), "{header}");
+}
+
+#[test]
+fn status_with_nothing_unstaged_opens_on_the_first_staged_file() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "a", "a\n");
+    fs::write(ctx.dir.join("a"), "staged\n").unwrap();
+    run(&ctx.dir, &["git", "add", "a"]);
+    fs::write(ctx.dir.join("untracked"), "").unwrap();
+
+    let (diff_type, header) = selected_file(&ctx.init_app());
+    assert_eq!(diff_type, DiffType::IndexToTree);
+    assert!(header.starts_with("diff --git a/a b/a"), "{header}");
+}
+
+fn selected_file(app: &crate::app::App) -> (DiffType, String) {
+    match &app.screen().get_selected_item().data {
+        crate::item_data::ItemData::Delta { diff, file_i, .. } => (
+            diff.diff_type.clone(),
+            diff.file_diff_header(*file_i).to_string(),
+        ),
+        data => panic!("not a file: {data:?}"),
+    }
 }
