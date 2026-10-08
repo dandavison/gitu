@@ -837,7 +837,7 @@ fn a_shorter_rendering_still_fills_the_screen() {
         "before the re-render"
     );
 
-    ctx.update(&mut app, keys("|<enter>"));
+    ctx.update(&mut app, keys("<-><enter>"));
     let buffer = ctx.redact_buffer();
     assert!(blank_rows_at_the_bottom(&buffer) <= 2, "{buffer}");
 }

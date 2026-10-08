@@ -255,7 +255,7 @@ root.reverse = ["v"]
 root.copy_hash = ["y"]
 root.blame = ["B"]
 # Turn a renderer feature (side-by-side, line numbers, ...) on or off in place.
-root.renderer_features = ["|"]
+root.renderer_features = ["-"]
 
 picker.next = ["down", "ctrl+n", "tab"]
 picker.previous = ["up", "ctrl+p", "backtab"]

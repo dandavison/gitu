@@ -145,7 +145,7 @@ fn re_enter_picker_from_menu() {
 
 #[test]
 fn renderer_features_offers_the_configured_ones() {
-    snapshot!(setup_clone!(), "|");
+    snapshot!(setup_clone!(), "-");
 }
 
 fn with_feature_key(ctx: &mut TestContext, feature: &str, key: char) {
@@ -178,7 +178,7 @@ fn saved_feature_keys(path: &Path) -> Vec<(String, char)> {
         .collect()
 }
 
-/// A feature's key is a top-level key: it toggles the feature without `|`.
+/// A feature's key is a top-level key: it toggles the feature without `-`.
 #[test]
 fn a_feature_key_toggles_its_feature() {
     let mut ctx = setup_clone!();
@@ -236,7 +236,7 @@ fn the_feature_list_is_moved_through_with_the_arrows() {
     let mut ctx = setup_clone!();
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("|<down><enter>"));
+    ctx.update(&mut app, keys("<-><down><enter>"));
     assert_eq!(&*app.state.features, ["line-numbers".to_string()]);
 }
 
@@ -245,7 +245,7 @@ fn the_feature_list_is_moved_through_with_the_arrows() {
 fn the_feature_list_shows_feature_keys() {
     let mut ctx = setup_clone!();
     with_feature_key(&mut ctx, "line-numbers", 'x');
-    snapshot!(ctx, "|");
+    snapshot!(ctx, "-");
 }
 
 /// In the list, a letter becomes the selected feature's key. It works at once,
@@ -256,7 +256,7 @@ fn a_letter_in_the_feature_list_sets_the_selected_features_key() {
     let (_dir, path) = config_file(&mut ctx, "# mine\n[general]\nvisit_context_lines = true\n");
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("|x<esc>"));
+    ctx.update(&mut app, keys("-x<esc>"));
     assert!(
         app.state.features.is_empty(),
         "setting a key toggles nothing"
@@ -275,7 +275,7 @@ fn the_same_letter_again_unsets_the_key() {
     let (_dir, path) = config_file(&mut ctx, "");
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("|xx<esc>x"));
+    ctx.update(&mut app, keys("-xx<esc>x"));
     assert!(app.state.features.is_empty());
     assert_eq!(saved_feature_keys(&path), []);
 }
@@ -286,7 +286,7 @@ fn another_letter_replaces_the_key() {
     let (_dir, path) = config_file(&mut ctx, "");
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("|xw<esc>x"));
+    ctx.update(&mut app, keys("-xw<esc>x"));
     assert!(app.state.features.is_empty());
 
     ctx.update(&mut app, keys("w"));
@@ -300,7 +300,7 @@ fn a_key_set_for_one_feature_is_taken_from_another() {
     let (_dir, path) = config_file(&mut ctx, "");
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("|x<down>x<esc>x"));
+    ctx.update(&mut app, keys("-x<down>x<esc>x"));
     assert_eq!(&*app.state.features, ["line-numbers".to_string()]);
     assert_eq!(saved_feature_keys(&path), [("line-numbers".into(), 'x')]);
 }
@@ -312,7 +312,7 @@ fn a_letter_bound_at_the_top_level_is_refused() {
     let (_dir, path) = config_file(&mut ctx, "");
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("|s<esc>"));
+    ctx.update(&mut app, keys("-s<esc>"));
     assert!(app.state.feature_keys.is_empty());
     assert!(!path.exists());
 }
@@ -329,7 +329,7 @@ fn renderer_features_offers_those_in_git_config_a_pattern_matches() {
     );
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("|<enter>"));
+    ctx.update(&mut app, keys("<-><enter>"));
     assert_eq!(&*app.state.features, ["my-theme".to_string()]);
 }
 
@@ -341,10 +341,10 @@ fn choosing_a_renderer_feature_marks_it() {
     let mut ctx = ctx;
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("|<enter>"));
+    ctx.update(&mut app, keys("<-><enter>"));
     assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
 
-    ctx.update(&mut app, keys("|<enter>"));
+    ctx.update(&mut app, keys("<-><enter>"));
     assert!(
         app.state.features.is_empty(),
         "picking it again turns it off"

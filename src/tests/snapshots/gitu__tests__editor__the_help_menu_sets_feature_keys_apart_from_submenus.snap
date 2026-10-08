@@ -6,7 +6,7 @@ expression: ctx.redact_buffer()
  Commands                             Submenus          Section                 |
  Y                Show Refs           b   Branch        tab Fold                |
  g+s              Status              c   Commit                                |
- |                Renderer features   f   Fetch                                 |
+ -                Renderer features   f   Fetch                                 |
  backtab          Fold all            h/? Help                                  |
  U                Diff context        l   Log                                   |
  :                Edit git command    m   Merge                                 |
