@@ -10,7 +10,7 @@ expression: ctx.redact_buffer()
  backtab          Fold all            h/? Help                                  |
  U                Diff context        l   Log                                   |
  :                Edit git command    m   Merge                                 |
- _                Files               M   Remote                                |
+ &                Files               M   Remote                                |
  k/up             Up                  F   Pull                                  |
  j/down           Down                P   Push                                  |
  ctrl+k/ctrl+up   Up line             r   Rebase                                |

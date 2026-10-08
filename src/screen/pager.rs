@@ -87,7 +87,7 @@ impl Source {
     ///
     /// The files the user has said to `hide` are dropped from the question
     /// before it is first asked, so the command holds them like any other
-    /// pathspec: `:` shows them, and `_` takes them back.
+    /// pathspec: `:` shows them, and `&` takes them back.
     fn of(paged: Paged, hide: &[String]) -> Self {
         if let Some(git) = paged.git_argv.and_then(GitCommand::of) {
             let mut patterns = git.file_patterns();

@@ -27,7 +27,7 @@ verbose_branch_status = true
 
 # Files to drop from a paged view (`gitu --pager`), as if the patch never had
 # them. The wildcards are git's: `*.pb.go` matches at any depth, and naming a
-# directory hides its subtree. `_` says which files to show while reading, and
+# directory hides its subtree. `&` says which files to show while reading, and
 # `:` shows the pathspecs these became. e.g.:
 #   hide = ["*.pb.go", "*_test.go", "vendor"]
 hide = []
@@ -220,7 +220,7 @@ root.edit_git_command = [":"]
 # files to show at all: `src !*_test.go` limits the view to src and hides its
 # tests.
 root.hide_file = ["d"]
-root.file_patterns = ["_"]
+root.file_patterns = ["&"]
 root.move_up = ["k", "up"]
 root.move_down = ["j", "down"]
 root.move_up_line = ["ctrl+k", "ctrl+up"]

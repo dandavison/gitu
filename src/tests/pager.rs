@@ -356,7 +356,7 @@ fn the_files_to_show_can_be_said_by_pattern() {
     two_changed_files(&ctx);
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
-    ctx.update(&mut app, keys("_!*_test.rs<enter>"));
+    ctx.update(&mut app, keys("&!*_test.rs<enter>"));
 
     let buffer = ctx.redact_buffer();
     assert!(buffer.contains("alpha"), "{buffer}");
@@ -371,7 +371,7 @@ fn the_files_asked_for_come_back_for_editing() {
     two_changed_files(&ctx);
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
-    ctx.update(&mut app, keys("kd_"));
+    ctx.update(&mut app, keys("kd&"));
     assert!(
         ctx.redact_buffer().contains("Files: › !a.rs"),
         "{}",
@@ -398,7 +398,7 @@ fn command_and_file_histories_persist_separately() {
     ctx.update(
         &mut app,
         keys(
-            "_!a_test.rs<enter>_<ctrl+u>!a.rs<enter>\
+            "&!a_test.rs<enter>&<ctrl+u>!a.rs<enter>\
              : HEAD<enter>:<ctrl+u>git diff --cached<enter>",
         ),
     );
@@ -408,7 +408,7 @@ fn command_and_file_histories_persist_separately() {
     ctx.update(&mut app, keys(":<up>"));
     assert_eq!(ctx.prompt_line(), "git diff --cached|");
 
-    ctx.update(&mut app, keys("_<up>"));
+    ctx.update(&mut app, keys("&<up>"));
     assert_eq!(ctx.prompt_line(), "? Files: › !a.rs|");
 
     ctx.update(&mut app, keys(":<up><up><down>"));
