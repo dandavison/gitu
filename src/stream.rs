@@ -457,4 +457,55 @@ mod tests {
         assert!(snapshot.done);
         assert_eq!(snapshot.refused.as_deref(), Some("fatal: no"));
     }
+
+    /// A refresh drops the stream it replaces. A command still writing must
+    /// not be left blocked on a pipe nobody reads, nor a silent one left to
+    /// run on.
+    #[test]
+    fn dropping_a_stream_stops_a_command_still_writing() {
+        assert_stopped_when_dropped("echo $$; exec yes");
+    }
+
+    #[test]
+    fn dropping_a_stream_stops_a_command_yet_to_write_more() {
+        assert_stopped_when_dropped("echo $$; exec sleep 60");
+    }
+
+    /// Start `script`, which first writes its pid, and drop its stream.
+    fn assert_stopped_when_dropped(script: &str) {
+        let stream = Stream::start(
+            Input::Command(command(&["sh", "-c", script])),
+            None,
+            u64::MAX,
+        )
+        .unwrap();
+        stream.wait_for(1);
+        let pid = stream
+            .snapshot()
+            .text
+            .trim()
+            .lines()
+            .next()
+            .unwrap()
+            .to_owned();
+        drop(stream);
+
+        let started = Instant::now();
+        while running(&pid) && started.elapsed() < Duration::from_secs(5) {
+            thread::sleep(Duration::from_millis(50));
+        }
+        let stopped = !running(&pid);
+        let _ = Command::new("kill").arg(&pid).status();
+        assert!(stopped, "still running");
+    }
+
+    /// Whether `pid` is a process that has not been reaped.
+    fn running(pid: &str) -> bool {
+        Command::new("kill")
+            .args(["-0", pid])
+            .stderr(Stdio::null())
+            .status()
+            .unwrap()
+            .success()
+    }
 }
