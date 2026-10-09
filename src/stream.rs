@@ -4,7 +4,7 @@
 
 use std::io::{self, Read, Write};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
 /// Where the text comes from: a command gitu runs, or text already in hand.
@@ -80,8 +80,24 @@ impl State {
 
 impl Shared {
     fn update(&self, change: impl FnOnce(&mut State)) {
-        change(&mut self.state.lock().unwrap());
+        change(&mut self.lock());
         self.changed.notify_all();
+    }
+
+    /// The state, even after a thread panicked holding it: the threads only
+    /// ever add to it, so what is there is still worth showing.
+    fn lock(&self) -> MutexGuard<'_, State> {
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+/// Applies its change to the state when dropped, so that a thread that ends by
+/// panicking still says it has finished.
+struct OnExit<'a>(&'a Shared, fn(&mut State));
+
+impl Drop for OnExit<'_> {
+    fn drop(&mut self) {
+        self.0.update(self.1);
     }
 }
 
@@ -131,31 +147,46 @@ impl Stream {
                     state.rendered = Some(Vec::new());
                 });
                 let shared = Arc::clone(&shared);
-                thread::spawn(move || draw(&shared, stdout, child));
+                thread::spawn(move || {
+                    let _done = OnExit(&shared, |state| state.rendered_done = true);
+                    draw(&shared, stdout, child);
+                });
             }
             None => shared.update(|state| state.rendered_done = true),
         }
 
         let reader = Arc::clone(&shared);
-        thread::spawn(move || read(&reader, source, sink, stderr, limit));
+        thread::spawn(move || {
+            let _done = OnExit(&reader, |state| {
+                state.input_done = true;
+                if let Some(command) = &mut state.command {
+                    let _ = command.kill();
+                }
+            });
+            read(&reader, source, sink, stderr, limit);
+        });
 
         Ok(Self { shared })
     }
 
     /// Wait until there are `rows` rows to show, or everything is done.
     pub(crate) fn wait_for(&self, rows: usize) {
-        let mut state = self.shared.state.lock().unwrap();
+        let mut state = self.shared.lock();
         while !state.done() && state.rows() < rows {
-            state = self.shared.changed.wait(state).unwrap();
+            state = self
+                .shared
+                .changed
+                .wait(state)
+                .unwrap_or_else(PoisonError::into_inner);
         }
     }
 
     pub(crate) fn is_done(&self) -> bool {
-        self.shared.state.lock().unwrap().done()
+        self.shared.lock().done()
     }
 
     pub(crate) fn snapshot(&self) -> Snapshot {
-        let state = self.shared.state.lock().unwrap();
+        let state = self.shared.lock();
         let done = state.done();
 
         let text = String::from_utf8_lossy(&state.input);
