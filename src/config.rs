@@ -80,6 +80,10 @@ pub struct GeneralConfig {
     /// line by line wants. Nothing can be staged there.
     #[serde(default)]
     pub visit_context_lines: bool,
+    /// Whether the status screen opens with the cursor on the first unstaged
+    /// file, or the first staged one when nothing is unstaged.
+    #[serde(default)]
+    pub status_cursor_on_changes: bool,
     #[serde(default)]
     pub diff_renderer: DiffRendererConfig,
     #[serde(default)]
@@ -471,6 +475,7 @@ pub(crate) fn init_test_config() -> Res<Config> {
 
     general.always_show_help.enabled = false;
     general.refresh_on_file_change.enabled = false;
+    general.status_cursor_on_changes = false;
 
     style.search_match = StyleConfigEntry {
         fg: None,

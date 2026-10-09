@@ -139,6 +139,12 @@ pub(crate) fn create(
     )?;
 
     screen.is_status = true;
+    // Unstaged files come before staged ones, and are the only other files here.
+    if screen.config.general.status_cursor_on_changes
+        && let Some(file) = screen.find_item(|item| matches!(item.data, ItemData::Delta { .. }))
+    {
+        screen.cursor = file;
+    }
     Ok(screen)
 }
 

@@ -36,6 +36,10 @@ hide = []
 # line wants. Nothing can be staged there; off, the cursor skips them.
 visit_context_lines = true
 
+# Open the status screen on the first unstaged file, or the first staged one
+# when nothing is unstaged; off, it opens at the top.
+status_cursor_on_changes = true
+
 # Render diffs with an external command (e.g. delta) instead of Gitu's
 # built-in syntax/diff highlighting. The command receives a unified diff on
 # stdin and emits ANSI-colored output.

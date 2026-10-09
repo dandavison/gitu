@@ -47,6 +47,7 @@ fn status_opens_on_the_first_unstaged_file() {
     run(&ctx.dir, &["git", "add", "a"]);
     fs::write(ctx.dir.join("b"), "unstaged\n").unwrap();
     fs::write(ctx.dir.join("untracked"), "").unwrap();
+    ctx.config().general.status_cursor_on_changes = true;
 
     let (diff_type, header) = selected_file(&ctx.init_app());
     assert_eq!(diff_type, DiffType::WorkdirToIndex);
@@ -60,6 +61,7 @@ fn status_with_nothing_unstaged_opens_on_the_first_staged_file() {
     fs::write(ctx.dir.join("a"), "staged\n").unwrap();
     run(&ctx.dir, &["git", "add", "a"]);
     fs::write(ctx.dir.join("untracked"), "").unwrap();
+    ctx.config().general.status_cursor_on_changes = true;
 
     let (diff_type, header) = selected_file(&ctx.init_app());
     assert_eq!(diff_type, DiffType::IndexToTree);
