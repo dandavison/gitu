@@ -1165,6 +1165,71 @@ fn the_first_screen_is_drawn_before_the_renderer_finishes() {
     }
 }
 
+/// The view is up, and can be quit, while a renderer slow to start has drawn
+/// nothing; the first screen arrives once it is drawn, before the rest is.
+#[test]
+fn a_renderer_slow_to_start_does_not_hold_up_the_view() {
+    let mut ctx = setup_clone!();
+    let lines = |prefix: &str, n: usize| {
+        (1..=n)
+            .map(|i| format!("{prefix} {i}\n"))
+            .collect::<String>()
+    };
+    commit(&ctx.dir, "a.rs", &lines("old a", 60));
+    commit(&ctx.dir, "b.rs", "old b\n");
+    fs::write(ctx.dir.join("a.rs"), lines("new a", 60)).unwrap();
+    fs::write(ctx.dir.join("b.rs"), "new b\n").unwrap();
+    ctx.config().general.diff_renderer.command = slow_to_start(pausing_renderer());
+
+    let started = Instant::now();
+    let mut app = ctx.init_app_streaming_as_pager_of(&["git", "diff"]);
+
+    assert!(
+        started.elapsed() < Duration::from_millis(1500),
+        "{:?}",
+        started.elapsed()
+    );
+    assert!(!draws_lines_of(&app, "a.rs"));
+
+    while !draws_lines_of(&app, "a.rs") {
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "the first screen never arrived"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+        app.update(&mut ctx.term, None).unwrap();
+    }
+    assert!(
+        !draws_lines_of(&app, "b.rs"),
+        "waited for the rest before showing the first screen"
+    );
+}
+
+/// `--quit-if-one-screen` decides on all of the output, however slow the
+/// renderer is to start drawing it.
+#[test]
+fn a_patch_that_fits_is_printed_however_slow_the_renderer() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
+    ctx.config().general.diff_renderer.command = slow_to_start(osc_1717_passthrough());
+
+    let mut app = ctx.init_app_streaming_as_pager_of(&["git", "diff"]);
+    ctx.term.clear().unwrap();
+    ctx.term.queue_move_cursor(0, 0).unwrap();
+
+    assert!(app.print_if_one_screen(&mut ctx.term).unwrap());
+    assert!(ctx.physical_screen().contains("+changed"));
+}
+
+/// `renderer`, an awk script, drawing nothing for its first two seconds.
+fn slow_to_start(renderer: Vec<String>) -> Vec<String> {
+    renderer
+        .into_iter()
+        .map(|arg| arg.replacen("BEGIN{", "BEGIN{system(\"sleep 2\")}\nBEGIN{", 1))
+        .collect()
+}
+
 /// [`osc_1717_passthrough`], drawing its first 80 rows and then pausing for
 /// three seconds before the rest.
 pub(super) fn pausing_renderer() -> Vec<String> {
