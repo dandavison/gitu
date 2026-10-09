@@ -773,6 +773,39 @@ mod tests {
         );
     }
 
+    /// Folding everything from within a file's diff leaves the cursor on that
+    /// file.
+    #[test]
+    fn folding_all_from_within_a_stat_file_keeps_the_cursor_on_it() {
+        let ctx = repo_setup_clone!();
+        for file_i in 0..2 {
+            let mut screen = stat_screen(&ctx);
+            for _ in 0..file_i {
+                screen.select_next(crate::screen::NavMode::Normal);
+            }
+            screen.toggle_section().unwrap();
+            for _ in 0..3 {
+                screen.select_next(crate::screen::NavMode::IncludeSubLines);
+            }
+            assert!(
+                matches!(screen.get_selected_item().data, ItemData::HunkLine { .. }),
+                "{:?}",
+                screen.get_selected_item().data
+            );
+
+            screen.toggle_all_sections();
+
+            assert!(
+                matches!(
+                    screen.get_selected_item().data,
+                    ItemData::Delta { file_i: i, .. } if i == file_i
+                ),
+                "file {file_i}: {:?}",
+                screen.get_selected_item().data
+            );
+        }
+    }
+
     /// The screen for `git diff --stat` of changes to two files.
     fn stat_screen(ctx: &RepoTestContext) -> Screen {
         std::fs::write(ctx.dir.join("initial-file"), "hello\nworld\n").unwrap();
