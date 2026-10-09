@@ -1067,6 +1067,15 @@ impl Screen {
             .collect()
     }
 
+    /// The text of each row the screen shows, folded rows as they are folded.
+    #[cfg(test)]
+    pub(crate) fn shown_row_texts(&self) -> Vec<String> {
+        self.visible_items()
+            .filter_map(|item_i| self.items[item_i].rendered.as_ref())
+            .map(|row| row.iter().map(|(text, _)| text.as_str()).collect())
+            .collect()
+    }
+
     pub(crate) fn get_selected_item(&self) -> &Item {
         &self.items[self.cursor]
     }

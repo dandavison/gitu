@@ -686,6 +686,66 @@ mod tests {
         assert_eq!(files, ["a.rs"]);
     }
 
+    /// `git diff --stat` paged by gitu reads as git prints it, a row per file
+    /// and the summary, and each file's row is that file.
+    #[test]
+    fn a_stat_shows_a_row_per_file_as_git_prints_it() {
+        let ctx = repo_setup_clone!();
+        let screen = stat_screen(&ctx);
+
+        assert_eq!(
+            screen.shown_row_texts(),
+            run(&ctx.dir, &["git", "diff", "--stat"])
+                .lines()
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            screen
+                .visible_items()
+                .filter(|&i| matches!(screen.items()[i].data, ItemData::Delta { .. }))
+                .count(),
+            2
+        );
+    }
+
+    /// ... and each of those rows is a file, which unfolds to its diff.
+    #[test]
+    fn a_file_in_a_stat_unfolds_to_its_diff() {
+        let ctx = repo_setup_clone!();
+        let mut screen = stat_screen(&ctx);
+        let shows_a_line = |screen: &Screen| {
+            screen
+                .visible_items()
+                .any(|i| matches!(screen.items()[i].data, ItemData::HunkLine { .. }))
+        };
+        assert!(!shows_a_line(&screen));
+
+        screen.toggle_section().unwrap();
+
+        assert!(shows_a_line(&screen));
+    }
+
+    /// The screen for `git diff --stat` of changes to two files.
+    fn stat_screen(ctx: &RepoTestContext) -> Screen {
+        std::fs::write(ctx.dir.join("initial-file"), "hello\nworld\n").unwrap();
+        std::fs::write(ctx.dir.join("second-file"), "one\n").unwrap();
+        run(&ctx.dir, &["git", "add", "-N", "second-file"]);
+        let argv = ["git", "diff", "--stat"].map(String::from).to_vec();
+
+        create(
+            Arc::new(config::init_test_config().unwrap()),
+            Rc::new(Repository::open(&ctx.dir).unwrap()),
+            RenderParams {
+                size: (80, 20),
+                features: Rc::from([]),
+                context: None,
+                streaming: false,
+            },
+            paged(&run(&ctx.dir, &["git", "diff", "--stat"]), Some(argv)),
+        )
+        .unwrap()
+    }
+
     fn write(ctx: &RepoTestContext, content: &str) {
         std::fs::write(ctx.dir.join("f.txt"), content).unwrap();
     }
