@@ -6,6 +6,7 @@ use std::io::{self, Read, Write};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
+use std::time::Duration;
 
 /// Where the text comes from: a command gitu runs, or text already in hand.
 pub(crate) enum Input {
@@ -179,6 +180,21 @@ impl Stream {
                 .wait(state)
                 .unwrap_or_else(PoisonError::into_inner);
         }
+    }
+
+    /// [`Self::wait_for`], giving up after `timeout`.
+    pub(crate) fn wait_at_most(&self, rows: usize, timeout: Duration) {
+        let state = self.shared.lock();
+        let _ = self
+            .shared
+            .changed
+            .wait_timeout_while(state, timeout, |state| !state.done() && state.rows() < rows)
+            .unwrap_or_else(PoisonError::into_inner);
+    }
+
+    /// How many rows there are to show so far.
+    pub(crate) fn rows(&self) -> usize {
+        self.shared.lock().rows()
     }
 
     pub(crate) fn is_done(&self) -> bool {

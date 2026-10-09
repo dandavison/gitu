@@ -22,6 +22,7 @@ use std::iter::{self, successors};
 use std::ops::RangeInclusive;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 
 pub(crate) mod blame;
 pub(crate) mod log;
@@ -102,31 +103,47 @@ pub(crate) type RefreshItems = Box<dyn Fn(RenderParams) -> Res<Vec<Item>>>;
 pub(crate) type RefreshStreamed = Box<dyn Fn(RenderParams) -> Res<Items>>;
 
 /// A screen's items: those there are now, and, while the rest are still being
-/// drawn, how to have all of them once they are.
+/// drawn, how to have more of them as they are.
 pub(crate) struct Items {
     pub(crate) now: Vec<Item>,
     pub(crate) later: Option<Later>,
 }
 
-/// All of a screen's items once the rest are drawn; `None` until then.
-pub(crate) type Later = Box<dyn FnMut() -> Option<Res<Vec<Item>>>>;
+/// More of a screen's items: `None` until there are more to show, then the
+/// items and whether they are all of them.
+pub(crate) type Later = Box<dyn FnMut() -> Option<(Res<Vec<Item>>, bool)>>;
+
+/// How long a screen waits for its first screenfuls before it is shown with
+/// what there is. Waiting longer would leave gitu deaf to keys while a slow
+/// command or renderer has drawn nothing.
+const FIRST_SCREEN_WAIT: Duration = Duration::from_millis(500);
 
 /// The items `build` makes of what `stream` has produced: once it has
-/// `params`' first two screenfuls to show (or all of it, when not streaming),
-/// and all of them, as [`Items::later`], once it is done.
+/// `params`' first two screenfuls to show or [`FIRST_SCREEN_WAIT`] has passed
+/// (or all of it, when not streaming); then, as [`Items::later`], the first
+/// two screenfuls if they were not there yet, and all of them once it is done.
 pub(crate) fn streamed_items(
     stream: Stream,
     params: &RenderParams,
     build: impl Fn(Snapshot) -> Res<Vec<Item>> + 'static,
 ) -> Res<Items> {
-    stream.wait_for(if params.streaming {
-        2 * params.size.1 as usize
+    let first_screens = 2 * params.size.1 as usize;
+    if params.streaming {
+        stream.wait_at_most(first_screens, FIRST_SCREEN_WAIT);
     } else {
-        usize::MAX
-    });
+        stream.wait_for(usize::MAX);
+    }
+    let mut short = stream.rows() < first_screens;
     let snapshot = stream.snapshot();
     let done = snapshot.done;
-    let now = build(snapshot)?;
+    // Until the renderer has drawn a row there is nothing to show: gitu's own
+    // rows in their place would be highlighted by running the renderer on each
+    // hunk, all before the first screen.
+    let now = if !done && snapshot.rendered.as_deref() == Some("") {
+        Vec::new()
+    } else {
+        build(snapshot)?
+    };
     if done {
         return Ok(now.into());
     }
@@ -134,7 +151,14 @@ pub(crate) fn streamed_items(
     Ok(Items {
         now,
         later: Some(Box::new(move || {
-            stream.is_done().then(|| build(stream.snapshot()))
+            if stream.is_done() {
+                Some((build(stream.snapshot()), true))
+            } else if short && stream.rows() >= first_screens {
+                short = false;
+                Some((build(stream.snapshot()), false))
+            } else {
+                None
+            }
         })),
     })
 }
@@ -619,15 +643,17 @@ impl Screen {
     /// are; a re-render that lays the same diff out differently moves them.
     /// What does not move is where a row sits in the patch, so that is what is
     /// restored.
-    /// Take all of the items once the rest are drawn, and say whether it did.
+    /// Take more of the items once they are drawn, and say whether it did.
     /// The cursor keeps its place in the list. The rows drawn first are the
     /// first rows of all of them, so that is the same row, unless the cursor
     /// had already gone past what was drawn.
     pub(crate) fn finish(&mut self) -> Res<bool> {
-        let Some(items) = self.later.as_mut().and_then(|later| later()) else {
+        let Some((items, all)) = self.later.as_mut().and_then(|later| later()) else {
             return Ok(false);
         };
-        self.later = None;
+        if all {
+            self.later = None;
+        }
         let items = items?;
         // Items that were not drawn yet start folded as a screen's first items
         // do.
@@ -981,6 +1007,11 @@ impl Screen {
     }
 
     /// Whether every row [`print_screen`] prints fits in `rows`.
+    /// Whether some of the items are still being drawn.
+    pub(crate) fn is_drawing(&self) -> bool {
+        self.later.is_some()
+    }
+
     pub(crate) fn fits_in(&self, rows: usize) -> bool {
         let mut height = 0;
         self.printed_items().all(|item_i| {

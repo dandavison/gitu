@@ -351,12 +351,22 @@ impl App {
     }
 
     /// Prints the screen, and says so, if it fits on the terminal with a row
-    /// to spare for the shell's prompt: less's `--quit-if-one-screen`.
-    pub fn print_if_one_screen(&self, term: &mut Term) -> Res<bool> {
-        let screen = self.state.screens.last().unwrap();
+    /// to spare for the shell's prompt: less's `--quit-if-one-screen`. Waits
+    /// for the rest of a screen still being drawn while what there is fits.
+    pub fn print_if_one_screen(&mut self, term: &mut Term) -> Res<bool> {
+        let screen = self.state.screens.last_mut().unwrap();
         let (_, rows) = term.size().map_err(Error::Term)?;
-        if !screen.fits_in(rows.saturating_sub(1).into()) {
-            return Ok(false);
+        let rows = rows.saturating_sub(1).into();
+        loop {
+            if !screen.fits_in(rows) {
+                return Ok(false);
+            }
+            if !screen.is_drawing() {
+                break;
+            }
+            if !screen.finish()? {
+                std::thread::sleep(Duration::from_millis(10));
+            }
         }
 
         screen::print_screen(term, screen)?;

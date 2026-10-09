@@ -971,7 +971,7 @@ fn a_patch_that_fits_on_one_screen_is_printed() {
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
 
-    let app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
     ctx.term.clear().unwrap();
     ctx.term.queue_move_cursor(0, 0).unwrap();
 
@@ -990,7 +990,7 @@ fn a_patch_longer_than_one_screen_is_not_printed() {
     commit(&ctx.dir, "firstfile", &lines("old"));
     fs::write(ctx.dir.join("firstfile"), lines("new")).unwrap();
 
-    let app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
     ctx.term.clear().unwrap();
     ctx.term.queue_move_cursor(0, 0).unwrap();
 
