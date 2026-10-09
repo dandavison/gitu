@@ -11,6 +11,8 @@ use std::thread;
 pub(crate) enum Input {
     Command(Command),
     Text(String),
+    #[cfg(test)]
+    Reader(Box<dyn Read + Send>),
 }
 
 /// A pipeline from an [`Input`] through a renderer, read on threads of its own.
@@ -95,6 +97,8 @@ impl Stream {
 
         let (source, stderr): (Box<dyn Read + Send>, Option<ChildStderr>) = match input {
             Input::Text(text) => (Box::new(io::Cursor::new(text.into_bytes())), None),
+            #[cfg(test)]
+            Input::Reader(reader) => (reader, None),
             Input::Command(mut command) => {
                 let mut child = command
                     .stdin(Stdio::null())
@@ -515,5 +519,25 @@ mod tests {
             .status()
             .unwrap()
             .success()
+    }
+
+    /// A thread that dies part way must not leave the view waiting forever:
+    /// what was read before it died is shown.
+    #[test]
+    fn a_stream_whose_reading_panics_is_done() {
+        struct Panics;
+        impl Read for Panics {
+            fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+                panic!("reading panicked");
+            }
+        }
+        let stream = Stream::start(Input::Reader(Box::new(Panics)), None, u64::MAX).unwrap();
+
+        let (done, waited) = std::sync::mpsc::channel();
+        thread::spawn(move || {
+            stream.wait_for(usize::MAX);
+            let _ = done.send(stream.snapshot().done);
+        });
+        assert_eq!(waited.recv_timeout(Duration::from_secs(5)), Ok(true));
     }
 }
