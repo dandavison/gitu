@@ -532,8 +532,8 @@ impl Screen {
     /// Fold the view down to its outermost headings, or open all of it when
     /// they are already folded. Only the outermost are folded, and everything
     /// within them is opened, so that opening one shows what is inside it
-    /// rather than another folded thing. The cursor can end up inside what was
-    /// folded away, so it is re-placed afterwards.
+    /// rather than another folded thing. A cursor inside what was folded away
+    /// goes to the heading that folded it.
     pub(crate) fn toggle_all_sections(&mut self) {
         self.anchor = None;
 
@@ -550,6 +550,9 @@ impl Screen {
         self.collapsed.clear();
         if !folded {
             self.collapsed.extend(headings);
+        }
+        if let Some(heading) = self.hidden_by(self.cursor, 0) {
+            self.cursor = heading;
         }
 
         self.invalidate();
