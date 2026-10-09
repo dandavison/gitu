@@ -308,8 +308,7 @@ fn a_patch_with_no_command_cannot_be_edited() {
 }
 
 /// Two files whose contents say which is which, so that a view can be asserted
-/// to have dropped one of them without reading its name off the row that says
-/// what is being asked.
+/// to have dropped one of them.
 fn two_changed_files(ctx: &TestContext) {
     commit(&ctx.dir, "a.rs", "alpha\n");
     commit(&ctx.dir, "a_test.rs", "beta\n");
@@ -436,28 +435,19 @@ fn command_history_is_scoped_to_the_worktree() {
     assert_eq!(ctx.prompt_line(), "git diff|");
 }
 
-/// A view with files hidden from it must not pass for the whole patch, so a
-/// question that is no longer git's own says so — in one line, and only then.
+/// The view shows the command's output only: what is being asked is for `:`
+/// to say, edited or not.
 #[test]
-fn a_view_that_is_not_what_git_asked_for_says_what_it_is() {
+fn an_edited_command_is_not_shown_in_the_view() {
     let mut ctx = setup_clone!();
     two_changed_files(&ctx);
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
-    assert!(
-        !ctx.redact_buffer().contains("git diff"),
-        "nothing to say about git's own question:\n{}",
-        ctx.redact_buffer()
-    );
-
     ctx.update(&mut app, keys("kd"));
 
-    assert!(
-        ctx.redact_buffer()
-            .contains("git diff -- ':(top,exclude)a.rs'"),
-        "{}",
-        ctx.redact_buffer()
-    );
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("beta"), "{buffer}");
+    assert!(!buffer.contains("git diff"), "{buffer}");
 }
 
 /// Folding everything leaves one folded thing, not a stack of them: opening a
