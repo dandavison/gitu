@@ -64,12 +64,7 @@ enum Source {
     /// produced the patch. Asking again is what makes it a live view — staging
     /// a hunk changes what it shows — and the question itself can be edited,
     /// so what comes back is classified afresh on every ask.
-    Live {
-        git: Rc<RefCell<GitCommand>>,
-        /// The command as git put it, to say when what is being asked is no
-        /// longer that.
-        found: String,
-    },
+    Live { git: Rc<RefCell<GitCommand>> },
     /// A patch gitu found no command for: a saved patch file, another repo's,
     /// one piped in from a process already gone. It stays as it came, and gitu
     /// structures it.
@@ -95,7 +90,6 @@ impl Source {
             patterns.extend(hide.iter().map(|glob| format!("!{glob}")));
 
             return Source::Live {
-                found: git.line(None),
                 git: Rc::new(RefCell::new(git.asking_for(&patterns))),
             };
         }
@@ -157,7 +151,7 @@ impl Source {
         params: &RenderParams,
     ) -> Res<(Stream, Shape)> {
         let (input, shape) = match self {
-            Source::Live { git, found } => {
+            Source::Live { git } => {
                 let git = git.borrow();
                 let stat = git.is_stat();
                 // A diffstat is shown as the files of the patch, folded to
@@ -174,7 +168,6 @@ impl Source {
                     diff_type: git.diff_type(),
                     named_commit: true,
                     stat,
-                    asked: asked_rows(&git.line(params.context.as_deref()), found),
                     truncated: false,
                 };
                 (Input::Command(command), shape)
@@ -184,7 +177,6 @@ impl Source {
                     diff_type: DiffType::TreeToTree,
                     named_commit: false,
                     stat: false,
-                    asked: Vec::new(),
                     truncated: *truncated,
                 };
                 (Input::Text(text.clone()), shape)
@@ -224,8 +216,6 @@ enum Shape {
         /// Whether it opens with a diffstat, each file folding to its row of
         /// it.
         stat: bool,
-        /// The row saying what is being asked, if that is not git's question.
-        asked: Vec<Item>,
         /// Whether the input it came from was already cut short.
         truncated: bool,
     },
@@ -255,10 +245,9 @@ fn built(
             diff_type,
             named_commit,
             stat,
-            asked,
             truncated,
         } => {
-            let mut items = asked.clone();
+            let mut items = Vec::new();
             // The output arrives coloured; the parser reads none of it through
             // the escapes.
             let text = crate::diff_renderer::strip_ansi(&snapshot.text);
@@ -301,17 +290,6 @@ fn built(
 
     items.extend(truncated_rows(truncated || snapshot.truncated, limit));
     Ok(items)
-}
-
-/// One line saying what is being asked, and only when that is not what git was
-/// asked: a view with files hidden from it must not pass for the whole patch.
-/// When gitu is asking git's own question there is nothing to say.
-fn asked_rows(line: &str, found: &str) -> Vec<Item> {
-    if line == found {
-        return Vec::new();
-    }
-
-    vec![dim_row(line.to_owned())]
 }
 
 /// One line saying that what is shown is not all of the output, for output that
