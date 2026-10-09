@@ -1305,3 +1305,55 @@ fn a_piped_patch_keeps_the_colours_of_its_commit() {
         ctx.redact_buffer()
     );
 }
+
+/// A re-render keeps the cursor on its diff line though that line is drawn only
+/// after the first screenfuls: it is there when the user gets control back, not
+/// moved there later.
+#[test]
+fn a_rerender_keeps_the_cursor_on_a_line_drawn_late() {
+    let mut ctx = setup_clone!();
+    let lines = |prefix: &str, n: usize| {
+        (1..=n)
+            .map(|i| format!("{prefix} {i}\n"))
+            .collect::<String>()
+    };
+    commit(&ctx.dir, "a.rs", &lines("old a", 60));
+    commit(&ctx.dir, "b.rs", "old b\n");
+    fs::write(ctx.dir.join("a.rs"), lines("new a", 60)).unwrap();
+    fs::write(ctx.dir.join("b.rs"), "new b\n").unwrap();
+    ctx.config().general.diff_renderer.command = pausing_renderer();
+    let mut app = ctx.init_app_streaming_as_pager_of(&["git", "diff"]);
+    let started = Instant::now();
+    while app.screen().is_drawing() {
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "never finished"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+        app.update(&mut ctx.term, None).unwrap();
+    }
+    ctx.update(&mut app, keys("/new b<enter>"));
+    assert_eq!(selected_line_of(&app), Some(("b.rs".into(), 1)));
+
+    ctx.update(&mut app, keys("<-><enter>"));
+    assert_eq!(selected_line_of(&app), Some(("b.rs".into(), 1)));
+}
+
+fn selected_line_of(app: &App) -> Option<(String, usize)> {
+    match &app.screen().get_selected_item().data {
+        crate::item_data::ItemData::HunkLine {
+            diff,
+            file_i,
+            line_i,
+            ..
+        } => Some((
+            diff.file_diffs[*file_i]
+                .header
+                .new_file
+                .fmt(&diff.text)
+                .to_string(),
+            *line_i,
+        )),
+        _ => None,
+    }
+}
