@@ -3,7 +3,7 @@
 //! it is still being written and drawn.
 
 use std::io::{self, Read, Write};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
@@ -14,7 +14,8 @@ pub(crate) enum Input {
 }
 
 /// A pipeline from an [`Input`] through a renderer, read on threads of its own.
-/// Dropping it stops reading the input; what has been read is still drawn.
+/// Dropping it stops reading the input, killing a command still running; what
+/// has been read is still drawn.
 pub(crate) struct Stream {
     shared: Arc<Shared>,
 }
@@ -56,6 +57,8 @@ struct State {
     rendered_rows: usize,
     rendered_done: bool,
     abandoned: bool,
+    /// The input's command, until it closes its output and is waited for.
+    command: Option<Child>,
 }
 
 impl State {
@@ -90,7 +93,7 @@ impl Stream {
             changed: Condvar::new(),
         });
 
-        let (source, git): (Box<dyn Read + Send>, Option<Child>) = match input {
+        let (source, stderr): (Box<dyn Read + Send>, Option<ChildStderr>) = match input {
             Input::Text(text) => (Box::new(io::Cursor::new(text.into_bytes())), None),
             Input::Command(mut command) => {
                 let mut child = command
@@ -99,7 +102,9 @@ impl Stream {
                     .stderr(Stdio::piped())
                     .spawn()?;
                 let stdout = child.stdout.take().expect("stdout was piped");
-                (Box::new(stdout), Some(child))
+                let stderr = child.stderr.take();
+                shared.update(|state| state.command = Some(child));
+                (Box::new(stdout), stderr)
             }
         };
 
@@ -128,7 +133,7 @@ impl Stream {
         }
 
         let reader = Arc::clone(&shared);
-        thread::spawn(move || read(&reader, source, sink, git, limit));
+        thread::spawn(move || read(&reader, source, sink, stderr, limit));
 
         Ok(Self { shared })
     }
@@ -178,7 +183,12 @@ impl Stream {
 
 impl Drop for Stream {
     fn drop(&mut self) {
-        self.shared.update(|state| state.abandoned = true);
+        self.shared.update(|state| {
+            state.abandoned = true;
+            if let Some(command) = &mut state.command {
+                let _ = command.kill();
+            }
+        });
     }
 }
 
@@ -189,22 +199,18 @@ fn read(
     shared: &Shared,
     mut source: Box<dyn Read + Send>,
     mut sink: Option<ChildStdin>,
-    git: Option<Child>,
+    stderr: Option<ChildStderr>,
     limit: u64,
 ) {
     // Read stderr on its own thread: a command filling that pipe while gitu is
     // reading stdout would otherwise deadlock.
-    let mut git = git;
-    let complaint = git
-        .as_mut()
-        .and_then(|child| child.stderr.take())
-        .map(|mut pipe| {
-            thread::spawn(move || {
-                let mut said = String::new();
-                let _ = pipe.read_to_string(&mut said);
-                said
-            })
-        });
+    let complaint = stderr.map(|mut pipe| {
+        thread::spawn(move || {
+            let mut said = String::new();
+            let _ = pipe.read_to_string(&mut said);
+            said
+        })
+    });
 
     let mut buffer = vec![0; 64 * 1024];
     let mut total = 0;
@@ -245,7 +251,9 @@ fn read(
 
     let mut refused = None;
     let mut failed = false;
-    if let Some(mut child) = git {
+    let mut command = None;
+    shared.update(|state| command = state.command.take());
+    if let Some(mut child) = command {
         if stopped {
             // The rest of it is not going to be read, so it is not left to be
             // written either.
