@@ -315,3 +315,41 @@ impl TermBackend {
         }
     }
 }
+
+/// Whether the terminal behind `fd` has gone, as when its window is closed.
+/// Reading it then gives end of file, which crossterm reports as no input, so
+/// gitu must ask. Without this, gitu as git's pager in a closed tmux pane spins
+/// forever: git, the pane's session leader, takes the SIGHUP and waits for its
+/// pager rather than passing it on.
+#[cfg(unix)]
+fn hung_up(fd: std::os::fd::BorrowedFd) -> bool {
+    let _ = fd;
+    false
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::hung_up;
+    use std::os::fd::{AsFd, FromRawFd, OwnedFd};
+
+    #[test]
+    fn a_terminal_has_hung_up_once_its_other_end_is_closed() {
+        let (mut master, mut slave) = (0, 0);
+        let opened = unsafe {
+            libc::openpty(
+                &mut master,
+                &mut slave,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        assert_eq!(opened, 0);
+        let (master, slave) =
+            unsafe { (OwnedFd::from_raw_fd(master), OwnedFd::from_raw_fd(slave)) };
+
+        assert!(!hung_up(slave.as_fd()));
+        drop(master);
+        assert!(hung_up(slave.as_fd()));
+    }
+}

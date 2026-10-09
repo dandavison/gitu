@@ -497,6 +497,7 @@ dependencies = [
  "imara-diff",
  "insta",
  "itertools 0.14.0",
+ "libc",
  "log",
  "nom",
  "notify",

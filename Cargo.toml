@@ -101,3 +101,6 @@ unicode-width = "0.2.0"
 url = "2.5.7"
 sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
 shell-words = "1.1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.178"
