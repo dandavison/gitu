@@ -308,6 +308,16 @@ impl TermBackend {
         }
     }
 
+    pub fn hung_up(&self) -> bool {
+        match self {
+            #[cfg(unix)]
+            TermBackend::Crossterm(t) => hung_up(std::os::fd::AsFd::as_fd(t)),
+            #[cfg(not(unix))]
+            TermBackend::Crossterm(_) => false,
+            TermBackend::Test { .. } => false,
+        }
+    }
+
     pub fn read_event(&mut self) -> Res<Event> {
         match self {
             TermBackend::Crossterm(_) => crossterm::event::read().map_err(Error::Term),
@@ -323,8 +333,14 @@ impl TermBackend {
 /// pager rather than passing it on.
 #[cfg(unix)]
 fn hung_up(fd: std::os::fd::BorrowedFd) -> bool {
-    let _ = fd;
-    false
+    use std::os::fd::AsRawFd;
+    let mut pollfd = libc::pollfd {
+        fd: fd.as_raw_fd(),
+        events: libc::POLLOUT,
+        revents: 0,
+    };
+    let ready = unsafe { libc::poll(&mut pollfd, 1, 0) };
+    ready == 1 && pollfd.revents & (libc::POLLHUP | libc::POLLERR | libc::POLLNVAL) != 0
 }
 
 #[cfg(all(test, unix))]

@@ -218,6 +218,8 @@ impl App {
         while !self.state.quit {
             let event = if term.poll_event(max_tick_delay)? {
                 Some(term.read_event()?)
+            } else if term.hung_up() {
+                return Ok(());
             } else {
                 None
             };
