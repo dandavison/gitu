@@ -16,7 +16,8 @@ use crate::{
     error::Error,
     git::diff::{Diff, DiffType},
     gitu_diff,
-    items::{self, Item, RenderParams},
+    item_data::ItemData,
+    items::{self, Item, RenderParams, RenderedRow},
     stream::{Input, Snapshot, Stream},
 };
 use git2::Repository;
@@ -158,11 +159,21 @@ impl Source {
         let (input, shape) = match self {
             Source::Live { git, found } => {
                 let git = git.borrow();
-                let mut command = git.command(params.context.as_deref());
+                let stat = git.is_stat();
+                // A diffstat is shown as the files of the patch, folded to
+                // their rows of it, so the patch is asked for too.
+                let mut command = if stat {
+                    let mut command = git.with_patch().command(params.context.as_deref());
+                    command.env("COLUMNS", params.width().to_string());
+                    command
+                } else {
+                    git.command(params.context.as_deref())
+                };
                 command.current_dir(repo.workdir().ok_or(Error::NoRepoWorkdir)?);
                 let shape = Shape::Diff {
                     diff_type: git.diff_type(),
                     named_commit: true,
+                    stat,
                     asked: asked_rows(&git.line(params.context.as_deref()), found),
                     truncated: false,
                 };
@@ -172,6 +183,7 @@ impl Source {
                 let shape = Shape::Diff {
                     diff_type: DiffType::TreeToTree,
                     named_commit: false,
+                    stat: false,
                     asked: Vec::new(),
                     truncated: *truncated,
                 };
@@ -209,6 +221,9 @@ enum Shape {
         /// Whether its first line names the commit it is of, as `git show`'s
         /// does.
         named_commit: bool,
+        /// Whether it opens with a diffstat, each file folding to its row of
+        /// it.
+        stat: bool,
         /// The row saying what is being asked, if that is not git's question.
         asked: Vec<Item>,
         /// Whether the input it came from was already cut short.
@@ -239,6 +254,7 @@ fn built(
         Shape::Diff {
             diff_type,
             named_commit,
+            stat,
             asked,
             truncated,
         } => {
@@ -261,15 +277,23 @@ fn built(
                     commit: named_commit.then(|| commit_named_by(&text)).flatten(),
                     text,
                 });
-                items.extend(preamble_items(config, params, &snapshot.text, &diff.text));
-                items.extend(items::drawn_diff_items(
+                let drawn = items::drawn_diff_items(
                     config,
                     &diff,
                     snapshot.rendered.as_deref(),
                     0,
                     false,
                     None,
-                ));
+                );
+                let preamble = preamble(&snapshot.text, &diff.text);
+                if *stat {
+                    items.extend(folded_to_stat(drawn, preamble.as_deref().unwrap_or("")));
+                } else {
+                    if let Some(preamble) = preamble {
+                        items.extend(items::plain_rows(&render(config, params, &preamble)));
+                    }
+                    items.extend(drawn);
+                }
             }
             (items, *truncated)
         }
@@ -342,24 +366,47 @@ fn commit_named_by(text: &str) -> Option<String> {
         .then(|| id.to_owned())
 }
 
-/// The commit a patch opens with, as the renderer draws it, in the colours it
-/// arrived with. It belongs to no file, so gitu has no structure to give it. A
-/// patch whose first line already begins a file's diff opens with nothing.
-/// `plain` is `coloured` without its colours, line for line.
-fn preamble_items(
-    config: &Config,
-    params: &RenderParams,
-    coloured: &str,
-    plain: &str,
-) -> Vec<Item> {
+/// What a patch opens with before its first file's diff, in the colours it
+/// arrived with: the commit it is of, or a diffstat. It belongs to no file, so
+/// gitu has no structure to give it. A patch whose first line already begins a
+/// file's diff opens with none. `plain` is `coloured` without its colours,
+/// line for line.
+fn preamble(coloured: &str, plain: &str) -> Option<String> {
     let end = match plain.find("\ndiff --git ") {
         Some(i) if !plain.starts_with("diff --git ") => i + 1,
-        _ => return Vec::new(),
+        _ => return None,
     };
     let lines = plain[..end].lines().count();
-    let preamble: String = coloured.split_inclusive('\n').take(lines).collect();
+    Some(coloured.split_inclusive('\n').take(lines).collect())
+}
 
-    items::plain_rows(&render(config, params, &preamble))
+/// A diff's items with each file folded to its row of the diffstat `stat`,
+/// which lists the files in the order the diff has them, and ends with its
+/// summary. Rows for files not yet in the diff (still arriving, or past the
+/// byte limit) are shown as they are.
+fn folded_to_stat(mut items: Vec<Item>, stat: &str) -> Vec<Item> {
+    let mut rows: Vec<RenderedRow> = items::plain_rows(stat)
+        .into_iter()
+        .filter_map(|item| item.rendered)
+        .map(Rc::unwrap_or_clone)
+        .filter(|row| row.iter().any(|(text, _)| !text.trim().is_empty()))
+        .collect();
+    let summary = rows.pop();
+    let mut rows = rows.into_iter();
+
+    for item in &mut items {
+        if matches!(item.data, ItemData::Delta { .. }) {
+            item.folded = rows.next().map(Rc::new);
+            item.default_collapsed = true;
+        }
+    }
+
+    items.extend(rows.chain(summary).map(|row| Item {
+        unselectable: true,
+        rendered: Some(Rc::new(row)),
+        ..Default::default()
+    }));
+    items
 }
 
 /// `text` as the renderer draws it, or as it arrived when there is no renderer
@@ -723,6 +770,29 @@ mod tests {
         screen.toggle_section().unwrap();
 
         assert!(shows_a_line(&screen));
+    }
+
+    /// Moving down a stat goes from file to file.
+    #[test]
+    fn the_cursor_moves_down_a_stat_file_by_file() {
+        let ctx = repo_setup_clone!();
+        let mut screen = stat_screen(&ctx);
+        let first = screen.get_selected_item().data.clone();
+
+        screen.select_next(crate::screen::NavMode::Normal);
+
+        assert!(
+            matches!(first, ItemData::Delta { file_i: 0, .. }),
+            "{first:?}"
+        );
+        assert!(
+            matches!(
+                screen.get_selected_item().data,
+                ItemData::Delta { file_i: 1, .. }
+            ),
+            "{:?}",
+            screen.get_selected_item().data
+        );
     }
 
     /// The screen for `git diff --stat` of changes to two files.

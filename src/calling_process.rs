@@ -76,6 +76,32 @@ impl GitCommand {
         }
     }
 
+    /// Whether the command asks for a diffstat and no patch, as `git diff
+    /// --stat` does.
+    pub(crate) fn is_stat(&self) -> bool {
+        let args: Vec<&str> = self.arguments().take_while(|arg| *arg != "--").collect();
+        self.subcommand() == "diff"
+            && args
+                .iter()
+                .any(|arg| *arg == "--stat" || arg.starts_with("--stat="))
+            && !args.iter().any(|arg| {
+                matches!(*arg, "-p" | "-u" | "--patch" | "--patch-with-stat")
+                    || arg.starts_with("-U")
+                    || arg.starts_with("--unified")
+            })
+    }
+
+    /// The same command asking for the patch as well as whatever else it
+    /// asked for.
+    pub(crate) fn with_patch(&self) -> Self {
+        let mut argv = self.argv.clone();
+        argv.insert(self.subcommand + 1, "--patch".to_owned());
+        Self {
+            argv,
+            subcommand: self.subcommand,
+        }
+    }
+
     /// The command again, asking for `context` around each change (`-U8`,
     /// `-W`) in place of whatever it originally asked for. `None` puts the
     /// question exactly as git put it.

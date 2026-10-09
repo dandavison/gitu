@@ -61,6 +61,12 @@ pub(crate) struct Item {
     /// Pre-rendered styled spans (e.g. a diff row from an external renderer),
     /// used verbatim by [`crate::ui::item::layout_item`] in place of `data`.
     pub(crate) rendered: Option<Rc<RenderedRow>>,
+    /// The row shown in place of the item and everything under it while it is
+    /// folded (e.g. a file's line of a diffstat).
+    pub(crate) folded: Option<Rc<RenderedRow>>,
+    /// Whether this is decoration drawn above the next item that is not, and so
+    /// hidden while that item shows its `folded` row.
+    pub(crate) decorates_next: bool,
 }
 
 /// Build the items for a diff. When the configured renderer speaks the OSC-1717
@@ -312,6 +318,7 @@ fn rendered_diff_items(
                 id: file_hash,
                 depth,
                 unselectable: true,
+                decorates_next: true,
                 rendered: Some(Rc::new(row)),
                 ..Default::default()
             });

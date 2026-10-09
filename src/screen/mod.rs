@@ -9,7 +9,7 @@ use crate::ui::{UiTree, layout_span};
 use crate::{
     Res,
     config::Config,
-    items::{ItemId, RenderParams, hash},
+    items::{ItemId, RenderParams, RenderedRow, hash},
 };
 use crate::{item_data::ItemData, ui};
 
@@ -625,7 +625,17 @@ impl Screen {
             return Ok(false);
         };
         self.later = None;
-        self.items = fill_empty(items?);
+        let items = items?;
+        // Items that were not drawn yet start folded as a screen's first items
+        // do.
+        let had: HashSet<ItemId> = self.items.iter().map(|item| item.id).collect();
+        self.collapsed.extend(
+            items
+                .iter()
+                .filter(|item| item.default_collapsed && !had.contains(&item.id))
+                .map(|item| item.id),
+        );
+        self.items = fill_empty(items);
 
         self.invalidate();
         self.update_cursor();
@@ -700,23 +710,40 @@ impl Screen {
                 offset: 0,
             };
         }
+        if self.folded_away(self.scroll.item_anchor)
+            && let Some(next) = self.next_visible(self.scroll.item_anchor)
+        {
+            self.scroll = Scroll {
+                item_anchor: next,
+                offset: 0,
+            };
+        }
     }
 
     /// The visible item after `item_i`, which only `item_i` itself can hide.
     fn next_visible(&self, item_i: usize) -> Option<usize> {
-        let item = &self.items[item_i];
-        let next = item_i + 1;
+        self.next_shown(item_i, |item| {
+            item.data.is_section() && self.is_collapsed(item)
+        })
+    }
 
-        if !item.data.is_section() || !self.is_collapsed(item) {
-            return (next < self.items.len()).then_some(next);
+    /// The item after `item_i` that is shown when the items `shuts` holds
+    /// shut hide what is under them.
+    fn next_shown(&self, item_i: usize, shuts: impl Fn(&Item) -> bool) -> Option<usize> {
+        let item = &self.items[item_i];
+        let mut next = item_i + 1;
+
+        if shuts(item) {
+            // Step over the subtree it holds shut.
+            next += self.items[next..]
+                .iter()
+                .position(|below| below.depth <= item.depth)?;
         }
 
-        // Step over the subtree it holds shut.
-        let shut = self.items[next..]
-            .iter()
-            .position(|below| below.depth <= item.depth)?;
-
-        Some(next + shut)
+        while next < self.items.len() && self.folded_away(next) {
+            next += 1;
+        }
+        (next < self.items.len()).then_some(next)
     }
 
     /// The visible item before `item_i`.
@@ -725,7 +752,11 @@ impl Screen {
 
         // In case prev is collapsed, we need to find the item that hides it.
         let depth = self.items[item_i].depth;
-        Some(self.hidden_by(prev, depth).unwrap_or(prev))
+        let prev = self.hidden_by(prev, depth).unwrap_or(prev);
+        if self.folded_away(prev) {
+            return self.prev_visible(prev);
+        }
+        Some(prev)
     }
 
     /// The outermost collapsed section hiding `item_i`, looking no further out
@@ -758,7 +789,7 @@ impl Screen {
 
     /// Visible items at or after `item_i`, in order.
     fn visible_from(&self, item_i: usize) -> impl Iterator<Item = usize> {
-        let start = (item_i < self.items.len()).then_some(item_i);
+        let start = (item_i..self.items.len()).find(|&item_i| !self.folded_away(item_i));
         successors(start, |&item_i| self.next_visible(item_i))
     }
 
@@ -946,13 +977,36 @@ impl Screen {
         lines.min(limit)
     }
 
-    /// Whether every row, folded or not, fits in `rows`.
+    /// Whether every row [`print_screen`] prints fits in `rows`.
     pub(crate) fn fits_in(&self, rows: usize) -> bool {
         let mut height = 0;
-        (0..self.items.len()).all(|item_i| {
+        self.printed_items().all(|item_i| {
             height += self.item_height(item_i);
             height <= rows
         })
+    }
+
+    /// Every item, but those an item folded to a row of its own hides.
+    fn printed_items(&self) -> impl Iterator<Item = usize> {
+        let first = (0..self.items.len()).find(|&item_i| !self.folded_away(item_i));
+        successors(first, |&item_i| {
+            self.next_shown(item_i, |item| self.folded_row(item).is_some())
+        })
+    }
+
+    /// The row `item` shows in place of itself and what is under it, while it
+    /// is folded to one.
+    fn folded_row<'a>(&self, item: &'a Item) -> Option<&'a RenderedRow> {
+        item.folded.as_deref().filter(|_| self.is_collapsed(item))
+    }
+
+    /// Whether `item_i` is decoration above an item showing its folded row.
+    fn folded_away(&self, item_i: usize) -> bool {
+        self.items[item_i].decorates_next
+            && self.items[item_i..]
+                .iter()
+                .find(|item| !item.decorates_next)
+                .is_some_and(|item| self.folded_row(item).is_some())
     }
 
     /// Whether the screen renders no lines at all, e.g. the log of a branch
@@ -1071,7 +1125,8 @@ impl Screen {
     #[cfg(test)]
     pub(crate) fn shown_row_texts(&self) -> Vec<String> {
         self.visible_items()
-            .filter_map(|item_i| self.items[item_i].rendered.as_ref())
+            .map(|item_i| &self.items[item_i])
+            .filter_map(|item| self.folded_row(item).or(item.rendered.as_deref()))
             .map(|row| row.iter().map(|(text, _)| text.as_str()).collect())
             .collect()
     }
@@ -1386,13 +1441,15 @@ pub(crate) fn layout_screen<'a>(layout: &mut UiTree<'a>, screen: &'a Screen, hid
     });
 }
 
-/// Every row, folded or not, printed where the terminal's cursor is rather
-/// than drawn as a frame, so that it stays in the scrollback.
+/// Every row, folded or not, unless folded to a row of its own, printed where
+/// the terminal's cursor is rather than drawn as a frame, so that it stays in
+/// the scrollback.
 pub(crate) fn print_screen(term: &mut TermBackend, screen: &Screen) -> Res<()> {
-    for item in &screen.items {
+    for item in screen.printed_items().map(|item_i| &screen.items[item_i]) {
         let mut layout = UiTree::new();
-        layout.row(opts(), |layout| {
-            ui::item::layout_item(layout, item, &screen.config, Style::new())
+        layout.row(opts(), |layout| match screen.folded_row(item) {
+            Some(row) => ui::item::layout_rendered(layout, row, Style::new()),
+            None => ui::item::layout_item(layout, item, &screen.config, Style::new()),
         });
 
         for computed in layout.compute([screen.size.0, 1]).iter() {
@@ -1426,6 +1483,10 @@ fn layout_item<'a>(layout: &mut UiTree<'a>, screen: &'a Screen, hide_cursor: boo
         layout.row(opts(), |layout| layout_span(layout, gutter_char));
 
         let item = &screen.items[line.item_index];
+        if let Some(row) = screen.folded_row(item) {
+            ui::item::layout_rendered(layout, row, bg);
+            return;
+        }
         ui::item::layout_item(layout, item, &screen.config, bg);
 
         // A collapsed section says so only when it is hiding something.
@@ -1805,5 +1866,57 @@ mod tests {
         screen.refresh().unwrap();
 
         assert_ne!(selected_line(&screen), Some(2));
+    }
+
+    fn row(text: &str) -> Option<Rc<RenderedRow>> {
+        Some(Rc::new(vec![(text.to_owned(), Style::new())]))
+    }
+
+    /// A section folded to a row of its own shows that row alone: not the
+    /// decoration drawn above it, nor what is under it.
+    #[test]
+    fn a_section_folded_to_a_row_shows_only_that_row() {
+        fn section(id: u64, name: &str) -> [Item; 3] {
+            [
+                Item {
+                    id,
+                    unselectable: true,
+                    decorates_next: true,
+                    rendered: row("───"),
+                    ..Default::default()
+                },
+                Item {
+                    id,
+                    default_collapsed: true,
+                    data: ItemData::Header(SectionHeader::Tags),
+                    rendered: row(name),
+                    folded: row(&format!("{name} | 1 +")),
+                    ..Default::default()
+                },
+                Item {
+                    id: id + 1,
+                    depth: 1,
+                    rendered: row("+line"),
+                    ..Default::default()
+                },
+            ]
+        }
+        let mut screen = Screen::new(
+            Arc::new(init_test_config().unwrap()),
+            RenderParams {
+                size: (80, 10),
+                ..Default::default()
+            },
+            Box::new(move |_params| Ok([section(0, "a"), section(10, "b")].concat())),
+        )
+        .unwrap();
+
+        assert_eq!(screen.shown_row_texts(), ["a | 1 +", "b | 1 +"]);
+        assert!(screen.fits_in(2));
+
+        screen.select_next(NavMode::Normal);
+        screen.toggle_section().unwrap();
+
+        assert_eq!(screen.shown_row_texts(), ["a | 1 +", "───", "b", "+line"]);
     }
 }

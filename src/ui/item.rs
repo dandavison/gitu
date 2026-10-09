@@ -6,7 +6,7 @@ use crate::config::Config;
 use crate::gitu_diff::Status;
 use crate::highlight;
 use crate::item_data::{ItemData, Ref, SectionHeader};
-use crate::items::Item;
+use crate::items::{Item, RenderedRow};
 use crate::rebase_todo::TodoEntry;
 use crate::ui::layout::opts;
 use crate::ui::{UiTree, layout_span};
@@ -30,9 +30,7 @@ pub(crate) fn layout_item<'a>(
     let style = &config.style;
 
     if let Some(rendered) = &item.rendered {
-        for (text, span_style) in rendered.iter() {
-            layout_span(layout, (text.as_str().into(), base.patch(*span_style)));
-        }
+        layout_rendered(layout, rendered, base);
         return;
     }
 
@@ -300,6 +298,13 @@ pub(crate) fn layout_item<'a>(
                 }
             }
         }
+    }
+}
+
+/// Lays out a row a renderer drew, each span patched onto `base`.
+pub(crate) fn layout_rendered<'a>(layout: &mut UiTree<'a>, row: &'a RenderedRow, base: Style) {
+    for (text, span_style) in row.iter() {
+        layout_span(layout, (text.as_str().into(), base.patch(*span_style)));
     }
 }
 
