@@ -17,11 +17,11 @@ use crate::{
     git::diff::{Diff, DiffType},
     gitu_diff,
     item_data::ItemData,
-    items::{self, Item, RenderParams, RenderedRow},
+    items::{self, Item, ItemId, RenderParams, RenderedRow},
     stream::{Input, Snapshot, Stream},
 };
 use git2::Repository;
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
 
 /// What git handed gitu as its pager: its output, and the argv of the command
 /// that produced it where gitu could find it.
@@ -360,9 +360,10 @@ fn preamble(coloured: &str, plain: &str) -> Option<String> {
 
 /// A diff's items with each file folded to its row of the diffstat `stat`,
 /// which lists the files in the order the diff has them, and ends with its
-/// summary. Rows for files not yet in the diff (still arriving, or past the
-/// byte limit) are shown as they are.
-fn folded_to_stat(mut items: Vec<Item>, stat: &str) -> Vec<Item> {
+/// summary. The stat row also heads the unfolded file, in place of the
+/// renderer's file header. Rows for files not yet in the diff (still
+/// arriving, or past the byte limit) are shown as they are.
+fn folded_to_stat(items: Vec<Item>, stat: &str) -> Vec<Item> {
     let mut rows: Vec<RenderedRow> = items::plain_rows(stat)
         .into_iter()
         .filter_map(|item| item.rendered)
@@ -372,9 +373,20 @@ fn folded_to_stat(mut items: Vec<Item>, stat: &str) -> Vec<Item> {
     let summary = rows.pop();
     let mut rows = rows.into_iter();
 
+    let files: HashSet<ItemId> = items
+        .iter()
+        .filter(|item| matches!(item.data, ItemData::Delta { .. }))
+        .map(|item| item.id)
+        .collect();
+    let mut items: Vec<Item> = items
+        .into_iter()
+        .filter(|item| matches!(item.data, ItemData::Delta { .. }) || !files.contains(&item.id))
+        .collect();
     for item in &mut items {
         if matches!(item.data, ItemData::Delta { .. }) {
-            item.folded = rows.next().map(Rc::new);
+            let row = rows.next().map(Rc::new);
+            item.rendered = row.clone();
+            item.folded = row;
             item.default_collapsed = true;
         }
     }
