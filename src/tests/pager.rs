@@ -1070,6 +1070,25 @@ fn the_renderers_file_header_folds_and_stages_its_file() {
     assert!(run(&ctx.dir, &["git", "diff", "--cached"]).contains("+changed"));
 }
 
+/// A file unfolded from a diffstat is headed by its stat row in place of the
+/// renderer's file header.
+#[test]
+fn a_stat_file_unfolds_under_its_stat_row_not_the_renderers_header() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
+    ctx.config().general.diff_renderer.command = file_header_renderer();
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff", "--stat"]);
+    ctx.update(&mut app, keys("<tab>"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("firstfile | 2 +-"), "{buffer}");
+    assert!(buffer.contains("changed"), "{buffer}");
+    assert!(!buffer.contains("~ firstfile ~"), "{buffer}");
+    assert!(!buffer.contains("==========="), "{buffer}");
+}
+
 /// [`osc_1717_passthrough`], drawing each file's header its own way, named and
 /// underlined, as delta does.
 fn file_header_renderer() -> Vec<String> {
