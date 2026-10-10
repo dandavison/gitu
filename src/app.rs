@@ -54,7 +54,8 @@ pub(crate) struct State {
     pub pending_keys: Vec<(KeyModifiers, KeyCode)>,
     pub quit: bool,
     /// What gitu exits with. Non-zero only to tell git, which is waiting on
-    /// gitu as its sequence editor, to call the rebase off.
+    /// gitu as its sequence editor, to call the rebase off: it is until the
+    /// list is accepted.
     pub exit_code: i32,
     pub screens: Vec<Screen>,
     pub pending_menu: Option<PendingMenu>,
@@ -161,7 +162,10 @@ impl App {
                 enable_async_cmds,
                 debug: args.debug,
                 quit: false,
-                exit_code: 0,
+                exit_code: match args.command {
+                    Some(cli::Commands::SequenceEditor { .. }) => 1,
+                    _ => 0,
+                },
                 screens,
                 pending_cmd: None,
                 pending_menu: None,
