@@ -750,6 +750,26 @@ mod tests {
         assert!(shows_a_line(&screen));
     }
 
+    /// ... and an unfolded file is headed by its stat row, not the renderer's
+    /// file header.
+    #[test]
+    fn an_unfolded_stat_file_keeps_its_stat_row() {
+        let ctx = repo_setup_clone!();
+        let mut screen = stat_screen(&ctx);
+        let stat_row = screen.shown_row_texts()[0].clone();
+
+        screen.toggle_section().unwrap();
+
+        assert_eq!(screen.shown_row_texts()[0], stat_row);
+        assert_eq!(
+            screen.get_selected_item().rendered.as_deref().map(|row| row
+                .iter()
+                .map(|(text, _)| text.as_str())
+                .collect::<String>()),
+            Some(stat_row)
+        );
+    }
+
     /// Moving down a stat goes from file to file.
     #[test]
     fn the_cursor_moves_down_a_stat_file_by_file() {
