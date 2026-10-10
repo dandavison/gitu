@@ -638,11 +638,6 @@ impl Screen {
         self.invalidate();
     }
 
-    /// Rebuild, keeping the cursor on whatever it was on. [`Self::refresh`]
-    /// keeps its place in the list, which is the same place only while the rows
-    /// are; a re-render that lays the same diff out differently moves them.
-    /// What does not move is where a row sits in the patch, so that is what is
-    /// restored.
     /// Take more of the items once they are drawn, and say whether it did.
     /// The cursor keeps its place in the list. The rows drawn first are the
     /// first rows of all of them, so that is the same row, unless the cursor
@@ -671,12 +666,26 @@ impl Screen {
         Ok(true)
     }
 
+    /// Rebuild, keeping the cursor on whatever it was on. [`Self::refresh`]
+    /// keeps its place in the list, which is the same place only while the rows
+    /// are; a re-render that lays the same diff out differently moves them.
+    /// What does not move is where a row sits in the patch, so that is what is
+    /// restored.
+    /// Waits for the rows to be drawn as far as that row, so the cursor is on
+    /// it when the user has control again. Where it is past the first
+    /// screenfuls this waits for the whole render.
     pub(crate) fn refresh_keeping_position(&mut self) -> Res<()> {
         let was_on = diff_position(&self.get_selected_item().data);
         self.refresh()?;
 
         if let Some(position) = was_on {
-            self.select_matching_in_view(|data| diff_position(data) == Some(position));
+            while !self.select_matching_in_view(|data| diff_position(data) == Some(position))
+                && self.is_drawing()
+            {
+                if !self.finish()? {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            }
         }
         Ok(())
     }
