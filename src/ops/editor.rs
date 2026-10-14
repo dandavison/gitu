@@ -173,14 +173,13 @@ impl OpTrait for DiffContext {
                 &PromptParams {
                     prompt: "",
                     create_default_value: Box::new(move |_| {
-                        Some(match current.as_deref() {
-                            Some("-W") => "W".to_owned(),
-                            Some(flag) => flag.trim_start_matches("-U").to_owned(),
-                            None => DEFAULT_LINES.to_owned(),
+                        current.as_deref().map(|flag| match flag {
+                            "-W" => "W".to_owned(),
+                            flag => flag.trim_start_matches("-U").to_owned(),
                         })
                     }),
                     hide_menu: false,
-                    prefill: false,
+                    prefill: true,
                     history: None,
                 },
             )?;
@@ -348,16 +347,14 @@ fn file_of(target: &ItemData) -> Option<String> {
     Some(path.fmt(&diff.text).into_owned())
 }
 
-/// What git gives without being asked, so asking for it is asking for nothing.
-const DEFAULT_LINES: &str = "3";
-
-/// The git flag an answer asks for: `None` for the default, which is to pass
-/// no flag at all. An answer that is neither a count nor the whole function
-/// isn't one, since a flag that leaves no hunks leaves nothing to act on.
+/// The git flag an answer asks for: `None` for no answer, which is to pass no
+/// flag at all and leave the context to the command and git's config. An
+/// answer that is neither a count nor the whole function isn't one, since a
+/// flag that leaves no hunks leaves nothing to act on.
 fn context_flag(answer: &str) -> Option<Option<Rc<str>>> {
     match answer {
+        "" => Some(None),
         "W" | "w" => Some(Some(Rc::from("-W"))),
-        DEFAULT_LINES => Some(None),
         lines if !lines.is_empty() && lines.chars().all(|c| c.is_ascii_digit()) => {
             Some(Some(Rc::from(format!("-U{lines}").as_str())))
         }
