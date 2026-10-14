@@ -231,6 +231,29 @@ fn an_edit_takes_over_the_context_asked_for() {
     );
 }
 
+/// ... and in a diffstat the context is for the patches its files unfold to: the
+/// view stays a diffstat.
+#[test]
+fn an_edit_of_a_stat_keeps_it_a_stat_with_the_context_asked_for() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", &twenty_lines("line 10"));
+    fs::write(ctx.dir.join("firstfile"), twenty_lines("changed")).unwrap();
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff", "--stat"]);
+    ctx.update(&mut app, keys("U8<enter>:<enter>"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("firstfile | 2 +-"), "{buffer}");
+    assert!(!buffer.contains("modified   firstfile"), "{buffer}");
+
+    ctx.update(&mut app, keys("<tab>"));
+    assert!(
+        ctx.redact_buffer().contains("line 2 "),
+        "the widened context was lost:\n{}",
+        ctx.redact_buffer()
+    );
+}
+
 /// A command the user can edit is one the user can get wrong. git says what it
 /// thought of it, and the view it could not answer stays as it was.
 #[test]
