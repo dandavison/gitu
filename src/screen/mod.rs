@@ -639,13 +639,14 @@ impl Screen {
     }
 
     /// Take more of the items once they are drawn, and say whether it did.
-    /// The cursor keeps its place in the list. The rows drawn first are the
-    /// first rows of all of them, so that is the same row, unless the cursor
-    /// had already gone past what was drawn.
+    /// The cursor stays on its row of the patch. Its place in the list is not
+    /// that row once the cursor is past what was drawn: there, a file's hunks
+    /// are listed without their lines.
     pub(crate) fn finish(&mut self) -> Res<bool> {
         let Some((items, all)) = self.later.as_mut().and_then(|later| later()) else {
             return Ok(false);
         };
+        let was_on = diff_position(&self.get_selected_item().data);
         if all {
             self.later = None;
         }
@@ -663,6 +664,9 @@ impl Screen {
 
         self.invalidate();
         self.update_cursor();
+        if let Some(position) = was_on {
+            self.select_matching_in_view(|data| diff_position(data) == Some(position));
+        }
         Ok(true)
     }
 
