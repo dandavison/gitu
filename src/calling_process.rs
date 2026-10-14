@@ -77,18 +77,18 @@ impl GitCommand {
     }
 
     /// Whether the command asks for a diffstat and no patch, as `git diff
-    /// --stat` does.
+    /// --stat` does. git takes `-U` as asking for the patch too; here it is the
+    /// context of the patches the stat's files unfold to, which is how gitu
+    /// writes the context it is asked for into the command.
     pub(crate) fn is_stat(&self) -> bool {
         let args: Vec<&str> = self.arguments().take_while(|arg| *arg != "--").collect();
         self.subcommand() == "diff"
             && args
                 .iter()
                 .any(|arg| *arg == "--stat" || arg.starts_with("--stat="))
-            && !args.iter().any(|arg| {
-                matches!(*arg, "-p" | "-u" | "--patch" | "--patch-with-stat")
-                    || arg.starts_with("-U")
-                    || arg.starts_with("--unified")
-            })
+            && !args
+                .iter()
+                .any(|arg| matches!(*arg, "-p" | "-u" | "--patch" | "--patch-with-stat"))
     }
 
     /// The same command asking for the patch as well as whatever else it
