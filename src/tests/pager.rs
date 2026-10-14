@@ -386,6 +386,22 @@ fn the_files_asked_for_come_back_for_editing() {
     );
 }
 
+/// A command reached without typing it, by hiding a file, is in the command
+/// history as one typed at `:` is.
+#[test]
+fn hiding_a_file_puts_the_command_in_the_history() {
+    let mut ctx = setup_clone!();
+    two_changed_files(&ctx);
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(&mut app, keys("kd"));
+    drop(app);
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(&mut app, keys(":<up>"));
+    assert_eq!(ctx.prompt_line(), "git diff -- ':(top,exclude)a.rs'|");
+}
+
 /// Commands and file patterns are two different kinds of question, and what
 /// was answered before remains available after gitu itself has exited.
 #[test]
