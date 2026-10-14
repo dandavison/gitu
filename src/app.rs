@@ -760,7 +760,9 @@ impl App {
 
             if self.state.prompt.state.status == text_input::Status::Done {
                 let value = get_prompt_result(params, self)?;
-                self.state.prompt.remember(&value)?;
+                if let Some(kind) = params.history {
+                    self.state.prompt.remember(kind, &value)?;
+                }
                 return Ok(value);
             } else if self.state.prompt.state.status == text_input::Status::Aborted {
                 return Err(Error::PromptAborted);

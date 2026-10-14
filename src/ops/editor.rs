@@ -317,13 +317,18 @@ impl OpTrait for HideFile {
 
 const NOT_ASKED_FOR: &str = "This view is not something gitu asked git for";
 
-/// Put the held command again, for these paths.
+/// Put the held command again, for these paths, and remember it as if typed
+/// at `:`.
 fn ask_for(
     app: &mut App,
     git: &Rc<RefCell<crate::calling_process::GitCommand>>,
     patterns: &[String],
 ) -> Res<()> {
     let asking_for = git.borrow().asking_for(patterns);
+    app.state.prompt.remember(
+        crate::prompt::HistoryKind::GitCommand,
+        &asking_for.line(app.state.context.as_deref()),
+    )?;
     *git.borrow_mut() = asking_for;
     app.rerender_screens()
 }

@@ -28,7 +28,6 @@ pub(crate) struct Prompt {
 }
 
 struct ActiveHistory {
-    kind: HistoryKind,
     entries: Vec<String>,
     position: usize,
     draft: String,
@@ -73,7 +72,6 @@ impl Prompt {
             .filter(|entry| entry != &draft)
             .collect::<Vec<_>>();
         self.active_history = Some(ActiveHistory {
-            kind,
             position: entries.len(),
             entries,
             draft,
@@ -81,8 +79,8 @@ impl Prompt {
         Ok(())
     }
 
-    pub(crate) fn remember(&self, value: &str) -> Res<()> {
-        let (Some(history), Some(dir)) = (&self.active_history, &self.history_dir) else {
+    pub(crate) fn remember(&self, kind: HistoryKind, value: &str) -> Res<()> {
+        let Some(dir) = &self.history_dir else {
             return Ok(());
         };
         if value.is_empty() {
@@ -93,7 +91,7 @@ impl Prompt {
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(history_path(dir, history.kind))
+            .open(history_path(dir, kind))
             .map_err(Error::WritePromptHistory)?;
         file.write_all(format!("{value}\n").as_bytes())
             .map_err(Error::WritePromptHistory)
