@@ -1376,3 +1376,89 @@ fn selected_line_of(app: &App) -> Option<(String, usize)> {
         _ => None,
     }
 }
+
+/// Hiding a file is kill-line: the cursor stays on the row that was below it,
+/// which is the next file, whether files are folded to their stat rows or not.
+#[test]
+fn hiding_a_file_leaves_the_cursor_on_the_next_file() {
+    for (args, to_second_file) in [
+        (&["git", "diff"][..], "k<alt+j>"),
+        (&["git", "diff", "--stat"], "j"),
+    ] {
+        let mut ctx = setup_clone!();
+        three_changed_files(&ctx);
+
+        let mut app = ctx.init_app_as_pager_of(args);
+        ctx.update(&mut app, keys(to_second_file));
+        assert_eq!(selected_file(&app).as_deref(), Some("b.rs"), "{args:?}");
+
+        ctx.update(&mut app, keys("d"));
+
+        assert_eq!(
+            selected_file(&app).as_deref(),
+            Some("c.rs"),
+            "{args:?}\n{}",
+            ctx.redact_buffer()
+        );
+    }
+}
+
+fn three_changed_files(ctx: &TestContext) {
+    for file in ["a.rs", "b.rs", "c.rs"] {
+        commit(&ctx.dir, file, "before\n");
+        fs::write(ctx.dir.join(file), "after\n").unwrap();
+    }
+}
+
+fn selected_file(app: &App) -> Option<String> {
+    match &app.screen().get_selected_item().data {
+        crate::item_data::ItemData::Delta { diff, file_i, .. } => Some(
+            diff.file_diffs[*file_i]
+                .header
+                .new_file
+                .fmt(&diff.text)
+                .into_owned(),
+        ),
+        _ => None,
+    }
+}
+
+/// ... and so does hiding a file whose diff is drawn only after the first
+/// screenfuls: the rest of the render arriving does not move the cursor.
+#[test]
+fn hiding_a_file_drawn_late_leaves_the_cursor_on_the_next_file() {
+    let mut ctx = setup_clone!();
+    let lines = |prefix: &str| {
+        (1..=60)
+            .map(|i| format!("{prefix} {i}\n"))
+            .collect::<String>()
+    };
+    for file in [
+        "a.rs", "b.rs", "c.rs", "d.rs", "e.rs", "f.rs", "g.rs", "h.rs",
+    ] {
+        commit(&ctx.dir, file, &lines("old"));
+        fs::write(ctx.dir.join(file), lines("new")).unwrap();
+    }
+    ctx.config().general.diff_renderer.command = pausing_renderer();
+    let mut app = ctx.init_app_streaming_as_pager_of(&["git", "diff", "--stat"]);
+    finish_drawing(&mut ctx, &mut app);
+    ctx.update(&mut app, keys("jjjj"));
+    assert_eq!(selected_file(&app).as_deref(), Some("e.rs"));
+
+    ctx.update(&mut app, keys("d"));
+    finish_drawing(&mut ctx, &mut app);
+
+    assert_eq!(selected_file(&app).as_deref(), Some("f.rs"));
+}
+
+fn finish_drawing(ctx: &mut TestContext, app: &mut App) {
+    let started = Instant::now();
+    while app.screen().is_drawing() {
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "never finished"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+        app.update(&mut ctx.term, None).unwrap();
+    }
+}
