@@ -136,6 +136,43 @@ fn widening_the_context_of_a_piped_commit() {
     );
 }
 
+/// Every number asked for is passed to git, 3 included: git's own default for
+/// the context may be configured to something else.
+#[test]
+fn asking_for_three_lines_overrides_configured_context() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", &twenty_lines("line 10"));
+    fs::write(ctx.dir.join("firstfile"), twenty_lines("changed")).unwrap();
+    run(&ctx.dir, &["git", "config", "diff.context", "8"]);
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    assert!(ctx.redact_buffer().contains("line 2 "));
+
+    ctx.update(&mut app, keys("U3<enter>"));
+
+    assert!(
+        !ctx.redact_buffer().contains("line 2 "),
+        "{}",
+        ctx.redact_buffer()
+    );
+}
+
+/// The context asked for is offered for editing, and asking for none goes back
+/// to the command as it was written.
+#[test]
+fn an_empty_context_answer_asks_for_no_context_flag() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", &twenty_lines("line 10"));
+    fs::write(ctx.dir.join("firstfile"), twenty_lines("changed")).unwrap();
+
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(&mut app, keys("U8<enter>U"));
+    assert_eq!(ctx.prompt_line(), "8|");
+
+    ctx.update(&mut app, keys("U<ctrl+u><enter>"));
+    assert_eq!(app.state.context, None);
+}
+
 /// The key already said what is being set, so the prompt says nothing at all:
 /// a line to type on, and no words explaining it every time.
 #[test]
