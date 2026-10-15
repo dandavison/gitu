@@ -639,14 +639,15 @@ impl Screen {
     }
 
     /// Take more of the items once they are drawn, and say whether it did.
-    /// The cursor stays on its row of the patch. Its place in the list is not
-    /// that row once the cursor is past what was drawn: there, a file's hunks
-    /// are listed without their lines.
+    /// The cursor stays on its row of the patch, drawn on the same row of the
+    /// screen. Its place in the list is not that row once the cursor is past
+    /// what was drawn: there, a file's hunks are listed without their lines.
     pub(crate) fn finish(&mut self) -> Res<bool> {
         let Some((items, all)) = self.later.as_mut().and_then(|later| later()) else {
             return Ok(false);
         };
         let was_on = diff_position(&self.get_selected_item().data);
+        let was_at = self.cursor_row();
         if all {
             self.later = None;
         }
@@ -665,7 +666,7 @@ impl Screen {
         self.invalidate();
         self.update_cursor();
         if let Some(position) = was_on {
-            self.select_matching_in_view(|data| diff_position(data) == Some(position));
+            self.select_at_row(position, was_at);
         }
         Ok(true)
     }
@@ -674,24 +675,44 @@ impl Screen {
     /// keeps its place in the list, which is the same place only while the rows
     /// are; a re-render that lays the same diff out differently moves them.
     /// What does not move is where a row sits in the patch, so that is what is
-    /// restored.
+    /// restored, on the row of the screen it was drawn on.
     /// Waits for the rows to be drawn as far as that row, so the cursor is on
     /// it when the user has control again. Where it is past the first
     /// screenfuls this waits for the whole render.
     pub(crate) fn refresh_keeping_position(&mut self) -> Res<()> {
         let was_on = diff_position(&self.get_selected_item().data);
+        let was_at = self.cursor_row();
         self.refresh()?;
 
         if let Some(position) = was_on {
-            while !self.select_matching_in_view(|data| diff_position(data) == Some(position))
-                && self.is_drawing()
-            {
+            while !self.select_at_row(position, was_at) && self.is_drawing() {
                 if !self.finish()? {
                     std::thread::sleep(Duration::from_millis(10));
                 }
             }
         }
         Ok(())
+    }
+
+    /// Selects the row at `position` in the patch, drawn on row `row` of the
+    /// screen as far as the content allows, and says whether there is one.
+    fn select_at_row(&mut self, position: DiffPosition, row: Option<usize>) -> bool {
+        if !self.select_matching_in_view(|data| diff_position(data) == Some(position)) {
+            return false;
+        }
+        if let Some(row) = row {
+            let at_cursor = Scroll {
+                item_anchor: self.cursor,
+                offset: 0,
+            };
+            self.scroll = self.retreated(at_cursor, row);
+            // Until the render is done the content seems to end where the
+            // drawing has got to.
+            if !self.is_drawing() {
+                self.clamp_scroll();
+            }
+        }
+        true
     }
 
     fn update_cursor(&mut self) {
@@ -1459,7 +1480,9 @@ fn same_hunk(a: &ItemData, b: &ItemData) -> bool {
 /// Where a row sits in the patch, for the rows that sit anywhere in one: a
 /// file, a hunk within it, and for a content row the line within that. Two rows
 /// of one wrapped line share a position, which is right — they are one line.
-fn diff_position(data: &ItemData) -> Option<(usize, Option<usize>, Option<usize>)> {
+type DiffPosition = (usize, Option<usize>, Option<usize>);
+
+fn diff_position(data: &ItemData) -> Option<DiffPosition> {
     match data {
         ItemData::Delta { file_i, .. } => Some((*file_i, None, None)),
         ItemData::Hunk { file_i, hunk_i, .. } => Some((*file_i, Some(*hunk_i), None)),
