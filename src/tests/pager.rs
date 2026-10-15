@@ -908,6 +908,60 @@ fn a_shorter_rendering_still_fills_the_screen() {
     assert!(blank_rows_at_the_bottom(&buffer) <= 2, "{buffer}");
 }
 
+/// A re-render, such as turning on line numbers, leaves the cursor's line on
+/// the row of the screen it was on, though the first screenfuls of the new
+/// rendering end not far below it.
+#[test]
+fn a_rerender_keeps_the_cursor_on_its_screen_row() {
+    let mut ctx = setup_clone!();
+    let lines = |prefix: &str| {
+        (1..=60)
+            .map(|i| format!("{prefix} {i}\n"))
+            .collect::<String>()
+    };
+    commit(&ctx.dir, "a.rs", &lines("old"));
+    fs::write(ctx.dir.join("a.rs"), lines("new")).unwrap();
+    let renderer = &mut ctx.config().general.diff_renderer;
+    renderer.features = vec!["line-numbers".into()];
+    renderer.feature_keys.insert("line-numbers".into(), 'L');
+    renderer.command = pausing_renderer();
+
+    let mut app = ctx.init_app_streaming_as_pager_of(&["git", "diff"]);
+    finish_drawing(&mut ctx, &mut app);
+    ctx.update(
+        &mut app,
+        keys(&format!(
+            "{}{}",
+            "<ctrl+j>".repeat(90),
+            "<ctrl+k>".repeat(15)
+        )),
+    );
+    let before = (selected_hunk_line(&app), cursor_screen_row(&ctx));
+
+    ctx.update(&mut app, keys("L"));
+    assert_eq!(
+        (selected_hunk_line(&app), cursor_screen_row(&ctx)),
+        before,
+        "{}",
+        ctx.redact_buffer()
+    );
+
+    finish_drawing(&mut ctx, &mut app);
+    ctx.update(&mut app, vec![]);
+    assert_eq!(
+        (selected_hunk_line(&app), cursor_screen_row(&ctx)),
+        before,
+        "{}",
+        ctx.redact_buffer()
+    );
+}
+
+fn cursor_screen_row(ctx: &TestContext) -> Option<usize> {
+    ctx.redact_buffer()
+        .lines()
+        .position(|row| row.starts_with('\u{258c}'))
+}
+
 /// A renderer that halves its rows once a feature is on, as a side-by-side one
 /// does to a run of changed lines.
 fn fusing_renderer() -> Vec<String> {
