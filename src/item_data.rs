@@ -223,7 +223,6 @@ pub(crate) enum SectionHeader {
     CherryPick(String),
     Stashes,
     RecentCommits,
-    Commit(String),
     StashRef(String),
     StagedChanges(usize),
     UnstagedChanges(usize),

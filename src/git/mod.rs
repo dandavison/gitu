@@ -207,29 +207,6 @@ pub(crate) fn status(dir: &Path) -> Res<status::Status> {
     Ok(status::Status::from_str(&text).unwrap())
 }
 
-/// `git show` of `reference`, asking for `context` around each change.
-pub(crate) fn show_command(repo: &Repository, reference: &str, context: Option<&str>) -> Command {
-    let mut command = Command::new("git");
-    command
-        .current_dir(repo.workdir().expect("Bare repos unhandled"))
-        .arg("show")
-        .args(context)
-        .arg(reference);
-    command
-}
-
-/// The diff `git show` of `reference` wrote as `text`.
-pub(crate) fn shown(reference: &str, text: String) -> Diff {
-    Diff {
-        file_diffs: gitu_diff::Parser::new(&text)
-            .parse_diff()
-            .unwrap_or_default(),
-        diff_type: DiffType::TreeToTree,
-        text,
-        commit: Some(reference.to_string()),
-    }
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct StashDiffs {
     pub staged: Diff,

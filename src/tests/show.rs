@@ -18,49 +18,6 @@ fn show_head(ctx: &mut TestContext) -> App {
     ctx.init_app_with_args(ctx.dir.clone(), args)
 }
 
-fn with_show_renderer(ctx: &mut TestContext, command: &[&str]) {
-    let config = ctx.config();
-    config.general.show_renderer.command = command.iter().map(|arg| arg.to_string()).collect();
-}
-
-/// A command of the user's own draws the header, so it can match their log
-/// format and show the whole message; its first row heads the commit in place
-/// of gitu's. gitu appends the commit to show.
-#[test]
-fn the_show_renderer_draws_the_commit_header() {
-    let mut ctx = setup_clone!();
-    commit(&ctx.dir, "firstfile", "testing\n");
-    let head = run(&ctx.dir, &["git", "rev-parse", "HEAD"])
-        .trim()
-        .to_string();
-    with_show_renderer(
-        &mut ctx,
-        &["sh", "-c", r#"printf 'shown %s\n' "$1""#, "gitu"],
-    );
-
-    show_head(&mut ctx);
-
-    let buffer = ctx.redact_buffer();
-    assert!(
-        buffer.contains(&format!("shown {}", &head[..40])),
-        "{buffer}"
-    );
-    assert!(!buffer.contains("Author:"), "{buffer}");
-    assert!(!buffer.contains(&format!("commit {head}")), "{buffer}");
-}
-
-#[test]
-fn a_failing_show_renderer_leaves_the_built_in_header() {
-    let mut ctx = setup_clone!();
-    commit(&ctx.dir, "firstfile", "testing\n");
-    with_show_renderer(&mut ctx, &["false"]);
-
-    show_head(&mut ctx);
-
-    let buffer = ctx.redact_buffer();
-    assert!(buffer.contains("Author:"), "{buffer}");
-}
-
 /// The commit view is drawn once the renderer has drawn its first screen, and
 /// the rest of the diff once it has drawn that.
 #[test]
@@ -106,4 +63,64 @@ fn the_commit_view_is_drawn_before_the_renderer_finishes() {
         std::thread::sleep(Duration::from_millis(50));
         app.update(&mut ctx.term, None).unwrap();
     }
+}
+
+/// The command a view is the output of, as `:` offers it for editing.
+fn git_command_of(app: &App) -> Option<String> {
+    app.screen()
+        .git_command
+        .as_ref()
+        .map(|git| git.borrow().line(None))
+}
+
+/// A commit opened from the log is the view `git show` gives on the command
+/// line, so the two behave the same.
+#[test]
+fn a_commit_opened_from_the_log_is_the_output_of_git_show() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+    let head = run(&ctx.dir, &["git", "rev-parse", "HEAD"])
+        .trim()
+        .to_string();
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("ll<enter>"));
+
+    assert_eq!(git_command_of(&app), Some(format!("git show {head}")));
+}
+
+#[test]
+fn gitu_show_is_the_output_of_git_show() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+    let app = show_head(&mut ctx);
+
+    assert_eq!(git_command_of(&app), Some("git show HEAD".into()));
+}
+
+/// Folding everything folds the files; the commit's header is not one of them.
+#[test]
+fn folding_all_leaves_the_commit_header_in_view() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+    let mut app = show_head(&mut ctx);
+
+    ctx.update(&mut app, keys("<backtab>"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("Author:"), "{buffer}");
+}
+
+/// The arguments the user gives for the commits gitu shows, such as a pretty
+/// format of their own.
+#[test]
+fn show_args_are_given_to_git_show() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+    ctx.config().general.show_args = vec!["--format=shown %s".into()];
+
+    show_head(&mut ctx);
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("shown add firstfile"), "{buffer}");
 }

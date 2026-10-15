@@ -58,6 +58,31 @@ pub(crate) fn create(
     Ok(screen)
 }
 
+/// The view `git show <reference>` gives with gitu as git's pager.
+pub(crate) fn show(
+    config: Arc<Config>,
+    repo: Rc<Repository>,
+    params: RenderParams,
+    reference: &str,
+) -> Res<Screen> {
+    let git_argv = ["git", "show"]
+        .into_iter()
+        .chain(config.general.show_args.iter().map(String::as_str))
+        .chain([reference])
+        .map(String::from)
+        .collect();
+    create(
+        config,
+        repo,
+        params,
+        Paged {
+            text: String::new(),
+            git_argv: Some(git_argv),
+            truncated: false,
+        },
+    )
+}
+
 /// Where the rows come from each time the screen is rebuilt.
 enum Source {
     /// A question git can be put again, gitu having found the command that

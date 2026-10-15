@@ -99,14 +99,12 @@ diff_renderer.feature_keys = {}
 #   log_renderer.command = ["sh", "-c", "git log --stat --color=always --format='{commit}%h %s' \"$@\" | delta --width {width}", "gitu"]
 log_renderer.command = []
 
-# Draw the commit view's header (above a commit's diff) with a command of your
-# own instead of Gitu's Author/Date/message. The command is run in the
-# repository with the commit appended, and the first row of its ANSI-colored
-# output heads the commit. `{width}` is substituted as for `diff_renderer`.
-# With a named format it can match your log renderer, showing the whole
-# message, e.g.:
-#   show_renderer.command = ["sh", "-c", "git show -s --color=always --pretty=commit-format-full \"$@\" | delta", "gitu"]
-show_renderer.command = []
+# Arguments given to the `git show` Gitu runs for a commit it opens (enter on a
+# commit, `gitu show`), e.g. a pretty format of your own:
+#   show_args = ["--pretty=commit-format-full"]
+# `git show` typed at the command line takes git's own config instead
+# (`format.pretty`).
+show_args = []
 
 # When to prompt for discard confirmation. Options:
 # "line"  - always prompt even for individual lines (default),

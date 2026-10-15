@@ -111,12 +111,11 @@ impl App {
                 )?]
             }
             Some(cli::Commands::Show { ref reference }) => {
-                vec![screen::show::create(
+                vec![screen::pager::show(
                     Arc::clone(&config),
                     Rc::clone(&repo),
                     params.clone(),
-                    reference.clone(),
-                    None,
+                    reference,
                 )?]
             }
             Some(cli::Commands::Blame { ref rev, ref file }) => {

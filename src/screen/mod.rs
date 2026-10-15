@@ -28,7 +28,6 @@ pub(crate) mod blame;
 pub(crate) mod log;
 pub(crate) mod pager;
 pub(crate) mod rebase_todo;
-pub(crate) mod show;
 pub(crate) mod show_refs;
 pub(crate) mod show_stash;
 pub(crate) mod status;

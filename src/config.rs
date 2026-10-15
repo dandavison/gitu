@@ -88,8 +88,9 @@ pub struct GeneralConfig {
     pub diff_renderer: DiffRendererConfig,
     #[serde(default)]
     pub log_renderer: LogRendererConfig,
+    /// Arguments given to the `git show` gitu runs for a commit it opens.
     #[serde(default)]
-    pub show_renderer: ShowRendererConfig,
+    pub show_args: Vec<String>,
 }
 
 #[derive(Default, Debug, Deserialize)]
@@ -115,14 +116,6 @@ pub struct LogRendererConfig {
     /// identified by commit records, which a `{commit}` token in the format
     /// emits (see [`crate::diff_renderer::COMMIT_RECORD_FORMAT`]), or a renderer
     /// the output is piped through.
-    #[serde(default)]
-    pub command: Vec<String>,
-}
-
-#[derive(Default, Debug, Deserialize)]
-pub struct ShowRendererConfig {
-    /// Command as `[executable, ...args]`, run in the repository with the
-    /// commit appended. Its ANSI-colored output is the commit view's header.
     #[serde(default)]
     pub command: Vec<String>,
 }
