@@ -182,6 +182,10 @@ pub(crate) struct Screen {
     /// Where a multi-line selection was started, if one is being made. The
     /// selection runs from here to the cursor, inclusive.
     anchor: Option<usize>,
+    /// The cursor a page turn left, with the row of the viewport the turn kept
+    /// it on. Stepping off a row with nothing to select moves the cursor to
+    /// another row, so a turn back starts from the row kept, not that one.
+    page_turned: Option<(usize, usize)>,
     scroll: Scroll,
     config: Arc<Config>,
     /// The renderer features to rebuild with, as chosen in-session. Pushed down
@@ -234,6 +238,7 @@ impl Screen {
         let mut screen = Self {
             cursor: 0,
             anchor: None,
+            page_turned: None,
             menu: None,
             show_menu: false,
             is_status: false,
@@ -505,7 +510,11 @@ impl Screen {
     /// the screen — can still be turned past.
     fn turn_page(&mut self, lines: usize, forwards: bool) {
         self.anchor = None;
-        let row = self.cursor_row();
+        let row = self
+            .page_turned
+            .filter(|&(cursor, _)| cursor == self.cursor)
+            .map(|(_, row)| row)
+            .or_else(|| self.cursor_row());
         let before = self.scroll;
 
         if forwards {
@@ -533,6 +542,7 @@ impl Screen {
         let nav_mode = self.selected_item_nav_mode();
         self.move_from_unselectable(nav_mode);
         self.scroll = scroll;
+        self.page_turned = row.map(|row| (self.cursor, row));
     }
 
     /// Which row of the viewport the cursor is drawn on, when it is on screen.
