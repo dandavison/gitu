@@ -38,8 +38,6 @@ pub(crate) struct Snapshot {
     pub done: bool,
     /// What git said when it exited unsuccessfully having written nothing.
     pub refused: Option<String>,
-    /// Whether the command exited unsuccessfully, whatever it wrote.
-    pub failed: bool,
 }
 
 struct Shared {
@@ -54,7 +52,6 @@ struct State {
     truncated: bool,
     input_done: bool,
     refused: Option<String>,
-    failed: bool,
     has_renderer: bool,
     rendered: Option<Vec<u8>>,
     rendered_rows: usize,
@@ -227,7 +224,6 @@ impl Stream {
             rendered,
             done,
             refused: state.refused.clone(),
-            failed: state.failed,
         }
     }
 }
@@ -301,7 +297,6 @@ fn read(
     drop(sink);
 
     let mut refused = None;
-    let mut failed = false;
     let mut command = None;
     shared.update(|state| command = state.command.take());
     if let Some(mut child) = command {
@@ -311,7 +306,6 @@ fn read(
             let _ = child.kill();
         }
         let succeeded = child.wait().is_ok_and(|status| status.success());
-        failed = !succeeded;
         let said = complaint.and_then(|thread| thread.join().ok());
         // A command the user can edit is a command the user can get wrong, and
         // an empty screen does not say what git thought of it. (`git diff
@@ -325,7 +319,6 @@ fn read(
     shared.update(|state| {
         state.truncated = stopped;
         state.refused = refused;
-        state.failed = failed;
         state.input_done = true;
     });
 }
@@ -481,19 +474,6 @@ mod tests {
     }
 
     #[test]
-    fn a_command_that_fails_having_written_says_so() {
-        let snapshot = finished(
-            Input::Command(command(&["sh", "-c", "echo out; exit 3"])),
-            None,
-            1_000,
-        );
-
-        assert!(snapshot.failed);
-        assert_eq!(snapshot.refused, None);
-        assert_eq!(snapshot.text, "out\n");
-    }
-
-    #[test]
     fn a_renderer_that_fails_has_drawn_nothing() {
         let snapshot = finished(
             Input::Text("a\n".into()),
@@ -515,6 +495,18 @@ mod tests {
 
         assert!(snapshot.done);
         assert_eq!(snapshot.refused.as_deref(), Some("fatal: no"));
+    }
+
+    #[test]
+    fn a_command_that_fails_having_written_is_not_refused() {
+        let snapshot = finished(
+            Input::Command(command(&["sh", "-c", "echo out; exit 3"])),
+            None,
+            1_000,
+        );
+
+        assert_eq!(snapshot.refused, None);
+        assert_eq!(snapshot.text, "out\n");
     }
 
     /// A refresh drops the stream it replaces. A command still writing must

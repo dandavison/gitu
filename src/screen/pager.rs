@@ -20,7 +20,8 @@ use crate::{
     items::{self, Item, ItemId, RenderParams, RenderedRow},
     stream::{Input, Snapshot, Stream},
 };
-use git2::Repository;
+use git2::{Oid, Repository};
+use regex::Regex;
 use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
 
 /// What git handed gitu as its pager: its output, and the argv of the command
@@ -71,6 +72,45 @@ pub(crate) fn show(
         .chain([reference])
         .map(String::from)
         .collect();
+    live(config, repo, params, git_argv)
+}
+
+/// The view `git log` gives with gitu as git's pager: of `rev`, or of `HEAD`,
+/// at most `limit` commits, and only those whose message matches `msg_regex`.
+pub(crate) fn log(
+    config: Arc<Config>,
+    repo: Rc<Repository>,
+    params: RenderParams,
+    limit: usize,
+    rev: Option<Oid>,
+    msg_regex: Option<&Regex>,
+) -> Res<Screen> {
+    let mut git_argv: Vec<String> = ["git", "log"]
+        .into_iter()
+        .map(String::from)
+        .chain(config.general.log_args.iter().cloned())
+        .collect();
+    // "No limit" is `u32::MAX`, which git rejects as not an integer; leaving the
+    // option off is what an unrepresentable limit means anyway.
+    if let Ok(limit) = i32::try_from(limit) {
+        git_argv.push(format!("-n{limit}"));
+    }
+    if let Some(regex) = msg_regex {
+        git_argv.push("--extended-regexp".into());
+        git_argv.push(format!("--grep={regex}"));
+    }
+    git_argv.extend(rev.map(|oid| oid.to_string()));
+    live(config, repo, params, git_argv)
+}
+
+/// The view of a git command gitu runs itself, as though git had been run with
+/// gitu as its pager.
+fn live(
+    config: Arc<Config>,
+    repo: Rc<Repository>,
+    params: RenderParams,
+    git_argv: Vec<String>,
+) -> Res<Screen> {
     create(
         config,
         repo,

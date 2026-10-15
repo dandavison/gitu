@@ -1,19 +1,15 @@
 ---
-source: src/tests/log.rs
+source: src/tests/rebase.rs
 expression: ctx.redact_buffer()
 ---
+        ▸ 132f122 Author Name 2024-02-16 (HEAD -> main)                         |
+     add third-file                                                             |
                                                                                 |
- ───                                                                            |
-▌▸ 8bb5532 add first commit                                                     |
+ squash ▸ bc73029 Author Name 2024-02-16                                        |
+     add second-file                                                            |
                                                                                 |
- ───                                                                            |
- ▸ 6c08cf7 add second commit                                                    |
-                                                                                |
- ───                                                                            |
- ▸ 79e63f1 add third commit                                                     |
-                                                                                |
- ───                                                                            |
- ▸ b66a0bf add initial-file                                                     |
+▌       ▸ f5149db Author Name 2024-02-16                                        |
+▌    add first-file                                                             |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +18,8 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: f7aa451e297d1163
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: 8b0e9c9ea3948a59

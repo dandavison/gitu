@@ -2,9 +2,9 @@
 source: src/tests/rebase.rs
 expression: ctx.redact_buffer()
 ---
-▌645b5e4 main add third-file                                     Author Name __ |
- f5149db add first-file                                          Author Name __ |
- b66a0bf origin/main add initial-file                            Author Name __ |
+▌▸ 645b5e4 add third-file                                                       |
+ ▸ f5149db add first-file                                                       |
+ ▸ b66a0bf add initial-file                                                     |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 91eb97c93ee94fee
+styles_hash: fd361eadad4094c9

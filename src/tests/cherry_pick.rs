@@ -4,7 +4,7 @@ fn setup_cherry_pickable(ctx: TestContext) -> TestContext {
     run(&ctx.dir, &["git", "checkout", "-b", "other-branch"]);
     commit(&ctx.dir, "cherry-file", "cherry content");
     run(&ctx.dir, &["git", "checkout", "main"]);
-    ctx
+    with_renderer(ctx)
 }
 
 fn setup_conflict(ctx: TestContext) -> TestContext {

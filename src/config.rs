@@ -86,8 +86,9 @@ pub struct GeneralConfig {
     pub status_cursor_on_changes: bool,
     #[serde(default)]
     pub diff_renderer: DiffRendererConfig,
+    /// Arguments given to the `git log` gitu runs for the log view.
     #[serde(default)]
-    pub log_renderer: LogRendererConfig,
+    pub log_args: Vec<String>,
     /// Arguments given to the `git show` gitu runs for a commit it opens.
     #[serde(default)]
     pub show_args: Vec<String>,
@@ -107,17 +108,6 @@ pub struct DiffRendererConfig {
     /// typed to filter it, by feature.
     #[serde(default)]
     pub feature_keys: BTreeMap<String, char>,
-}
-
-#[derive(Default, Debug, Deserialize)]
-pub struct LogRendererConfig {
-    /// Log command as `[executable, ...args]`, run in the repository. Its
-    /// ANSI-colored output becomes the log view. Each commit's rows are
-    /// identified by commit records, which a `{commit}` token in the format
-    /// emits (see [`crate::diff_renderer::COMMIT_RECORD_FORMAT`]), or a renderer
-    /// the output is piped through.
-    #[serde(default)]
-    pub command: Vec<String>,
 }
 
 #[derive(Default, Debug, Deserialize)]

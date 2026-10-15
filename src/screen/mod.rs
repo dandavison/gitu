@@ -25,7 +25,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub(crate) mod blame;
-pub(crate) mod log;
 pub(crate) mod pager;
 pub(crate) mod rebase_todo;
 pub(crate) mod show_refs;

@@ -2,24 +2,24 @@
 source: src/tests/log.rs
 expression: ctx.redact_buffer()
 ---
-▌8bb5532 main add first commit                                   Author Name __ |
- 6c08cf7 add second commit                                       Author Name __ |
+▌commit 8bb5532ff2d4f9af2c4bce47c8bed9a8160dbc29                                |
+▌Author: Author Name <author@email.com>                                         |
+▌Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+▌                                                                               |
+▌    add first commit                                                           |
+▌                                                                               |
+▌    Commit body goes here                                                      |
+▌                                                                               |
+ commit 6c08cf78a4544ae4dda8e6161a61070867c60246                                |
+ Author: Author Name <author@email.com>                                         |
+ Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+                                                                                |
+     add second commit                                                          |
+                                                                                |
+     Commit body goes here                                                      |
                                                                                 |
                                                                                 |
                                                                                 |
                                                                                 |
                                                                                 |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-styles_hash: f42d1be019af8018
+styles_hash: 2e1a40a84a78d922

@@ -28,35 +28,35 @@ fn setup_shifted(ctx: TestContext) -> TestContext {
 
 #[test]
 fn blame_from_hunk() {
-    snapshot!(setup(setup_clone!()), "ll<enter>B");
+    snapshot!(with_renderer(setup(setup_clone!())), "ll<enter>B");
 }
 
 #[test]
 fn blame_navigate_code_line() {
-    snapshot!(setup(setup_clone!()), "ll<enter>B<ctrl+j>");
+    snapshot!(with_renderer(setup(setup_clone!())), "ll<enter>B<ctrl+j>");
 }
 
 #[test]
 fn blame_enter_on_header() {
-    snapshot!(setup(setup_clone!()), "ll<enter>Bk<enter>");
+    snapshot!(with_renderer(setup(setup_clone!())), "ll<enter>Bk<enter>");
 }
 
 #[test]
 fn blame_enter_on_code_line() {
-    snapshot!(setup(setup_clone!()), "ll<enter>B<enter>");
+    snapshot!(with_renderer(setup(setup_clone!())), "ll<enter>B<enter>");
 }
 
 #[test]
 fn blame_re_blame_from_header() {
-    snapshot!(setup(setup_clone!()), "ll<enter>BB");
+    snapshot!(with_renderer(setup(setup_clone!())), "ll<enter>BB");
 }
 
 #[test]
 fn blame_re_blame_from_code_line() {
-    snapshot!(setup(setup_clone!()), "ll<enter>BB");
+    snapshot!(with_renderer(setup(setup_clone!())), "ll<enter>BB");
 }
 
 #[test]
 fn blame_from_hunk_shifted_lines() {
-    snapshot!(setup_shifted(setup_clone!()), "llj<enter>B");
+    snapshot!(with_renderer(setup_shifted(setup_clone!())), "llj<enter>B");
 }

@@ -1,6 +1,6 @@
 use super::*;
 use crate::cli::{Args, Commands};
-use crate::tests::log::{MULTI_ROW_FORMAT, with_log_renderer};
+use crate::tests::log::{MULTI_ROW_LOG_ARGS, with_log_args};
 use std::path::{Path, PathBuf};
 
 fn setup(ctx: TestContext) -> TestContext {
@@ -30,7 +30,8 @@ fn setup_todo(ctx: TestContext) -> TestContext {
     commit(&ctx.dir, "first-file", "");
     commit(&ctx.dir, "second-file", "");
     commit(&ctx.dir, "third-file", "");
-    ctx
+    // One row per commit, so a commit's row is its summary.
+    with_log_args(with_renderer(ctx), &["--format=▸ %h %s"])
 }
 
 /// Open the interactive rebase todo for the three commits: `l l` to the log,
@@ -150,27 +151,19 @@ fn rebase_todo_reorder_and_start() {
 }
 
 #[test]
-fn rebase_todo_shows_the_log_renderer_rows() {
+fn rebase_todo_shows_the_rendered_log_rows() {
     // The commits look as they do in the log view, with the instruction in front.
     snapshot!(
-        with_log_renderer(setup_todo(setup_clone!()), &[], MULTI_ROW_FORMAT),
+        with_log_args(setup_todo(setup_clone!()), MULTI_ROW_LOG_ARGS),
         &format!("{OPEN_TODO}js")
     );
 }
 
-/// A renderer that marks commits itself names them as the format printed them,
-/// usually abbreviated; the todo's commits are still drawn with their rows.
+/// A renderer names a commit as the format printed it, usually abbreviated; the
+/// todo's commits are still drawn with their rows.
 #[test]
 fn rebase_todo_shows_rows_a_renderer_marked_by_abbreviated_commit() {
-    let mut ctx = setup_todo(setup_clone!());
-    ctx.config().general.log_renderer.command = [
-        "sh",
-        "-c",
-        r#"git log --format='▸ %h %s' "$@" | awk '/^▸ /{printf "\033]1717;1;C;;;%s\033\\", $2} {print}'"#,
-        "gitu",
-    ]
-    .map(String::from)
-    .to_vec();
+    let mut ctx = with_log_args(setup_todo(setup_clone!()), &["--format=▸ %h %s"]);
     let mut app = ctx.init_app();
 
     ctx.update(&mut app, keys(OPEN_TODO));
@@ -181,14 +174,10 @@ fn rebase_todo_shows_rows_a_renderer_marked_by_abbreviated_commit() {
 
 #[test]
 fn rebase_todo_redraws_moved_renderer_hyperlinks() {
-    let mut ctx = setup_todo(setup_clone!());
-    let config = ctx.config();
-    config.general.log_renderer.command = vec![
-        "git".into(),
-        "log".into(),
-        "--color=always".into(),
-        "--format={commit}%n▸ \x1b]8;;https://example.com/%H\x1b\\%h\x1b]8;;\x1b\\ %s".into(),
-    ];
+    let mut ctx = with_log_args(
+        setup_todo(setup_clone!()),
+        &["--format=▸ %h \x1b]8;;https://example.com/%H\x1b\\%s\x1b]8;;\x1b\\"],
+    );
 
     let mut app = ctx.init_app();
     ctx.update(&mut app, keys(OPEN_TODO));

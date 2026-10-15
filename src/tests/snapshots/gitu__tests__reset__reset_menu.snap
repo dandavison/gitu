@@ -2,24 +2,24 @@
 source: src/tests/reset.rs
 expression: ctx.redact_buffer()
 ---
- ba1a85d main add unwanted-file                                  Author Name __ |
-▌b66a0bf origin/main add initial-file                            Author Name __ |
+ commit ba1a85d7f40f75166f9a33b842f6fd0befc8b987                                |
+ Author: Author Name <author@email.com>                                         |
+ Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
                                                                                 |
+     add unwanted-file                                                          |
                                                                                 |
+     Commit body goes here                                                      |
                                                                                 |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
+▌commit b66a0bf82020d6a386e94d0fceedec1f817d20c7                                |
+▌Author: Author Name <author@email.com>                                         |
+▌Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+▌                                                                               |
+▌    add initial-file                                                           |
+▌                                                                               |
 ────────────────────────────────────────────────────────────────────────────────|
  Reset                                                                          |
  s     soft                                                                     |
  m     mixed                                                                    |
  h     hard                                                                     |
  q/esc Quit/Close                                                               |
-styles_hash: 631e5e77751e1cc6
+styles_hash: 7e980b5bafa6113a

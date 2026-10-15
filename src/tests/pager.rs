@@ -844,15 +844,17 @@ fn rendered_context_lines_are_visited_when_configured() {
 }
 
 /// A renderer that changes nothing but speaks the protocol, so its rows carry
-/// the metadata that makes them content lines rather than plain text. As git's
-/// pager it is handed git's colours, which it drops, as delta reads through
-/// them.
+/// the metadata that makes them content lines rather than plain text, and marks
+/// each commit as delta does for rows matching `commit-regex = ^(▸|commit )`.
+/// As git's pager it is handed git's colours, which it drops, as delta reads
+/// through them.
 pub(super) fn osc_1717_passthrough() -> Vec<String> {
     [
         "awk",
         r#"
         BEGIN{printf "\033]1717;1\033\\\n"}
         {gsub(/\033\[[0-9;]*m/,"")}
+        /^(commit|▸) [0-9a-f]+/{printf "\033]1717;1;C;;;%s\033\\%s\n",$2,$0;next}
         /^\+\+\+ /{file=substr($0,7);print;next}
         /^--- /{print;next}
         /^@@ /{o=$2;n=$3;sub(/^-/,"",o);sub(/^\+/,"",n);split(o,a,",");split(n,b,",");old=a[1];new=b[1];print;next}

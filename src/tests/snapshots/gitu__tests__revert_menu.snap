@@ -2,13 +2,13 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
-▌b66a0bf main origin/main add initial-file                       Author Name __ |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
+▌commit b66a0bf82020d6a386e94d0fceedec1f817d20c7                                |
+▌Author: Author Name <author@email.com>                                         |
+▌Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+▌                                                                               |
+▌    add initial-file                                                           |
+▌                                                                               |
+▌    Commit body goes here                                                      |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  c     Continue           -E Don't edit commit message (--no-edit)              |
  V     Revert commit(s)   -s Add Signed-off-by lines (--signoff)                |
  q/esc Quit/Close                                                               |
-styles_hash: 89b4e55187671654
+styles_hash: 1d14ce96015e3a72

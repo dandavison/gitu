@@ -17,6 +17,7 @@ use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::iter;
+use std::process::Command;
 use std::rc::Rc;
 use std::time::SystemTime;
 
@@ -704,40 +705,6 @@ fn commit_refs(repo: &Repository) -> Res<Vec<(git2::Commit<'_>, Ref)>> {
         .collect())
 }
 
-/// Build the log view from the output of the configured log command
-/// (`general.log_renderer`), which prints the commits however it likes — several
-/// rows each, `--stat`, `--graph`. gitu substitutes the command's `{commit}`
-/// token with git format directives that emit an OSC-1717 commit record, so each
-/// commit's rows are known: the first non-blank one becomes the selectable
-/// `Commit` item and the rest nest under it, keeping a commit one unit for
-/// navigation, folding and the ops that act on a commit.
-///
-/// Returns `None` (fall back to the built-in log) if the command fails or its
-/// output carries no commit records.
-pub(crate) fn rendered_log(
-    config: &Config,
-    repo: &Repository,
-    params: &RenderParams,
-    limit: usize,
-    rev: Option<Oid>,
-    msg_regex: Option<&Regex>,
-) -> Option<Vec<Item>> {
-    let mut args = Vec::new();
-    // "No limit" is `u32::MAX`, which git rejects as not an integer; leaving the
-    // option off is what an unrepresentable limit means anyway.
-    if let Ok(limit) = i32::try_from(limit) {
-        args.push(format!("-n{limit}"));
-    }
-    if let Some(regex) = msg_regex {
-        args.push("--extended-regexp".into());
-        args.push(format!("--grep={regex}"));
-    }
-    args.push(rev.map_or_else(|| "HEAD".to_string(), |oid| oid.to_string()));
-
-    let blocks = rendered_commits(config, repo, params, &args)?;
-    Some(log_items(repo, &blocks))
-}
-
 /// Log items from rendered rows that gitu did not run the command for: as git's
 /// pager it is handed the renderer's output, and the commit records in it say
 /// where each commit begins just as well.
@@ -762,31 +729,30 @@ pub(crate) struct RenderedCommit {
     rows: Vec<Rc<RenderedRow>>,
 }
 
-/// Run the configured log command with `args` appended, and group its rows per
-/// commit. `None` if the command fails or emits no commit records.
+/// `git log` of the commits `revs`, through the renderer, grouped per commit.
+/// `None` if either fails or the renderer marks no commits.
 fn rendered_commits(
     config: &Config,
     repo: &Repository,
     params: &RenderParams,
-    args: &[String],
+    revs: &[String],
 ) -> Option<Vec<RenderedCommit>> {
-    let command: Vec<String> = config
-        .general
-        .log_renderer
-        .command
-        .iter()
-        .map(|arg| arg.replace("{commit}", crate::diff_renderer::COMMIT_RECORD_FORMAT))
-        .chain(args.iter().cloned())
-        .collect();
-
     let dir = repo.workdir().unwrap_or_else(|| repo.path());
-    let output = crate::diff_renderer::run(&command, None, params, Some(dir))?;
-    commits_in(&output).or_else(|| {
-        log::warn!(
-            "log command emitted no commit records; is the '{{commit}}' token in its format?"
-        );
-        None
-    })
+    let log = Command::new("git")
+        .current_dir(dir)
+        .args(["-c", "color.ui=always", "log", "--no-walk=unsorted"])
+        .args(&config.general.log_args)
+        .args(revs)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())?;
+    let output = crate::diff_renderer::run(
+        &config.general.diff_renderer.command,
+        Some(&String::from_utf8_lossy(&log.stdout)),
+        params,
+        Some(dir),
+    )?;
+    commits_in(&output)
 }
 
 /// Group rendered rows per commit, as the commit records in them say. `None`
@@ -815,16 +781,16 @@ fn commits_in(rendered: &str) -> Option<Vec<RenderedCommit>> {
     )
 }
 
-/// The log command's rows for each commit in `revs`, keyed by oid, for views
+/// The rendered log's rows for each commit in `revs`, keyed by oid, for views
 /// that lay the commits out themselves (the interactive rebase todo). Empty when
-/// no log command is configured or it fails; the caller renders those commits.
+/// there is no renderer or it fails; the caller renders those commits.
 pub(crate) fn rendered_commit_rows(
     config: &Config,
     repo: &Repository,
     params: &RenderParams,
     revs: &[String],
 ) -> HashMap<String, Vec<Rc<RenderedRow>>> {
-    if config.general.log_renderer.command.is_empty() || revs.is_empty() {
+    if config.general.diff_renderer.command.is_empty() || revs.is_empty() {
         return HashMap::new();
     }
 

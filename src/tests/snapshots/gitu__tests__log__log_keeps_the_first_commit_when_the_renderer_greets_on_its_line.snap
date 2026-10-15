@@ -2,15 +2,10 @@
 source: src/tests/log.rs
 expression: ctx.redact_buffer()
 ---
-▌commit 6c08cf78a4544ae4dda8e6161a61070867c60246                                |
- Author: Author Name <author@email.com>                                         |
- Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
-                                                                                |
-     add second commit                                                          |
-                                                                                |
-     Commit body goes here                                                      |
-                                                                                |
- added      second commit                                                       |
+▌▸ 8bb5532 add first commit                                                     |
+ ▸ 6c08cf7 add second commit                                                    |
+ ▸ 79e63f1 add third commit                                                     |
+ ▸ b66a0bf add initial-file                                                     |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +17,9 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 83a02d5c30fab5da
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: fd361eadad4094c9

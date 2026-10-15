@@ -866,7 +866,13 @@ impl App {
             crate::item_data::ItemData::Commit { oid, .. } => Some(oid.clone()),
             _ => None,
         };
-        self.state.screens.push(screen::log::create(
+        // The selected commit has to be found among the rows, so they are all
+        // drawn first.
+        let params = RenderParams {
+            streaming: params.streaming && selected.is_none(),
+            ..params
+        };
+        self.state.screens.push(screen::pager::log(
             Arc::clone(&self.state.config),
             Rc::clone(&self.state.repo),
             params,

@@ -2,24 +2,24 @@
 source: src/tests/commit.rs
 expression: ctx.redact_buffer()
 ---
- 1cee609 main add file-10                                        Author Name __ |
- 60c9fa8 add file-9                                              Author Name __ |
- 14327a8 add file-8                                              Author Name __ |
- ae37012 add file-7                                              Author Name __ |
- 585709b add file-6                                              Author Name __ |
- ed20882 add file-5                                              Author Name __ |
- 5eef443 add file-4                                              Author Name __ |
- 1cc7f07 add file-3                                              Author Name __ |
-▌f67e3f0 add file-2                                              Author Name __ |
- ce87247 add file-1                                              Author Name __ |
- b66a0bf origin/main add initial-file                            Author Name __ |
+     Commit body goes here                                                      |
                                                                                 |
+ commit 1cc7f07fb1a54e502fc5751d90107b4732f72e11                                |
+ Author: Author Name <author@email.com>                                         |
+ Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
                                                                                 |
+     add file-3                                                                 |
                                                                                 |
+     Commit body goes here                                                      |
                                                                                 |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-styles_hash: 5d739375db7da941
+▌commit f67e3f06699426a6c6cc1317ae88b97889315a7c                                |
+▌Author: Author Name <author@email.com>                                         |
+▌Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+▌                                                                               |
+▌    add file-2                                                                 |
+▌                                                                               |
+▌    Commit body goes here                                                      |
+▌                                                                               |
+ commit ce87247076ce319b82488e370f9e8bdb3db9b306                                |
+ Author: Author Name <author@email.com>                                         |
+styles_hash: 4ad95212697d58d2

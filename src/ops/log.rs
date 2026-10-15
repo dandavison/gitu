@@ -29,8 +29,7 @@ pub(crate) struct LogCurrent;
 impl OpTrait for LogCurrent {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {
         Some(Rc::new(|app: &mut App, _term: &mut Term| {
-            goto_log_screen(app, None);
-            Ok(())
+            goto_log_screen(app, None)
         }))
     }
 
@@ -75,11 +74,10 @@ fn log_other(app: &mut App, _term: &mut Term, result: &str) -> Res<()> {
 
     let oid = oid_result?;
 
-    goto_log_screen(app, Some(oid));
-    Ok(())
+    goto_log_screen(app, Some(oid))
 }
 
-fn goto_log_screen(app: &mut App, rev: Option<Oid>) {
+fn goto_log_screen(app: &mut App, rev: Option<Oid>) -> Res<()> {
     app.state.screens.drain(1..);
     let params = app.render_params(app.state.screens.last().unwrap().size);
     let limit = *app
@@ -98,15 +96,13 @@ fn goto_log_screen(app: &mut App, rev: Option<Oid>) {
 
     let msg_regex = msg_regex_menu.and_then(|arg| arg.value_as::<Regex>().cloned());
 
-    app.state.screens.push(
-        screen::log::create(
-            Arc::clone(&app.state.config),
-            Rc::clone(&app.state.repo),
-            params,
-            limit as usize,
-            rev,
-            msg_regex,
-        )
-        .expect("Couldn't create screen"),
-    );
+    app.state.screens.push(screen::pager::log(
+        Arc::clone(&app.state.config),
+        Rc::clone(&app.state.repo),
+        params,
+        limit as usize,
+        rev,
+        msg_regex.as_ref(),
+    )?);
+    Ok(())
 }

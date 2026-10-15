@@ -1,9 +1,8 @@
 //! Render diffs with an external command (e.g. `delta`).
 //!
-//! The command is fed a unified diff on stdin and emits ANSI-colored output that
-//! we parse back into per-line styled runs. The same ANSI/OSC-1717 parsing drives
-//! the log view, whose rows come from a `git log` command instead of stdin (see
-//! [`COMMIT_RECORD_FORMAT`]).
+//! The command is fed git's output on stdin and emits ANSI-colored output that
+//! we parse back into per-line styled runs. In a log, its commit records say
+//! which commit each row belongs to.
 //!
 //! Two cooperation levels are supported:
 //! - A `--color-only` renderer preserves line structure 1:1, and
@@ -36,11 +35,6 @@ const OSC1717_ADVERTISED: &str = "V1";
 /// the features already in git config", so what the user configured stays the
 /// base and gitu's selection is only an overlay on top of it.
 const FEATURES_VAR: &str = "DELTA_FEATURES";
-
-/// The git `--format` directives that emit a commit record: gitu substitutes
-/// them for the `{commit}` token in the configured log command, so git itself
-/// states which commit each rendered row belongs to.
-pub(crate) const COMMIT_RECORD_FORMAT: &str = "%x1b]1717;1;C;;;%H%x1b\\";
 
 /// What a rendered row is, per its OSC-1717 `type`. `Context`/`Added`/`Deleted`
 /// are content lines; `HunkHeader`/`FileHeader` are the renderer's own header rows
@@ -904,16 +898,15 @@ mod tests {
         assert_eq!(out[0].records[0].file, "weird;name.txt");
     }
 
-    /// What `COMMIT_RECORD_FORMAT` expands to once git has run it.
+    /// A commit record as the renderer emits it.
     fn commit_record(oid: &str) -> String {
         format!("\x1b]1717;1;C;;;{oid}\x1b\\")
     }
 
     #[test]
     fn keeps_a_handshake_line_that_also_carries_a_record() {
-        // delta emits the handshake as its first output, so a marker the log
-        // format put at the very start shares that line; the commit it
-        // identifies must survive.
+        // delta emits the handshake as its first output, so the first commit's
+        // record shares that line; the commit it identifies must survive.
         let out = parse_ansi_lines(&format!(
             "\x1b]1717;1\x1b\\{}\n──\n▸ abc1234 summary\n",
             commit_record("abc1234def")

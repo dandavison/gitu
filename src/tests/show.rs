@@ -77,7 +77,7 @@ fn git_command_of(app: &App) -> Option<String> {
 /// line, so the two behave the same.
 #[test]
 fn a_commit_opened_from_the_log_is_the_output_of_git_show() {
-    let mut ctx = setup_clone!();
+    let mut ctx = with_renderer(setup_clone!());
     commit(&ctx.dir, "firstfile", "testing\n");
     let head = run(&ctx.dir, &["git", "rev-parse", "HEAD"])
         .trim()

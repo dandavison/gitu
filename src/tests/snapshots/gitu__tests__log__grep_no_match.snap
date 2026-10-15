@@ -2,7 +2,7 @@
 source: src/tests/log.rs
 expression: ctx.redact_buffer()
 ---
-▌No commits found                                                               |
+▌                                                                               |
                                                                                 |
                                                                                 |
                                                                                 |

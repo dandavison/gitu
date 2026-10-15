@@ -80,24 +80,13 @@ diff_renderer.features = ["side-by-side", "line-numbers", "keep-plus-minus-marke
 # Gitu writes it here.
 diff_renderer.feature_keys = {}
 
-# Render the log view with a command of your own instead of Gitu's built-in
-# one-line-per-commit list. The command is run in the repository and its
-# ANSI-colored output becomes the log view; Gitu appends the log menu's
-# arguments (`-n`, `--grep`) and the rev being logged.
-#
-# A commit may take as many rows as the format prints (blank separators, a stat,
-# a graph): Gitu keeps them one unit — one commit per cursor stop, folded and
-# operated on together — by identifying them from a marker in the output (an
-# OSC-1717 commit record). A `{commit}` token in the format is substituted with
-# git format directives emitting it. Without the token, the output must be
-# piped through a renderer that emits it, as delta does for rows matching its
-# `commit-regex`; then the format can be a named one (`--pretty=<name>`) shared
-# with your own aliases. Output with no markers falls back to the built-in log.
-#
-# A `{width}` token is substituted as for `diff_renderer`, so the output can be
-# piped through a renderer that reflows, e.g.:
-#   log_renderer.command = ["sh", "-c", "git log --stat --color=always --format='{commit}%h %s' \"$@\" | delta --width {width}", "gitu"]
-log_renderer.command = []
+# Arguments given to the `git log` Gitu runs for the log view (`l l`, `l o`),
+# e.g. a pretty format of your own:
+#   log_args = ["--stat", "--pretty=commit-format"]
+# A commit is one cursor stop only where the renderer marks it, as delta does
+# for rows matching its `commit-regex`. `git log` typed at the command line
+# takes git's own config instead (`format.pretty`).
+log_args = []
 
 # Arguments given to the `git show` Gitu runs for a commit it opens (enter on a
 # commit, `gitu show`), e.g. a pretty format of your own:

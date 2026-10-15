@@ -2,7 +2,9 @@
 source: src/tests/log.rs
 expression: ctx.redact_buffer()
 ---
-▌                                                                               |
+▌On branch main                                                                 |
+                                                                                |
+ Recent commits                                                                 |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -18,8 +20,6 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-styles_hash: fd361eadad4094c9
+────────────────────────────────────────────────────────────────────────────────|
+! fatal: your current branch 'main' does not have any commits yet               |
+styles_hash: e623c0cd16c00d1b

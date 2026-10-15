@@ -1,25 +1,25 @@
 ---
-source: src/tests/rebase.rs
+source: src/tests/log.rs
 expression: ctx.redact_buffer()
 ---
                                                                                 |
-        ▸ 132f122 Author Name 2024-02-16 (HEAD -> main)                         |
-     add third-file                                                             |
+ ▸ 8bb5532 Author Name 2024-02-16 (HEAD -> main)                                |
+     add first commit                                                           |
                                                                                 |
- squash ▸ bc73029 Author Name 2024-02-16                                        |
-     add second-file                                                            |
+ ▸ 6c08cf7 Author Name 2024-02-16                                               |
+     add second commit                                                          |
                                                                                 |
-▌       ▸ f5149db Author Name 2024-02-16                                        |
-▌    add first-file                                                             |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
+▌▸ 79e63f1 Author Name 2024-02-16                                               |
+▌    add third commit                                                           |
+▌                                                                               |
+ ▸ b66a0bf Author Name 2024-02-16 (origin/main, origin/HEAD)                    |
+     add initial-file                                                           |
                                                                                 |
                                                                                 |
                                                                                 |
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 7f7ca0e8b3a320a2
+                                                                                |
+                                                                                |
+styles_hash: b54321d016393545

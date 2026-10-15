@@ -3,11 +3,9 @@ source: src/tests/log.rs
 expression: ctx.redact_buffer()
 ---
                                                                                 |
- ▸ 8bb5532 Author Name 2024-02-16 (HEAD -> main)                                |
-     add first commit                                                           |
-                                                                                |
-▌▸ 6c08cf7 Author Name 2024-02-16                                               |
-▌    add second commit                                                          |
+▌▸ 8bb5532 Author Name 2024-02-16 (HEAD -> main)…                               |
+ ▸ 6c08cf7 Author Name 2024-02-16                                               |
+     add second commit                                                          |
                                                                                 |
  ▸ 79e63f1 Author Name 2024-02-16                                               |
      add third commit                                                           |
@@ -20,6 +18,8 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-────────────────────────────────────────────────────────────────────────────────|
-> Commit hash copied to clipboard                                               |
-styles_hash: ebcd6dd009051043
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: e59cb46edba6cc1f
