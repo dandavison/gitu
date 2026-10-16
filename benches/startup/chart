@@ -1,0 +1,42 @@
+#!/usr/bin/env -S uv run --script
+#
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
+"""Write an HTML page charting cached bench-startup results in commit order."""
+
+import argparse
+import json
+import subprocess
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--results", type=Path, default=HERE / "results")
+    parser.add_argument("--out", type=Path)
+    args = parser.parse_args()
+
+    results = [json.loads(p.read_text()) for p in args.results.glob("*.json")]
+    results.sort(key=lambda r: commit_order(r["commit"]))
+    out = (
+        args.out
+        or HERE.parents[1] / "target" / "bench-startup" / f"{args.results.name}.html"
+    )
+    out.write_text(
+        (HERE / "chart.html").read_text().replace("/*DATA*/null", json.dumps(results))
+    )
+    print(out)
+
+
+def commit_order(sha: str) -> int:
+    """Ancestors first: the number of commits reachable from sha."""
+    git = ["git", "-C", str(HERE), "rev-list", "--count", sha]
+    return int(subprocess.run(git, capture_output=True, text=True, check=True).stdout)
+
+
+if __name__ == "__main__":
+    main()
