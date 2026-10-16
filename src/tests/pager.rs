@@ -1768,3 +1768,30 @@ fn unfolding_everything_from_a_diffstat_heads_the_files_with_the_renderers_heade
     assert!(buffer.contains("changed"), "{buffer}");
     assert!(!buffer.contains("firstfile | 2 +-"), "{buffer}");
 }
+
+/// A file the user unfolded stays unfolded through a re-render, such as
+/// turning on line numbers, though files start folded, and though the renderer
+/// draws nothing before the first screen is shown.
+#[test]
+fn an_unfolded_file_stays_unfolded_through_a_slow_rerender() {
+    let mut ctx = setup_clone!();
+    two_changed_files(&ctx);
+    ctx.config().general.start_folded = true;
+    let renderer = &mut ctx.config().general.diff_renderer;
+    renderer.features = vec!["line-numbers".into()];
+    renderer.command = osc_1717_passthrough()
+        .into_iter()
+        .map(|arg| arg.replace("BEGIN{", "BEGIN{system(\"sleep 1\");"))
+        .collect();
+    let mut app = ctx.init_app_streaming_as_pager_of(&["git", "diff"]);
+    finish_drawing(&mut ctx, &mut app);
+    ctx.update(&mut app, keys("gg<tab>"));
+    assert!(ctx.redact_buffer().contains("alpha changed"));
+
+    ctx.update(&mut app, keys("<-><enter>"));
+    finish_drawing(&mut ctx, &mut app);
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("alpha changed"), "{buffer}");
+    assert!(!buffer.contains("beta changed"), "{buffer}");
+}

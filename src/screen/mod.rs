@@ -209,6 +209,9 @@ pub(crate) struct Screen {
     /// Memoized `item_height`, indexed like `items`. Dropped by `invalidate`.
     item_heights: RefCell<Vec<Option<u16>>>,
     collapsed: HashSet<u64>,
+    /// Every item this screen has had. Only an item not seen before starts
+    /// folded by default; whether one seen before is folded is the user's.
+    seen: HashSet<ItemId>,
     search: Option<Search>,
 }
 
@@ -258,6 +261,7 @@ impl Screen {
             items: vec![],
             item_heights: RefCell::new(vec![]),
             collapsed,
+            seen: HashSet::new(),
             search: None,
         };
 
@@ -273,6 +277,7 @@ impl Screen {
                 .filter(|item| item.default_collapsed)
                 .map(|item| item.id),
         );
+        screen.seen.extend(screen.items.iter().map(|item| item.id));
 
         screen.invalidate();
         screen.update_cursor();
@@ -624,6 +629,7 @@ impl Screen {
         // are no longer the same lines.
         self.anchor = None;
         let Items { now, later } = (self.refresh_items)(self.params())?;
+        self.seen.extend(now.iter().map(|item| item.id));
         self.items = fill_empty(now);
         self.later = later;
 
@@ -667,13 +673,13 @@ impl Screen {
         let items = items?;
         // Items that were not drawn yet start folded as a screen's first items
         // do.
-        let had: HashSet<ItemId> = self.items.iter().map(|item| item.id).collect();
         self.collapsed.extend(
             items
                 .iter()
-                .filter(|item| item.default_collapsed && !had.contains(&item.id))
+                .filter(|item| item.default_collapsed && !self.seen.contains(&item.id))
                 .map(|item| item.id),
         );
+        self.seen.extend(items.iter().map(|item| item.id));
         self.items = fill_empty(items);
 
         self.invalidate();
