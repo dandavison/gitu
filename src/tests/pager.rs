@@ -1833,3 +1833,27 @@ fn a_diffstat_is_the_diff_folded_to_stat_rows() {
 
     assert_eq!(stat, ctx.redact_buffer());
 }
+
+/// While the renderer has drawn the files' headers but none of their lines,
+/// what is shown is the renderer's drawing so far, not gitu's own drawing of
+/// the patch in its place.
+#[test]
+fn a_patch_part_drawn_is_shown_as_the_renderer_drew_it() {
+    let mut ctx = setup_clone!();
+    two_changed_files(&ctx);
+    ctx.config().general.diff_renderer.command = osc_1717_passthrough()
+        .into_iter()
+        .map(|arg| arg.replace("BEGIN{", "NR==6{fflush(); system(\"sleep 2\")}\nBEGIN{"))
+        .collect();
+
+    let app = ctx.init_app_streaming_as_pager_of(&["git", "diff"]);
+
+    let undrawn: Vec<_> = app
+        .screen()
+        .items()
+        .iter()
+        .filter(|item| matches!(item.data, crate::item_data::ItemData::HunkLine { .. }))
+        .filter(|item| item.rendered.is_none())
+        .collect();
+    assert!(undrawn.is_empty(), "{undrawn:?}");
+}

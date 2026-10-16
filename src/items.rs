@@ -104,6 +104,7 @@ pub(crate) fn create_diff_items(
         config,
         diff,
         rendered.as_deref(),
+        true,
         depth,
         default_collapsed,
         commit,
@@ -111,11 +112,14 @@ pub(crate) fn create_diff_items(
 }
 
 /// The items for a diff the renderer has drawn as `rendered`, or gitu's own
-/// when it did not draw it (or drew it without OSC-1717 records).
+/// when it did not draw it (or drew it without OSC-1717 records). `drawn_whole`
+/// says whether `rendered` is all of the renderer's drawing or only what it has
+/// drawn so far.
 pub(crate) fn drawn_diff_items(
     config: &Config,
     diff: &Rc<Diff>,
     rendered: Option<&str>,
+    drawn_whole: bool,
     depth: usize,
     default_collapsed: bool,
     commit: Option<String>,
@@ -125,6 +129,7 @@ pub(crate) fn drawn_diff_items(
             create_rendered_diff_items(
                 config,
                 rendered,
+                drawn_whole,
                 diff,
                 depth,
                 default_collapsed,
@@ -250,6 +255,7 @@ fn scaled(count: usize, largest: usize) -> usize {
 fn create_rendered_diff_items(
     config: &Config,
     output: &str,
+    drawn_whole: bool,
     diff: &Rc<Diff>,
     depth: usize,
     default_collapsed: bool,
@@ -259,14 +265,16 @@ fn create_rendered_diff_items(
     parsed.protocol_version?; // Not an OSC-1717 renderer: fall back to built-in.
 
     // The handshake says the renderer speaks the protocol, not that it said
-    // anything with it: without content records there is nothing to lay out.
+    // anything with it: having drawn the whole diff without content records,
+    // it has nothing to lay out. Part way through, it may not have reached a
+    // content line yet.
     let has_hunks = diff.file_diffs.iter().any(|file| !file.hunks.is_empty());
     let annotated_a_line = parsed
         .lines
         .iter()
         .flat_map(|line| &line.records)
         .any(|record| record.kind.is_content());
-    if has_hunks && !annotated_a_line {
+    if drawn_whole && has_hunks && !annotated_a_line {
         return None;
     }
 

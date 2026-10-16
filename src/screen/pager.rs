@@ -335,6 +335,7 @@ fn built(
                     config,
                     &diff,
                     snapshot.rendered.as_deref(),
+                    snapshot.done,
                     0,
                     config.general.start_folded,
                     None,
