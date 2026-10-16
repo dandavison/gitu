@@ -1814,3 +1814,22 @@ fn a_file_new_to_a_rebuild_starts_folded() {
     assert!(buffer.contains("b.rs"), "{buffer}");
     assert!(!buffer.contains("beta changed"), "{buffer}");
 }
+
+/// A diffstat is the diff with its files headed by their stat rows and folded,
+/// drawn as any diff is.
+#[test]
+fn a_diffstat_is_the_diff_folded_to_stat_rows() {
+    let mut ctx = setup_clone!();
+    two_changed_files(&ctx);
+    ctx.config().general.diff_renderer.command = file_header_renderer();
+    let stat = {
+        ctx.init_app_as_pager_of(&["git", "diff", "--stat"]);
+        ctx.redact_buffer()
+    };
+    ctx.config().general.start_folded = true;
+    ctx.config().general.file_header = crate::config::FileHeader::Stat;
+
+    ctx.init_app_as_pager_of(&["git", "diff"]);
+
+    assert_eq!(stat, ctx.redact_buffer());
+}
