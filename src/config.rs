@@ -94,6 +94,10 @@ pub struct GeneralConfig {
     pub show_args: Vec<String>,
     #[serde(default)]
     pub folded_file_header: FoldedFileHeader,
+    /// Whether a patch's files start folded: `git diff`, `git show`, `git log
+    /// -p`, and a commit opened from the log.
+    #[serde(default)]
+    pub start_folded: bool,
 }
 
 /// What a folded file shows.

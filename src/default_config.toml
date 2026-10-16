@@ -102,6 +102,10 @@ show_args = []
 # a long diff has arrived.
 folded_file_header = "delta"
 
+# Whether a patch's files start folded, in every view of one: `git diff`, `git
+# show`, `git log -p`, and a commit opened from the log.
+start_folded = false
+
 # When to prompt for discard confirmation. Options:
 # "line"  - always prompt even for individual lines (default),
 # "hunk"  - prompt for files and hunks,

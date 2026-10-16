@@ -1668,3 +1668,46 @@ fn a_folded_file_shows_the_renderers_header_by_default() {
     assert!(buffer.contains("a.rs"), "{buffer}");
     assert!(!buffer.contains(" | "), "{buffer}");
 }
+
+/// Every view of a patch can open with its files folded, however it was opened.
+#[test]
+fn files_start_folded_when_asked() {
+    let mut ctx = setup_clone!();
+    two_changed_files(&ctx);
+    ctx.config().general.start_folded = true;
+
+    ctx.init_app_as_pager_of(&["git", "diff"]);
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("a.rs"), "{buffer}");
+    assert!(buffer.contains("a_test.rs"), "{buffer}");
+    assert!(!buffer.contains("alpha changed"), "{buffer}");
+}
+
+#[test]
+fn a_commit_opened_from_the_log_starts_folded_when_asked() {
+    let mut ctx = with_renderer(setup_clone!());
+    commit(&ctx.dir, "firstfile", "This should be folded\n");
+    ctx.config().general.start_folded = true;
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("ll<enter>"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("firstfile"), "{buffer}");
+    assert!(!buffer.contains("This should be folded"), "{buffer}");
+}
+
+#[test]
+fn files_start_folded_to_their_stat_rows() {
+    let mut ctx = setup_clone!();
+    a_replaced_line_and_three_added(&ctx);
+    ctx.config().general.start_folded = true;
+    ctx.config().general.folded_file_header = crate::config::FoldedFileHeader::Stat;
+
+    ctx.init_app_as_pager_of(&["git", "diff"]);
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("a.rs        | 2 +-"), "{buffer}");
+    assert!(buffer.contains("longer_b.rs | 3 +++"), "{buffer}");
+}

@@ -336,7 +336,7 @@ fn built(
                     &diff,
                     snapshot.rendered.as_deref(),
                     0,
-                    false,
+                    config.general.start_folded,
                     None,
                 );
                 let preamble = preamble(&snapshot.text, &diff.text);
