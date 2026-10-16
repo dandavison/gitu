@@ -86,9 +86,12 @@ def build(sha: str) -> Path | str:
     subprocess.run(
         ["git", "-C", str(WORKTREE), "checkout", "-q", "--detach", sha], check=True
     )
-    # gitu became an example rather than a binary when the crate became a library.
+    # gitu became an example rather than a binary when the crate became a library,
+    # and for one commit before that was a binary behind the feature "bin".
     example = (WORKTREE / "examples" / "gitu.rs").exists()
     target = ["--example", "gitu"] if example else ["--bin", "gitu"]
+    if 'required-features = ["bin"]' in (WORKTREE / "Cargo.toml").read_text():
+        target += ["--features", "bin"]
     p = subprocess.run(
         ["cargo", "build", "--release", *target],
         check=False,
