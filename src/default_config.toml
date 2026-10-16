@@ -214,7 +214,7 @@ root.refresh = ["g+r"]
 # Go to the status screen, leaving the screen gitu was started on underneath.
 root.status = ["g+s"]
 root.toggle_section = ["tab"]
-root.toggle_all_sections = ["backtab"]
+root.toggle_all_sections = ["shift+tab"]
 root.diff_context = ["U"]
 # Edit the git command the view is the output of, and ask it again.
 root.edit_git_command = [":"]
@@ -260,7 +260,7 @@ root.blame = ["B"]
 root.renderer_features = ["-"]
 
 picker.next = ["down", "ctrl+n", "tab"]
-picker.previous = ["up", "ctrl+p", "backtab"]
+picker.previous = ["up", "ctrl+p", "shift+tab"]
 picker.done = ["enter"]
 picker.cancel = ["esc", "ctrl+c"]
 

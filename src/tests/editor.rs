@@ -46,6 +46,26 @@ fn folding_everything_and_opening_it_again() {
     );
 }
 
+/// The default binding is written as the keys pressed, and the help says so.
+#[test]
+fn folding_everything_is_bound_to_shift_tab() {
+    let (mut ctx, mut app) = setup_scroll(setup_clone!());
+
+    ctx.update(&mut app, keys("<shift+backtab>"));
+
+    assert!(
+        !ctx.redact_buffer().contains("file-1"),
+        "shift+tab did nothing:\n{}",
+        ctx.redact_buffer()
+    );
+    ctx.update(&mut app, keys("h"));
+    assert!(
+        ctx.redact_buffer().contains("shift+tab"),
+        "{}",
+        ctx.redact_buffer()
+    );
+}
+
 /// A terminal sends shift-tab as backtab with the shift modifier still set.
 /// The keycode already says shift was held, so a `backtab` binding — which is
 /// what config can name — has to match it.
