@@ -1795,3 +1795,22 @@ fn an_unfolded_file_stays_unfolded_through_a_slow_rerender() {
     assert!(buffer.contains("alpha changed"), "{buffer}");
     assert!(!buffer.contains("beta changed"), "{buffer}");
 }
+
+/// A file a rebuild brings that the view has not had before starts folded, as
+/// the view's first files did.
+#[test]
+fn a_file_new_to_a_rebuild_starts_folded() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "a.rs", "alpha\n");
+    commit(&ctx.dir, "b.rs", "beta\n");
+    fs::write(ctx.dir.join("a.rs"), "alpha changed\n").unwrap();
+    ctx.config().general.start_folded = true;
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+
+    fs::write(ctx.dir.join("b.rs"), "beta changed\n").unwrap();
+    ctx.update(&mut app, keys("g+r"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("b.rs"), "{buffer}");
+    assert!(!buffer.contains("beta changed"), "{buffer}");
+}
