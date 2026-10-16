@@ -1236,6 +1236,37 @@ pub(crate) fn blank_line() -> Item {
     }
 }
 
+/// Each file's items identified as the same file in a rebuild of the diff: by
+/// its paths and which of the files with those paths it is, not by its whole
+/// header, whose `index` line changes as parts of it are staged.
+pub(crate) fn identified_by_paths(mut items: Vec<Item>) -> Vec<Item> {
+    let ids: HashMap<ItemId, ItemId> = items
+        .iter()
+        .filter_map(|item| match &item.data {
+            ItemData::Delta { diff, file_i, .. } => Some((item.id, file_id(diff, *file_i))),
+            _ => None,
+        })
+        .collect();
+    for item in &mut items {
+        if let Some(&id) = ids.get(&item.id) {
+            item.id = id;
+        }
+    }
+    items
+}
+
+fn file_id(diff: &Diff, file_i: usize) -> ItemId {
+    let paths = |file_i| diff.file_diff_header(file_i).lines().next().unwrap_or("");
+    let earlier = (0..file_i).filter(|&i| paths(i) == paths(file_i)).count();
+    hash((
+        "file",
+        format!("{:?}", diff.diff_type),
+        &diff.commit,
+        paths(file_i),
+        earlier,
+    ))
+}
+
 pub(crate) fn hash<T: Hash>(x: T) -> ItemId {
     let mut hasher = DefaultHasher::new();
     x.hash(&mut hasher);

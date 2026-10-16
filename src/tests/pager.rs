@@ -1811,7 +1811,7 @@ fn a_file_new_to_a_rebuild_starts_folded() {
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
 
     fs::write(ctx.dir.join("b.rs"), "beta changed\n").unwrap();
-    ctx.update(&mut app, keys("g+r"));
+    ctx.update(&mut app, keys("gr"));
 
     let buffer = ctx.redact_buffer();
     assert!(buffer.contains("b.rs"), "{buffer}");

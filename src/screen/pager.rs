@@ -54,6 +54,7 @@ pub(crate) fn create(
         }),
     )?;
     screen.git_command = git_command;
+    screen.folds_new_items = true;
 
     Ok(screen)
 }
@@ -328,7 +329,7 @@ fn built(
                     commit: named_commit.then(|| commit_named_by(&text)).flatten(),
                     text,
                 });
-                let drawn = items::drawn_diff_items(
+                let drawn = items::identified_by_paths(items::drawn_diff_items(
                     config,
                     &diff,
                     snapshot.rendered.as_deref(),
@@ -336,7 +337,7 @@ fn built(
                     0,
                     config.general.start_folded || *stat,
                     None,
-                );
+                ));
                 if let Some(preamble) = preamble(&snapshot.text, &diff.text) {
                     items.extend(items::plain_rows(&render(config, params, &preamble)));
                 }
