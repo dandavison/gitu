@@ -1654,24 +1654,27 @@ fn an_unfolded_file_is_headed_by_its_stat_row() {
     assert!(!buffer.contains("==========="), "{buffer}");
 }
 
-/// The bars are scaled so the largest change fits, as git scales them; a file
-/// with any change keeps at least one mark.
+/// Stat rows are laid out as git lays out `--stat` at the width they have:
+/// long names shortened from the left, bars scaled to fit, and a summary.
 #[test]
-fn stat_bars_are_scaled_to_the_largest_change() {
+fn stat_rows_are_laid_out_as_git_lays_them_out() {
     let mut ctx = setup_clone!();
+    let long = "a/very/long/directory/path/that/keeps/going/and/going/file_with_a_long_name.rs";
+    fs::create_dir_all(ctx.dir.join(long).parent().unwrap()).unwrap();
     commit(&ctx.dir, "big.rs", "");
     commit(&ctx.dir, "small.rs", "");
-    let lines: String = (1..=100).map(|i| format!("{i}\n")).collect();
-    fs::write(ctx.dir.join("big.rs"), lines).unwrap();
-    fs::write(ctx.dir.join("small.rs"), "1\n").unwrap();
+    commit(&ctx.dir, long, "");
+    let lines = |n: usize| (1..=n).map(|i| format!("{i}\n")).collect::<String>();
+    fs::write(ctx.dir.join("big.rs"), lines(100)).unwrap();
+    fs::write(ctx.dir.join("small.rs"), lines(1)).unwrap();
+    fs::write(ctx.dir.join(long), lines(7)).unwrap();
 
     let buffer = folded_to_stat_rows(&mut ctx);
 
-    assert!(
-        buffer.contains(&format!("big.rs   | 100 {}", "+".repeat(40))),
-        "{buffer}"
-    );
-    assert!(buffer.contains("small.rs |   1 +"), "{buffer}");
+    let git = run(&ctx.dir, &["sh", "-c", "COLUMNS=78 git diff --stat"]);
+    for line in git.lines() {
+        assert!(buffer.contains(line), "{line:?} not in\n{buffer}");
+    }
 }
 
 #[test]
