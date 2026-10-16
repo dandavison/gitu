@@ -12,12 +12,11 @@ use crate::style::{Modifier, Style};
 use crate::{
     Res,
     calling_process::GitCommand,
-    config::Config,
+    config::{Config, FileHeader},
     error::Error,
     git::diff::{Diff, DiffType},
     gitu_diff,
-    item_data::ItemData,
-    items::{self, Item, RenderParams, RenderedRow},
+    items::{self, Item, RenderParams},
     stream::{Input, Snapshot, Stream},
 };
 use git2::{Oid, Repository};
@@ -220,11 +219,9 @@ impl Source {
                 let git = git.borrow();
                 let stat = git.is_stat();
                 // A diffstat is shown as the files of the patch, folded to
-                // their rows of it, so the patch is asked for too.
+                // their stat rows, so the patch is what is asked for.
                 let mut command = if stat {
-                    let mut command = git.with_patch().command(params.context.as_deref());
-                    command.env("COLUMNS", params.width().to_string());
-                    command
+                    git.as_patch().command(params.context.as_deref())
                 } else {
                     git.command(params.context.as_deref())
                 };
@@ -337,18 +334,18 @@ fn built(
                     snapshot.rendered.as_deref(),
                     snapshot.done,
                     0,
-                    config.general.start_folded,
+                    config.general.start_folded || *stat,
                     None,
                 );
-                let preamble = preamble(&snapshot.text, &diff.text);
-                if *stat {
-                    items.extend(folded_to_stat(drawn, preamble.as_deref().unwrap_or("")));
-                } else {
-                    if let Some(preamble) = preamble {
-                        items.extend(items::plain_rows(&render(config, params, &preamble)));
-                    }
-                    items.extend(drawn);
+                if let Some(preamble) = preamble(&snapshot.text, &diff.text) {
+                    items.extend(items::plain_rows(&render(config, params, &preamble)));
                 }
+                // A diffstat is the diff with its files folded to their stat
+                // rows.
+                items.extend(match (*stat, config.general.file_header) {
+                    (false, FileHeader::Delta) => drawn,
+                    _ => items::headed_by_counted_stat(drawn, params.width()),
+                });
             }
             (items, *truncated)
         }
@@ -422,38 +419,6 @@ fn preamble(coloured: &str, plain: &str) -> Option<String> {
     };
     let lines = plain[..end].lines().count();
     Some(coloured.split_inclusive('\n').take(lines).collect())
-}
-
-/// A diff's items with each file folded to its row of the diffstat `stat`,
-/// which lists the files in the order the diff has them, and ends with its
-/// summary. The stat row also heads the unfolded file (see [`Item::header`]).
-/// Rows for files not yet in the diff (still arriving, or past the byte limit)
-/// are shown as they are.
-fn folded_to_stat(mut items: Vec<Item>, stat: &str) -> Vec<Item> {
-    let mut rows: Vec<RenderedRow> = items::plain_rows(stat)
-        .into_iter()
-        .filter_map(|item| item.rendered)
-        .map(Rc::unwrap_or_clone)
-        .filter(|row| row.iter().any(|(text, _)| !text.trim().is_empty()))
-        .collect();
-    let summary = rows.pop();
-    let mut rows = rows.into_iter();
-
-    for item in &mut items {
-        if matches!(item.data, ItemData::Delta { .. }) {
-            let row = rows.next().map(Rc::new);
-            item.header = row.clone();
-            item.folded = row;
-            item.default_collapsed = true;
-        }
-    }
-
-    items.extend(rows.chain(summary).map(|row| Item {
-        unselectable: true,
-        rendered: Some(Rc::new(row)),
-        ..Default::default()
-    }));
-    items
 }
 
 /// `text` as the renderer draws it, or as it arrived when there is no renderer

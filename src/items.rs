@@ -100,7 +100,7 @@ pub(crate) fn create_diff_items(
             )
         })
         .flatten();
-    drawn_diff_items(
+    let items = drawn_diff_items(
         config,
         diff,
         rendered.as_deref(),
@@ -108,7 +108,11 @@ pub(crate) fn create_diff_items(
         depth,
         default_collapsed,
         commit,
-    )
+    );
+    match config.general.file_header {
+        FileHeader::Delta => items,
+        FileHeader::Stat => headed_by_counted_stat(items, params.width()),
+    }
 }
 
 /// The items for a diff the renderer has drawn as `rendered`, or gitu's own
@@ -124,7 +128,7 @@ pub(crate) fn drawn_diff_items(
     default_collapsed: bool,
     commit: Option<String>,
 ) -> Vec<Item> {
-    let items = rendered
+    rendered
         .and_then(|rendered| {
             create_rendered_diff_items(
                 config,
@@ -145,21 +149,14 @@ pub(crate) fn drawn_diff_items(
                 config.general.visit_context_lines,
             )
             .collect()
-        });
-    match config.general.file_header {
-        FileHeader::Delta => items,
-        FileHeader::Stat => headed_by_counted_stat(items),
-    }
+        })
 }
 
-/// The widest a stat bar is drawn, as git's is in an 80-column terminal.
-const STAT_BAR_WIDTH: usize = 40;
-
 /// Each file headed by its line of a diffstat counted from the patch, folded or
-/// not, in place of the renderer's header. The lines are laid out as git lays
-/// out `--stat`: names padded to the longest, and bars scaled to the largest
-/// change.
-fn headed_by_counted_stat(mut items: Vec<Item>) -> Vec<Item> {
+/// not, in place of the renderer's header, and the diff followed by the
+/// diffstat's summary. The lines are laid out as git lays out `--stat` in
+/// `width` columns.
+pub(crate) fn headed_by_counted_stat(mut items: Vec<Item>, width: usize) -> Vec<Item> {
     let stats: Vec<(usize, FileStat)> = items
         .iter()
         .enumerate()
@@ -168,21 +165,21 @@ fn headed_by_counted_stat(mut items: Vec<Item>) -> Vec<Item> {
             _ => None,
         })
         .collect();
-    let name_width = stats
-        .iter()
-        .map(|(_, stat)| stat.name.chars().count())
-        .max();
-    let largest = stats.iter().map(|(_, stat)| stat.changed()).max();
-    let (Some(name_width), Some(largest)) = (name_width, largest) else {
+    let Some(layout) = StatLayout::of(stats.iter().map(|(_, stat)| stat), width) else {
         return items;
     };
-    let count_width = largest.to_string().len();
 
-    for (item_i, stat) in stats {
-        let row = Some(Rc::new(stat.row(name_width, count_width, largest)));
-        items[item_i].header = row.clone();
-        items[item_i].folded = row;
+    for (item_i, stat) in &stats {
+        let row = Some(Rc::new(layout.row(stat)));
+        items[*item_i].header = row.clone();
+        items[*item_i].folded = row;
     }
+    let summary = stat_summary(stats.iter().map(|(_, stat)| stat));
+    items.push(Item {
+        unselectable: true,
+        rendered: Some(Rc::new(vec![(summary, Style::new())])),
+        ..Default::default()
+    });
     items
 }
 
@@ -216,35 +213,123 @@ impl FileStat {
     fn changed(&self) -> usize {
         self.added + self.removed
     }
+}
 
-    fn row(&self, name_width: usize, count_width: usize, largest: usize) -> RenderedRow {
+/// The columns of a diffstat's lines, worked out as git's `show_stats` works
+/// them out: the name and the bar each as wide as the widest needs, and when
+/// that is too wide for `width`, the bar limited to about 3/8 of it and the
+/// name given the rest.
+struct StatLayout {
+    name_width: usize,
+    count_width: usize,
+    bar_width: usize,
+    largest: usize,
+}
+
+impl StatLayout {
+    fn of<'a>(stats: impl Iterator<Item = &'a FileStat> + Clone, width: usize) -> Option<Self> {
+        let largest = stats.clone().map(FileStat::changed).max()?;
+        let longest = stats.map(|stat| stat.name.chars().count()).max()?;
+        let count_width = largest.to_string().len();
+        let (width, fixed) = (width as isize, count_width as isize + 6);
+        let (mut name_width, mut bar_width) = (longest as isize, largest as isize);
+        if name_width + fixed + bar_width > width {
+            bar_width = bar_width.min((width * 3 / 8 - fixed).max(6));
+            if name_width > width - fixed - bar_width {
+                name_width = width - fixed - bar_width;
+            } else {
+                bar_width = width - fixed - name_width;
+            }
+        }
+        Some(Self {
+            name_width: name_width.max(0) as usize,
+            count_width,
+            bar_width: bar_width.max(0) as usize,
+            largest,
+        })
+    }
+
+    fn row(&self, stat: &FileStat) -> RenderedRow {
+        let (added, removed) = self.marks(stat);
+        let changed = stat.changed();
         let mark = |symbol: &str, count: usize, color: Color| {
             let mut style = Style::new();
             style.fg = Some(color);
-            (symbol.repeat(scaled(count, largest)), style)
+            (symbol.repeat(count), style)
         };
         vec![
             (
                 format!(
-                    "{:<name_width$} | {:>count_width$} ",
-                    self.name,
-                    self.changed()
+                    " {:<name_width$} | {changed:>count_width$}{}",
+                    shortened(&stat.name, self.name_width),
+                    if changed > 0 { " " } else { "" },
+                    name_width = self.name_width,
+                    count_width = self.count_width,
                 ),
                 Style::new(),
             ),
-            mark("+", self.added, Color::Green),
-            mark("-", self.removed, Color::Red),
+            mark("+", added, Color::Green),
+            mark("-", removed, Color::Red),
         ]
+    }
+
+    /// How many `+` and `-` marks a file's bar has: one per changed line, or
+    /// scaled as git scales them when the largest change does not fit.
+    fn marks(&self, stat: &FileStat) -> (usize, usize) {
+        let (added, removed) = (stat.added, stat.removed);
+        if self.bar_width > self.largest {
+            return (added, removed);
+        }
+        let scaled = |count: usize| {
+            if count == 0 {
+                0
+            } else {
+                1 + count * (self.bar_width.saturating_sub(1)) / self.largest
+            }
+        };
+        let mut total = scaled(added + removed);
+        if total < 2 && added > 0 && removed > 0 {
+            total = 2;
+        }
+        if added < removed {
+            let added = scaled(added);
+            (added, total - added)
+        } else {
+            let removed = scaled(removed);
+            (total - removed, removed)
+        }
     }
 }
 
-/// How many marks `count` changes take in a bar, scaled as git scales them so
-/// that the `largest` fits: any change keeps at least one.
-fn scaled(count: usize, largest: usize) -> usize {
-    if largest <= STAT_BAR_WIDTH || count == 0 {
-        return count;
+/// `name` in at most `width` columns, as git shortens it: its end, after
+/// `...`, from the first `/` that leaves it short enough.
+fn shortened(name: &str, width: usize) -> String {
+    let length = name.chars().count();
+    if length <= width {
+        return name.to_owned();
     }
-    1 + count * (STAT_BAR_WIDTH - 1) / largest
+    let tail: String = name.chars().skip(length - width + 3).collect();
+    match tail.find('/') {
+        Some(slash) => format!("...{}", &tail[slash..]),
+        None => format!("...{tail}"),
+    }
+}
+
+/// The last line of git's diffstat: how many files changed, and how many lines
+/// were inserted and deleted, leaving out a count of none unless both are.
+fn stat_summary<'a>(stats: impl Iterator<Item = &'a FileStat>) -> String {
+    let (files, added, removed) = stats.fold((0, 0, 0), |(files, added, removed), stat| {
+        (files + 1, added + stat.added, removed + stat.removed)
+    });
+    let plural = |count: usize| if count == 1 { "" } else { "s" };
+    let mut summary = format!(" {files} file{} changed", plural(files));
+    if added > 0 || removed == 0 {
+        summary += &format!(", {added} insertion{}(+)", plural(added));
+    }
+    if removed > 0 || added == 0 {
+        summary += &format!(", {removed} deletion{}(-)", plural(removed));
+    }
+    summary
 }
 
 /// Lay the OSC-1717 renderer's drawing of the diff out under gitu's own

@@ -91,10 +91,22 @@ impl GitCommand {
                 .any(|arg| matches!(*arg, "-p" | "-u" | "--patch" | "--patch-with-stat"))
     }
 
-    /// The same command asking for the patch as well as whatever else it
-    /// asked for.
-    pub(crate) fn with_patch(&self) -> Self {
-        let mut argv = self.argv.clone();
+    /// The same command asking for the patch in place of a diffstat, which
+    /// gitu counts from the patch itself rather than have git work it out
+    /// before writing anything else.
+    pub(crate) fn as_patch(&self) -> Self {
+        let end = self
+            .argv
+            .iter()
+            .position(|arg| arg == "--")
+            .unwrap_or(self.argv.len());
+        let argv = self
+            .argv
+            .iter()
+            .enumerate()
+            .filter(|&(i, arg)| i >= end || !(arg == "--stat" || arg.starts_with("--stat=")))
+            .map(|(_, arg)| arg.clone());
+        let mut argv: Vec<String> = argv.collect();
         argv.insert(self.subcommand + 1, "--patch".to_owned());
         Self {
             argv,
