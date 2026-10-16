@@ -83,6 +83,8 @@ const DATA = /*DATA*/null;
 const CASES = ["status", "diff", "diff --stat", "show", "log", "log -p"];
 const W = 520, H = 200, M = { l: 44, r: 8, t: 8, b: 20 };
 const NS = "http://www.w3.org/2000/svg";
+// Every case but status shares a y-axis; slower points are clipped, with values in the tooltip.
+const YMAX_MS = 200;
 
 const el = (tag, attrs = {}, parent) => {
   const e = document.createElementNS(NS, tag);
@@ -113,7 +115,7 @@ function panel(name) {
   const pts = DATA.map((r, i) => ({ i, r, c: r.cases?.[name] }));
   const base = DATA.map((r, i) => ({ i, r, c: r.baseline?.[name] }));
   const ok = [...pts, ...base].filter(p => p.c && p.c.mean !== undefined);
-  const top = Math.max(1, ...ok.map(p => ms(p.c.max)));
+  const top = name === "status" ? Math.max(1, ...ok.map(p => ms(p.c.max))) : YMAX_MS;
   const step = tickStep(top);
   const ymax = Math.ceil(top / step) * step;
   const x = i => M.l + (DATA.length < 2 ? 0 : (i / (DATA.length - 1)) * (W - M.l - M.r));
@@ -125,23 +127,26 @@ function panel(name) {
     el("text", { x: M.l - 6, y: y(v) + 4, "text-anchor": "end" }, svg).textContent = `${Math.round(v)}`;
   }
   el("text", { x: W - M.r, y: H - 4, "text-anchor": "end" }, svg).textContent = "ms · commits →";
+  const clip = `clip-${CASES.indexOf(name)}`;
+  el("rect", { x: 0, y: M.t, width: W, height: H - M.t - M.b }, el("clipPath", { id: clip }, svg));
+  const plot = el("g", { "clip-path": `url(#${clip})` }, svg);
 
   for (const run of runs(base))
     el("polyline", { points: run.map(p => `${x(p.i)},${y(ms(p.c.mean))}`).join(" "),
-      fill: "none", stroke: "var(--baseline)", "stroke-width": 2, "stroke-dasharray": "4 3" }, svg);
+      fill: "none", stroke: "var(--baseline)", "stroke-width": 2, "stroke-dasharray": "4 3" }, plot);
   for (const run of runs(pts)) {
     const top = run.map(p => `${x(p.i)},${y(ms(p.c.max))}`);
     const bot = run.map(p => `${x(p.i)},${y(ms(p.c.min))}`).reverse();
-    el("polygon", { points: [...top, ...bot].join(" "), fill: "var(--band)" }, svg);
+    el("polygon", { points: [...top, ...bot].join(" "), fill: "var(--band)" }, plot);
     el("polyline", { points: run.map(p => `${x(p.i)},${y(ms(p.c.mean))}`).join(" "),
-      fill: "none", stroke: "var(--series)", "stroke-width": 2, "stroke-linejoin": "round" }, svg);
-    if (run.length === 1) el("circle", { cx: x(run[0].i), cy: y(ms(run[0].c.mean)), r: 3, fill: "var(--series)" }, svg);
+      fill: "none", stroke: "var(--series)", "stroke-width": 2, "stroke-linejoin": "round" }, plot);
+    if (run.length === 1) el("circle", { cx: x(run[0].i), cy: y(ms(run[0].c.mean)), r: 3, fill: "var(--series)" }, plot);
   }
   for (const p of pts.filter(p => p.c?.error || p.r.build_error))
     el("text", { x: x(p.i), y: H - M.b - 2, "text-anchor": "middle", style: "fill: var(--error)" }, svg).textContent = "×";
 
   const hair = el("line", { y1: M.t, y2: H - M.b, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden" }, svg);
-  const dot = el("circle", { r: 4, fill: "var(--series)", stroke: "var(--panel)", "stroke-width": 2, visibility: "hidden" }, svg);
+  const dot = el("circle", { r: 4, fill: "var(--series)", stroke: "var(--panel)", "stroke-width": 2, visibility: "hidden" }, plot);
   const tip = document.createElement("div");
   tip.className = "tip";
   div.appendChild(tip);
