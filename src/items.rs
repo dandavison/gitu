@@ -13,7 +13,7 @@ use git2::Repository;
 use regex::Regex;
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -278,14 +278,39 @@ fn create_rendered_diff_items(
         return None;
     }
 
-    Some(rendered_diff_items(
+    let items = rendered_diff_items(
         diff,
         &parsed.lines,
         depth,
         default_collapsed,
         commit,
         config.general.visit_context_lines,
-    ))
+    );
+    Some(if drawn_whole {
+        items
+    } else {
+        reached_files(items)
+    })
+}
+
+/// The items of the files a renderer part way through its drawing has reached.
+/// It draws the files in order, so a file it has not drawn a row of, and every
+/// file after it, is left out rather than shown undrawn until it is.
+fn reached_files(mut items: Vec<Item>) -> Vec<Item> {
+    let reached: HashSet<usize> = items
+        .iter()
+        .filter_map(|item| match &item.data {
+            ItemData::HunkLine { file_i, .. } => Some(*file_i),
+            ItemData::Delta { file_i, .. } if item.rendered.is_some() => Some(*file_i),
+            _ => None,
+        })
+        .collect();
+    if let Some(unreached) = items.iter().position(
+        |item| matches!(&item.data, ItemData::Delta { file_i, .. } if !reached.contains(file_i)),
+    ) {
+        items.truncate(unreached);
+    }
+    items
 }
 
 /// Lay the renderer's rows out under gitu's file/hunk structure. Split from

@@ -1857,3 +1857,33 @@ fn a_patch_part_drawn_is_shown_as_the_renderer_drew_it() {
         .collect();
     assert!(undrawn.is_empty(), "{undrawn:?}");
 }
+
+/// A view the renderer has part drawn has only the files it has reached: a
+/// file it has not drawn yet is not shown in some other form until it has.
+#[test]
+fn a_part_drawn_patch_has_only_the_files_drawn_so_far() {
+    let mut ctx = setup_clone!();
+    two_changed_files(&ctx);
+    ctx.config().general.diff_renderer.command = osc_1717_passthrough()
+        .into_iter()
+        .map(|arg| {
+            arg.replace(
+                "BEGIN{",
+                "/diff --git/ && ++files == 2 {fflush(); system(\"sleep 2\")}\nBEGIN{",
+            )
+        })
+        .collect();
+
+    let app = ctx.init_app_streaming_as_pager_of(&["git", "diff"]);
+
+    let files: Vec<usize> = app
+        .screen()
+        .items()
+        .iter()
+        .filter_map(|item| match item.data {
+            crate::item_data::ItemData::Delta { file_i, .. } => Some(file_i),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(files, vec![0]);
+}
