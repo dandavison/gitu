@@ -13,7 +13,7 @@ use git2::Repository;
 use regex::Regex;
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -66,9 +66,16 @@ pub(crate) struct Item {
     /// The row shown in place of the item and everything under it while it is
     /// folded (e.g. a file's line of a diffstat).
     pub(crate) folded: Option<Rc<RenderedRow>>,
+    /// The row shown in place of the item's own while it is unfolded, as a
+    /// file's line of a diffstat heads it, unless the screen is showing the
+    /// renderer's headers.
+    pub(crate) header: Option<Rc<RenderedRow>>,
     /// Whether this is decoration drawn above the next item that is not, and so
-    /// hidden while that item shows its `folded` row.
+    /// hidden while that item shows a row in place of its own.
     pub(crate) decorates_next: bool,
+    /// Whether this is decoration drawn below the previous item that is not, and
+    /// so hidden while that item shows a row in place of its own.
+    pub(crate) decorates_previous: bool,
 }
 
 /// Build the items for a diff. When the configured renderer speaks the OSC-1717
@@ -147,16 +154,7 @@ const STAT_BAR_WIDTH: usize = 40;
 /// not, in place of the renderer's header. The lines are laid out as git lays
 /// out `--stat`: names padded to the longest, and bars scaled to the largest
 /// change.
-fn headed_by_counted_stat(items: Vec<Item>) -> Vec<Item> {
-    let files: HashSet<ItemId> = items
-        .iter()
-        .filter(|item| matches!(item.data, ItemData::Delta { .. }))
-        .map(|item| item.id)
-        .collect();
-    let mut items: Vec<Item> = items
-        .into_iter()
-        .filter(|item| matches!(item.data, ItemData::Delta { .. }) || !files.contains(&item.id))
-        .collect();
+fn headed_by_counted_stat(mut items: Vec<Item>) -> Vec<Item> {
     let stats: Vec<(usize, FileStat)> = items
         .iter()
         .enumerate()
@@ -177,7 +175,7 @@ fn headed_by_counted_stat(items: Vec<Item>) -> Vec<Item> {
 
     for (item_i, stat) in stats {
         let row = Some(Rc::new(stat.row(name_width, count_width, largest)));
-        items[item_i].rendered = row.clone();
+        items[item_i].header = row.clone();
         items[item_i].folded = row;
     }
     items
@@ -451,6 +449,7 @@ fn rendered_diff_items(
                 id: file_hash,
                 depth: depth + 1,
                 unselectable: true,
+                decorates_previous: true,
                 rendered: Some(Rc::new(row)),
                 ..Default::default()
             });

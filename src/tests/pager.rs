@@ -1729,3 +1729,42 @@ fn files_start_folded_to_their_stat_rows() {
     assert!(buffer.contains("a.rs        | 2 +-"), "{buffer}");
     assert!(buffer.contains("longer_b.rs | 3 +++"), "{buffer}");
 }
+
+/// Unfolding everything at once heads the files with the renderer's headers,
+/// stat rows or not; folding everything again folds them to their stat rows.
+#[test]
+fn unfolding_everything_heads_the_files_with_the_renderers_headers() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
+    ctx.config().general.diff_renderer.command = file_header_renderer();
+    ctx.config().general.file_header = crate::config::FileHeader::Stat;
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+
+    ctx.update(&mut app, keys("<backtab><backtab>"));
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("~ firstfile ~"), "{buffer}");
+    assert!(buffer.contains("changed"), "{buffer}");
+    assert!(!buffer.contains("firstfile | 2 +-"), "{buffer}");
+
+    ctx.update(&mut app, keys("<backtab>"));
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("firstfile | 2 +-"), "{buffer}");
+    assert!(!buffer.contains("~ firstfile ~"), "{buffer}");
+}
+
+#[test]
+fn unfolding_everything_from_a_diffstat_heads_the_files_with_the_renderers_headers() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
+    ctx.config().general.diff_renderer.command = file_header_renderer();
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff", "--stat"]);
+
+    ctx.update(&mut app, keys("<backtab>"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("~ firstfile ~"), "{buffer}");
+    assert!(buffer.contains("changed"), "{buffer}");
+    assert!(!buffer.contains("firstfile | 2 +-"), "{buffer}");
+}

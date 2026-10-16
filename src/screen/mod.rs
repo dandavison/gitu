@@ -182,6 +182,9 @@ pub(crate) struct Screen {
     /// Where a multi-line selection was started, if one is being made. The
     /// selection runs from here to the cursor, inclusive.
     anchor: Option<usize>,
+    /// Whether items are headed by their own rows rather than by their
+    /// [`Item::header`]s, as unfolding everything at once asks.
+    renderer_headers: bool,
     /// The cursor a page turn left, with the row of the viewport the turn kept
     /// it on. Stepping off a row with nothing to select moves the cursor to
     /// another row, so a turn back starts from the row kept, not that one.
@@ -238,6 +241,7 @@ impl Screen {
         let mut screen = Self {
             cursor: 0,
             anchor: None,
+            renderer_headers: false,
             page_turned: None,
             menu: None,
             show_menu: false,
@@ -583,6 +587,7 @@ impl Screen {
         if !folded {
             self.collapsed.extend(headings);
         }
+        self.renderer_headers = folded;
         if let Some(heading) = self.hidden_by(self.cursor, 0) {
             self.cursor = heading;
         }
@@ -1076,13 +1081,33 @@ impl Screen {
         item.folded.as_deref().filter(|_| self.is_collapsed(item))
     }
 
-    /// Whether `item_i` is decoration above an item showing its folded row.
+    /// The row `item` shows in place of its own: its folded row, or its header
+    /// while it is unfolded.
+    fn standing_in_row<'a>(&self, item: &'a Item) -> Option<&'a RenderedRow> {
+        self.folded_row(item).or_else(|| {
+            item.header
+                .as_deref()
+                .filter(|_| !self.renderer_headers && !self.is_collapsed(item))
+        })
+    }
+
+    /// Whether `item_i` is decoration of an item showing a row in place of its
+    /// own.
     fn folded_away(&self, item_i: usize) -> bool {
-        self.items[item_i].decorates_next
-            && self.items[item_i..]
+        let item = &self.items[item_i];
+        let decorated = if item.decorates_next {
+            self.items[item_i..]
                 .iter()
                 .find(|item| !item.decorates_next)
-                .is_some_and(|item| self.folded_row(item).is_some())
+        } else if item.decorates_previous {
+            self.items[..item_i]
+                .iter()
+                .rev()
+                .find(|item| !item.decorates_previous)
+        } else {
+            None
+        };
+        decorated.is_some_and(|item| self.standing_in_row(item).is_some())
     }
 
     /// Whether the screen renders no lines at all, e.g. the log of a branch
@@ -1202,7 +1227,7 @@ impl Screen {
     pub(crate) fn shown_row_texts(&self) -> Vec<String> {
         self.visible_items()
             .map(|item_i| &self.items[item_i])
-            .filter_map(|item| self.folded_row(item).or(item.rendered.as_deref()))
+            .filter_map(|item| self.standing_in_row(item).or(item.rendered.as_deref()))
             .map(|row| row.iter().map(|(text, _)| text.as_str()).collect())
             .collect()
     }
@@ -1525,7 +1550,7 @@ pub(crate) fn layout_screen<'a>(layout: &mut UiTree<'a>, screen: &'a Screen, hid
 pub(crate) fn print_screen(term: &mut TermBackend, screen: &Screen) -> Res<()> {
     for item in screen.printed_items().map(|item_i| &screen.items[item_i]) {
         let mut layout = UiTree::new();
-        layout.row(opts(), |layout| match screen.folded_row(item) {
+        layout.row(opts(), |layout| match screen.standing_in_row(item) {
             Some(row) => ui::item::layout_rendered(layout, row, Style::new()),
             None => ui::item::layout_item(layout, item, &screen.config, Style::new()),
         });
@@ -1561,7 +1586,7 @@ fn layout_item<'a>(layout: &mut UiTree<'a>, screen: &'a Screen, hide_cursor: boo
         layout.row(opts(), |layout| layout_span(layout, gutter_char));
 
         let item = &screen.items[line.item_index];
-        if let Some(row) = screen.folded_row(item) {
+        if let Some(row) = screen.standing_in_row(item) {
             ui::item::layout_rendered(layout, row, bg);
             return;
         }
