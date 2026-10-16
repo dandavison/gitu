@@ -93,17 +93,17 @@ pub struct GeneralConfig {
     #[serde(default)]
     pub show_args: Vec<String>,
     #[serde(default)]
-    pub folded_file_header: FoldedFileHeader,
+    pub file_header: FileHeader,
     /// Whether a patch's files start folded: `git diff`, `git show`, `git log
     /// -p`, and a commit opened from the log.
     #[serde(default)]
     pub start_folded: bool,
 }
 
-/// What a folded file shows.
+/// What heads each file of a patch, folded or not.
 #[derive(Default, Debug, Deserialize, PartialEq, Eq, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
-pub enum FoldedFileHeader {
+pub enum FileHeader {
     /// The renderer's file header.
     #[default]
     Delta,

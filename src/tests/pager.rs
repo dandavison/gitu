@@ -1605,7 +1605,7 @@ fn a_replaced_line_and_three_added(ctx: &TestContext) {
 }
 
 fn folded_to_stat_rows(ctx: &mut TestContext) -> String {
-    ctx.config().general.folded_file_header = crate::config::FoldedFileHeader::Stat;
+    ctx.config().general.file_header = crate::config::FileHeader::Stat;
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
     ctx.update(&mut app, keys("<backtab>"));
     ctx.redact_buffer()
@@ -1634,6 +1634,24 @@ fn a_folded_file_shows_its_stat_row_whatever_drew_it() {
 
     assert!(buffer.contains("a.rs        | 2 +-"), "{buffer}");
     assert!(buffer.contains("longer_b.rs | 3 +++"), "{buffer}");
+}
+
+/// The stat row heads the file unfolded too, in place of the renderer's header.
+#[test]
+fn an_unfolded_file_is_headed_by_its_stat_row() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
+    ctx.config().general.diff_renderer.command = file_header_renderer();
+    ctx.config().general.file_header = crate::config::FileHeader::Stat;
+
+    ctx.init_app_as_pager_of(&["git", "diff"]);
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("firstfile | 2 +-"), "{buffer}");
+    assert!(buffer.contains("changed"), "{buffer}");
+    assert!(!buffer.contains("~ firstfile ~"), "{buffer}");
+    assert!(!buffer.contains("==========="), "{buffer}");
 }
 
 /// The bars are scaled so the largest change fits, as git scales them; a file
@@ -1703,7 +1721,7 @@ fn files_start_folded_to_their_stat_rows() {
     let mut ctx = setup_clone!();
     a_replaced_line_and_three_added(&ctx);
     ctx.config().general.start_folded = true;
-    ctx.config().general.folded_file_header = crate::config::FoldedFileHeader::Stat;
+    ctx.config().general.file_header = crate::config::FileHeader::Stat;
 
     ctx.init_app_as_pager_of(&["git", "diff"]);
 

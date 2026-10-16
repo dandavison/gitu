@@ -1,5 +1,5 @@
 use crate::Res;
-use crate::config::{Config, FoldedFileHeader};
+use crate::config::{Config, FileHeader};
 use crate::error::Error;
 use crate::git::diff::Diff;
 use crate::gitu_diff;
@@ -13,7 +13,7 @@ use git2::Repository;
 use regex::Regex;
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -134,19 +134,29 @@ pub(crate) fn drawn_diff_items(
             )
             .collect()
         });
-    match config.general.folded_file_header {
-        FoldedFileHeader::Delta => items,
-        FoldedFileHeader::Stat => folded_to_counted_stat(items),
+    match config.general.file_header {
+        FileHeader::Delta => items,
+        FileHeader::Stat => headed_by_counted_stat(items),
     }
 }
 
 /// The widest a stat bar is drawn, as git's is in an 80-column terminal.
 const STAT_BAR_WIDTH: usize = 40;
 
-/// Each file's items, folding to its line of a diffstat counted from the patch,
-/// laid out as git lays out `--stat`: names padded to the longest, and bars
-/// scaled to the largest change.
-fn folded_to_counted_stat(mut items: Vec<Item>) -> Vec<Item> {
+/// Each file headed by its line of a diffstat counted from the patch, folded or
+/// not, in place of the renderer's header. The lines are laid out as git lays
+/// out `--stat`: names padded to the longest, and bars scaled to the largest
+/// change.
+fn headed_by_counted_stat(items: Vec<Item>) -> Vec<Item> {
+    let files: HashSet<ItemId> = items
+        .iter()
+        .filter(|item| matches!(item.data, ItemData::Delta { .. }))
+        .map(|item| item.id)
+        .collect();
+    let mut items: Vec<Item> = items
+        .into_iter()
+        .filter(|item| matches!(item.data, ItemData::Delta { .. }) || !files.contains(&item.id))
+        .collect();
     let stats: Vec<(usize, FileStat)> = items
         .iter()
         .enumerate()
@@ -166,7 +176,9 @@ fn folded_to_counted_stat(mut items: Vec<Item>) -> Vec<Item> {
     let count_width = largest.to_string().len();
 
     for (item_i, stat) in stats {
-        items[item_i].folded = Some(Rc::new(stat.row(name_width, count_width, largest)));
+        let row = Some(Rc::new(stat.row(name_width, count_width, largest)));
+        items[item_i].rendered = row.clone();
+        items[item_i].folded = row;
     }
     items
 }
