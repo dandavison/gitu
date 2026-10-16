@@ -1708,6 +1708,8 @@ fn files_start_folded_when_asked() {
 #[test]
 fn a_commit_opened_from_the_log_starts_folded_when_asked() {
     let mut ctx = with_renderer(setup_clone!());
+    fs::write(ctx.dir.join("secondfile"), "Also folded\n").unwrap();
+    run(&ctx.dir, &["git", "add", "secondfile"]);
     commit(&ctx.dir, "firstfile", "This should be folded\n");
     ctx.config().general.start_folded = true;
     let mut app = ctx.init_app();
@@ -1889,4 +1891,18 @@ fn a_part_drawn_patch_has_only_the_files_drawn_so_far() {
         })
         .collect();
     assert_eq!(files, vec![0]);
+}
+
+/// A patch of one file has nothing to fold it away from, so it opens unfolded.
+#[test]
+fn a_patch_of_one_file_starts_unfolded() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "a.rs", "alpha\n");
+    fs::write(ctx.dir.join("a.rs"), "alpha changed\n").unwrap();
+    ctx.config().general.start_folded = true;
+
+    ctx.init_app_as_pager_of(&["git", "diff"]);
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("alpha changed"), "{buffer}");
 }
