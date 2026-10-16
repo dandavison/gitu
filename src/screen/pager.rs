@@ -335,7 +335,7 @@ fn built(
                     snapshot.rendered.as_deref(),
                     snapshot.done,
                     0,
-                    config.general.start_folded || *stat,
+                    *stat || (config.general.start_folded && diff.file_diffs.len() > 1),
                     None,
                 ));
                 if let Some(preamble) = preamble(&snapshot.text, &diff.text) {

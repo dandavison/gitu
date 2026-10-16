@@ -102,8 +102,9 @@ show_args = []
 # a long diff has arrived.
 file_header = "delta"
 
-# Whether a patch's files start folded, in every view of one: `git diff`, `git
-# show`, `git log -p`, and a commit opened from the log.
+# Whether a patch of more than one file starts with its files folded, in every
+# view of one: `git diff`, `git show`, `git log -p`, and a commit opened from
+# the log. While a patch is still arriving, the files counted are those so far.
 start_folded = false
 
 # When to prompt for discard confirmation. Options:
