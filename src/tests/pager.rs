@@ -1594,3 +1594,77 @@ fn finish_drawing(ctx: &mut TestContext, app: &mut App) {
         app.update(&mut ctx.term, None).unwrap();
     }
 }
+
+/// Two files changed in the working tree: one line replaced in `a.rs`, three
+/// lines added to `longer_b.rs`.
+fn a_replaced_line_and_three_added(ctx: &TestContext) {
+    commit(&ctx.dir, "a.rs", "keep\nold\n");
+    commit(&ctx.dir, "longer_b.rs", "keep\n");
+    fs::write(ctx.dir.join("a.rs"), "keep\nnew\n").unwrap();
+    fs::write(ctx.dir.join("longer_b.rs"), "keep\n1\n2\n3\n").unwrap();
+}
+
+fn folded_to_stat_rows(ctx: &mut TestContext) -> String {
+    ctx.config().general.folded_file_header = crate::config::FoldedFileHeader::Stat;
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.update(&mut app, keys("<backtab>"));
+    ctx.redact_buffer()
+}
+
+/// A folded file shows its line of a diffstat, aligned with the others as git
+/// aligns them, when that is the style asked for.
+#[test]
+fn a_folded_file_shows_its_stat_row() {
+    let mut ctx = setup_clone!();
+    a_replaced_line_and_three_added(&ctx);
+
+    let buffer = folded_to_stat_rows(&mut ctx);
+
+    assert!(buffer.contains("a.rs        | 2 +-"), "{buffer}");
+    assert!(buffer.contains("longer_b.rs | 3 +++"), "{buffer}");
+}
+
+#[test]
+fn a_folded_file_shows_its_stat_row_whatever_drew_it() {
+    let mut ctx = setup_clone!();
+    a_replaced_line_and_three_added(&ctx);
+    ctx.config().general.diff_renderer.command = osc_1717_passthrough();
+
+    let buffer = folded_to_stat_rows(&mut ctx);
+
+    assert!(buffer.contains("a.rs        | 2 +-"), "{buffer}");
+    assert!(buffer.contains("longer_b.rs | 3 +++"), "{buffer}");
+}
+
+/// The bars are scaled so the largest change fits, as git scales them; a file
+/// with any change keeps at least one mark.
+#[test]
+fn stat_bars_are_scaled_to_the_largest_change() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "big.rs", "");
+    commit(&ctx.dir, "small.rs", "");
+    let lines: String = (1..=100).map(|i| format!("{i}\n")).collect();
+    fs::write(ctx.dir.join("big.rs"), lines).unwrap();
+    fs::write(ctx.dir.join("small.rs"), "1\n").unwrap();
+
+    let buffer = folded_to_stat_rows(&mut ctx);
+
+    assert!(
+        buffer.contains(&format!("big.rs   | 100 {}", "+".repeat(40))),
+        "{buffer}"
+    );
+    assert!(buffer.contains("small.rs |   1 +"), "{buffer}");
+}
+
+#[test]
+fn a_folded_file_shows_the_renderers_header_by_default() {
+    let mut ctx = setup_clone!();
+    a_replaced_line_and_three_added(&ctx);
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+
+    ctx.update(&mut app, keys("<backtab>"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("a.rs"), "{buffer}");
+    assert!(!buffer.contains(" | "), "{buffer}");
+}

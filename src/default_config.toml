@@ -95,6 +95,13 @@ log_args = []
 # (`format.pretty`).
 show_args = []
 
+# What a folded file shows: the renderer's file header ("delta"), or its line
+# of a diffstat ("stat"). Gitu counts the stat from the patch rather than asking
+# git for one, which would delay the first screen of a large diff. Its columns
+# are laid out to fit the files drawn so far, so they can shift once the rest of
+# a long diff has arrived.
+folded_file_header = "delta"
+
 # When to prompt for discard confirmation. Options:
 # "line"  - always prompt even for individual lines (default),
 # "hunk"  - prompt for files and hunks,

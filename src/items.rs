@@ -1,12 +1,13 @@
 use crate::Res;
-use crate::config::Config;
+use crate::config::{Config, FoldedFileHeader};
 use crate::error::Error;
 use crate::git::diff::Diff;
+use crate::gitu_diff;
 use crate::highlight;
 use crate::item_data::ItemData;
 use crate::item_data::Ref;
 use crate::rebase_todo::{RebaseTodo, TodoAction, TodoEntry};
-use crate::style::Style;
+use crate::style::{Color, Style};
 use git2::Oid;
 use git2::Repository;
 use regex::Regex;
@@ -112,26 +113,123 @@ pub(crate) fn drawn_diff_items(
     default_collapsed: bool,
     commit: Option<String>,
 ) -> Vec<Item> {
-    if let Some(items) = rendered.and_then(|rendered| {
-        create_rendered_diff_items(
-            config,
-            rendered,
-            diff,
-            depth,
-            default_collapsed,
-            commit.clone(),
-        )
-    }) {
-        return items;
+    let items = rendered
+        .and_then(|rendered| {
+            create_rendered_diff_items(
+                config,
+                rendered,
+                diff,
+                depth,
+                default_collapsed,
+                commit.clone(),
+            )
+        })
+        .unwrap_or_else(|| {
+            create_builtin_diff_items(
+                diff,
+                depth,
+                default_collapsed,
+                commit,
+                config.general.visit_context_lines,
+            )
+            .collect()
+        });
+    match config.general.folded_file_header {
+        FoldedFileHeader::Delta => items,
+        FoldedFileHeader::Stat => folded_to_counted_stat(items),
     }
-    create_builtin_diff_items(
-        diff,
-        depth,
-        default_collapsed,
-        commit,
-        config.general.visit_context_lines,
-    )
-    .collect()
+}
+
+/// The widest a stat bar is drawn, as git's is in an 80-column terminal.
+const STAT_BAR_WIDTH: usize = 40;
+
+/// Each file's items, folding to its line of a diffstat counted from the patch,
+/// laid out as git lays out `--stat`: names padded to the longest, and bars
+/// scaled to the largest change.
+fn folded_to_counted_stat(mut items: Vec<Item>) -> Vec<Item> {
+    let stats: Vec<(usize, FileStat)> = items
+        .iter()
+        .enumerate()
+        .filter_map(|(item_i, item)| match &item.data {
+            ItemData::Delta { diff, file_i, .. } => Some((item_i, FileStat::of(diff, *file_i))),
+            _ => None,
+        })
+        .collect();
+    let name_width = stats
+        .iter()
+        .map(|(_, stat)| stat.name.chars().count())
+        .max();
+    let largest = stats.iter().map(|(_, stat)| stat.changed()).max();
+    let (Some(name_width), Some(largest)) = (name_width, largest) else {
+        return items;
+    };
+    let count_width = largest.to_string().len();
+
+    for (item_i, stat) in stats {
+        items[item_i].folded = Some(Rc::new(stat.row(name_width, count_width, largest)));
+    }
+    items
+}
+
+struct FileStat {
+    name: String,
+    added: usize,
+    removed: usize,
+}
+
+impl FileStat {
+    fn of(diff: &Diff, file_i: usize) -> Self {
+        let header = &diff.file_diffs[file_i].header;
+        let new = header.new_file.fmt(&diff.text);
+        let name = match header.status {
+            gitu_diff::Status::Renamed | gitu_diff::Status::Copied => {
+                format!("{} => {new}", header.old_file.fmt(&diff.text))
+            }
+            _ => new.into_owned(),
+        };
+        let lines = || {
+            (0..diff.file_diffs[file_i].hunks.len())
+                .flat_map(move |hunk_i| diff.hunk_content(file_i, hunk_i).lines())
+        };
+        Self {
+            name,
+            added: lines().filter(|line| line.starts_with('+')).count(),
+            removed: lines().filter(|line| line.starts_with('-')).count(),
+        }
+    }
+
+    fn changed(&self) -> usize {
+        self.added + self.removed
+    }
+
+    fn row(&self, name_width: usize, count_width: usize, largest: usize) -> RenderedRow {
+        let mark = |symbol: &str, count: usize, color: Color| {
+            let mut style = Style::new();
+            style.fg = Some(color);
+            (symbol.repeat(scaled(count, largest)), style)
+        };
+        vec![
+            (
+                format!(
+                    "{:<name_width$} | {:>count_width$} ",
+                    self.name,
+                    self.changed()
+                ),
+                Style::new(),
+            ),
+            mark("+", self.added, Color::Green),
+            mark("-", self.removed, Color::Red),
+        ]
+    }
+}
+
+/// How many marks `count` changes take in a bar, scaled as git scales them so
+/// that the `largest` fits: any change keeps at least one.
+fn scaled(count: usize, largest: usize) -> usize {
+    if largest <= STAT_BAR_WIDTH || count == 0 {
+        return count;
+    }
+    1 + count * (STAT_BAR_WIDTH - 1) / largest
 }
 
 /// Lay the OSC-1717 renderer's drawing of the diff out under gitu's own

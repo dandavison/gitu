@@ -92,6 +92,19 @@ pub struct GeneralConfig {
     /// Arguments given to the `git show` gitu runs for a commit it opens.
     #[serde(default)]
     pub show_args: Vec<String>,
+    #[serde(default)]
+    pub folded_file_header: FoldedFileHeader,
+}
+
+/// What a folded file shows.
+#[derive(Default, Debug, Deserialize, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum FoldedFileHeader {
+    /// The renderer's file header.
+    #[default]
+    Delta,
+    /// The file's line of a diffstat, counted by gitu from the patch.
+    Stat,
 }
 
 #[derive(Default, Debug, Deserialize)]
