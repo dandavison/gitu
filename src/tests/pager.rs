@@ -1272,7 +1272,7 @@ fn what_git_piped_is_not_read_when_its_command_was_found() {
         read: &read,
     };
 
-    crate::paged(input, Some(vec!["git".into(), "diff".into()]), 1_000).unwrap();
+    crate::paged(input, Some(vec!["git".into(), "diff".into()]), None, 1_000).unwrap();
 
     assert!(!read.get());
 }
@@ -1285,7 +1285,7 @@ fn what_git_piped_is_read_when_its_command_was_not_found() {
         read: &read,
     };
 
-    let paged = crate::paged(input, None, 1_000).unwrap();
+    let paged = crate::paged(input, None, None, 1_000).unwrap();
 
     assert_eq!(paged.text, "diff --git a/f b/f\n");
 }

@@ -40,8 +40,7 @@ use ops::Action;
 use std::{
     env,
     io::{self, IsTerminal},
-    path::{Path, PathBuf},
-    process::Command,
+    path::Path,
     rc::Rc,
     sync::Arc,
     time::Duration,
@@ -103,12 +102,12 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
     let git_argv = args.pager.then(calling_process::paging_for).flatten();
     log::debug!("Paging the output of {git_argv:?}");
 
-    let dir = find_git_dir()?;
-    let repo = open_repo(&dir)?;
+    log::debug!("Opening repo");
+    let repo = open_repo_from_env()?;
 
     let piped = args
         .pager
-        .then(|| read_piped_input(git_argv, config.general.max_input_bytes))
+        .then(|| read_piped_input(git_argv, repo.workdir(), config.general.max_input_bytes))
         .transpose()?;
 
     let mut app = app::App::create(
@@ -159,25 +158,34 @@ fn run_app(app: &mut app::App, args: &cli::Args, term: &mut Term) -> Res<i32> {
 /// What git piped to us as its pager, alongside the command already found to
 /// have produced it. Reading the terminal instead would wait for input that is
 /// never coming, so that is refused outright.
-fn read_piped_input(git_argv: Option<Vec<String>>, limit: u64) -> Res<Paged> {
+fn read_piped_input(
+    git_argv: Option<Vec<String>>,
+    workdir: Option<&Path>,
+    limit: u64,
+) -> Res<Paged> {
     if io::stdin().is_terminal() {
         return Err(Error::PagerWithoutInput);
     }
 
-    paged(io::stdin(), git_argv, limit)
+    paged(io::stdin(), git_argv, workdir, limit)
 }
 
 /// What git piped, unless gitu found the command that produced it: then gitu
 /// asks git again itself (see [`screen::pager`]), and reading the output would
 /// only wait for git to write what is discarded. git, left blocked on a full
 /// pipe, ends with SIGPIPE when gitu exits, as it does when less quits early.
-fn paged(input: impl io::Read, git_argv: Option<Vec<String>>, limit: u64) -> Res<Paged> {
+fn paged(
+    input: impl io::Read,
+    git_argv: Option<Vec<String>>,
+    workdir: Option<&Path>,
+    limit: u64,
+) -> Res<Paged> {
     if git_argv.clone().and_then(GitCommand::of).is_some() {
         return Ok(Paged {
             text: String::new(),
             truncated: false,
             git_argv,
-            prefix: command_prefix(),
+            prefix: command_prefix(workdir),
         });
     }
 
@@ -192,17 +200,21 @@ fn paged(input: impl io::Read, git_argv: Option<Vec<String>>, limit: u64) -> Res
 
 /// Where git ran the command it is paging (see [`GitCommand::prefix`]). git
 /// runs its pager from the repository's root and says in `GIT_PREFIX` where it
-/// was run; in a shell pipeline, gitu runs where git did.
-fn command_prefix() -> String {
-    env::var("GIT_PREFIX").unwrap_or_else(|_| {
-        Command::new("git")
-            .args(["rev-parse", "--show-prefix"])
-            .output()
-            .ok()
-            .and_then(|output| String::from_utf8(output.stdout).ok())
-            .map(|prefix| prefix.trim_end().to_owned())
-            .unwrap_or_default()
-    })
+/// was run; in a shell pipeline, gitu runs where git did, in `workdir`.
+fn command_prefix(workdir: Option<&Path>) -> String {
+    if let Ok(prefix) = env::var("GIT_PREFIX") {
+        return prefix;
+    }
+
+    let relative = || {
+        let dir = env::current_dir().ok()?.canonicalize().ok()?;
+        let root = workdir?.canonicalize().ok()?;
+        Some(dir.strip_prefix(root).ok()?.to_str()?.to_owned())
+    };
+    match relative() {
+        Some(dir) if !dir.is_empty() => format!("{dir}/"),
+        _ => String::new(),
+    }
 }
 
 fn open_repo(dir: &Path) -> Res<Repository> {
@@ -210,22 +222,6 @@ fn open_repo(dir: &Path) -> Res<Repository> {
     let repo = open_repo_from_env()?;
     repo.set_workdir(dir, false).map_err(Error::OpenRepo)?;
     Ok(repo)
-}
-
-fn find_git_dir() -> Res<PathBuf> {
-    log::debug!("Finding git dir");
-    let dir = PathBuf::from(
-        String::from_utf8(
-            Command::new("git")
-                .args(["rev-parse", "--show-toplevel"])
-                .output()
-                .map_err(Error::FindGitDir)?
-                .stdout,
-        )
-        .map_err(Error::GitDirUtf8)?
-        .trim_end(),
-    );
-    Ok(dir)
 }
 
 fn open_repo_from_env() -> Res<Repository> {
