@@ -16,6 +16,7 @@ use crate::{
     error::Error,
     git::diff::{Diff, DiffType},
     gitu_diff,
+    item_data::ItemData,
     items::{self, Item, RenderParams},
     stream::{Input, Snapshot, Stream},
 };
@@ -55,6 +56,11 @@ pub(crate) fn create(
     )?;
     screen.git_command = git_command;
     screen.folds_new_items = true;
+    // With its files folded there is no hunk to start on; the first file is
+    // where the one wanted is chosen from.
+    if !matches!(screen.get_selected_item().data, ItemData::Hunk { .. }) {
+        screen.select_matching(|data| matches!(data, ItemData::Delta { .. }));
+    }
 
     Ok(screen)
 }
