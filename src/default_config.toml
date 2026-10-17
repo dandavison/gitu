@@ -40,19 +40,6 @@ visit_context_lines = true
 # when nothing is unstaged; off, it opens at the top.
 status_cursor_on_changes = true
 
-# The command that draws diffs. It receives a unified diff on stdin and emits
-# ANSI-colored output carrying OSC-1717 diff-line metadata, which Gitu
-# advertises to it via the OSC1717 env var. The renderer may draw the diff
-# freely — dropping +/- markers, side-by-side, gutters — and Gitu maps each
-# rendered row back to its patch line for staging. Gitu draws no diff line
-# itself: a row the renderer does not annotate is not shown. `delta --gitu`
-# makes itself the renderer whatever this says.
-#
-# A `{width}` token in the command is replaced with the number of columns Gitu
-# will render into (and COLUMNS is exported), so a reflowing renderer fills the
-# viewport rather than defaulting too narrow over the pipe.
-diff_renderer.command = ["delta"]
-
 # Renderer features that `renderer_features` offers, to turn on and off while
 # viewing a diff. They are passed to the renderer as DELTA_FEATURES=+<names>,
 # which delta adds to the features your own git config already sets: your

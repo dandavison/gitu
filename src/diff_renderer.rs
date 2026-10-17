@@ -244,8 +244,8 @@ pub(crate) fn resolve_file(diff: &Diff, meta: &LineMetadata, from: usize) -> Opt
     })
 }
 
-/// `command` as a process to start in `dir`, with `{width}` substituted and the
-/// environment that tells it the width, the protocol, and the features in force.
+/// `command` as a process to start in `dir`, with the environment that tells it
+/// the width, the protocol, and the features in force.
 pub(crate) fn renderer_command(
     command: &[String],
     params: &crate::items::RenderParams,
@@ -253,14 +253,10 @@ pub(crate) fn renderer_command(
 ) -> Option<Command> {
     let width = params.width();
     let (program, args) = command.split_first()?;
-    let args: Vec<String> = args
-        .iter()
-        .map(|arg| arg.replace("{width}", &width.to_string()))
-        .collect();
 
     let mut command = Command::new(program);
     command
-        .args(&args)
+        .args(args)
         .env("OSC1717", OSC1717_ADVERTISED)
         .env("COLUMNS", width.to_string());
 
@@ -281,9 +277,7 @@ pub(crate) fn renderer_command(
 ///
 /// `params` supplies the width gitu will render the output into. A renderer that
 /// reflows (delta side-by-side/wrapping) can't detect this over a pipe and
-/// defaults too narrow, so we make it available two ways: a literal `{width}`
-/// token anywhere in the command is substituted (e.g. `delta --width {width}`),
-/// and `COLUMNS` is exported for renderers that read it.
+/// defaults too narrow, so it is exported as `COLUMNS`.
 ///
 /// `params.features` are named renderer features chosen in-session, passed as
 /// `DELTA_FEATURES` (see [`FEATURES_VAR`]).

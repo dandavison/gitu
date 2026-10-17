@@ -114,9 +114,10 @@ pub enum FileHeader {
 
 #[derive(Default, Debug, Deserialize)]
 pub struct DiffRendererConfig {
-    /// Renderer command as `[executable, ...args]`. It receives a unified diff
-    /// on stdin and must emit ANSI-colored output that preserves line structure.
-    #[serde(default)]
+    /// Renderer command as `[executable, ...args]`, set by `delta --gitu` to
+    /// itself rather than read from config. It receives a unified diff on stdin
+    /// and emits ANSI-colored output carrying OSC-1717 diff-line metadata.
+    #[serde(skip)]
     pub command: Vec<String>,
     /// Named renderer features offered by `renderer_features`, to turn on and
     /// off while viewing a diff.
