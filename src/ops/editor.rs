@@ -59,6 +59,19 @@ impl OpTrait for OpenMenu {
     }
 }
 
+pub(crate) struct Suspend;
+impl OpTrait for Suspend {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app, term| {
+            term.suspend(&app.state.config).map_err(Error::Term)
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Suspend".into()
+    }
+}
+
 pub(crate) struct Refresh;
 impl OpTrait for Refresh {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {

@@ -160,6 +160,7 @@ pub(crate) enum Op {
     SearchPrevious,
 
     Refresh,
+    Suspend,
     Quit,
 
     #[serde(untagged)]
@@ -176,6 +177,7 @@ impl Op {
             Op::Quit => Box::new(editor::Quit),
             Op::OpenMenu(menu) => Box::new(editor::OpenMenu(menu)),
             Op::Refresh => Box::new(editor::Refresh),
+            Op::Suspend => Box::new(editor::Suspend),
             Op::ToggleArg(name) => Box::new(editor::ToggleArg(name)),
             Op::ToggleSection => Box::new(editor::ToggleSection),
             Op::ToggleAllSections => Box::new(editor::ToggleAllSections),

@@ -277,6 +277,23 @@ impl TermBackend {
         self.flush()
     }
 
+    /// Stop gitu as job control stops a program on ctrl+z, giving the
+    /// terminal back until the shell continues it, and then take it again. The
+    /// test terminal has no job control, and stopping would stop the tests.
+    pub(crate) fn suspend(&mut self, config: &Config) -> io::Result<()> {
+        if let TermBackend::Test { .. } = self {
+            return Ok(());
+        }
+        self.reset_term(config)?;
+        #[cfg(unix)]
+        // SAFETY: raising a signal touches no memory of this process.
+        unsafe {
+            libc::raise(libc::SIGTSTP);
+        }
+        self.setup_term(config)?;
+        self.clear()
+    }
+
     pub(crate) fn reset_term_stay_on_alt_screeen(
         &mut self,
         config: &Config,
