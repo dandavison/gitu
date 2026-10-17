@@ -26,6 +26,20 @@ const READ_ONLY: [&str; 10] = [
     "diff", "show", "log", "blame", "grep", "shortlog", "reflog", "ls-files", "describe", "status",
 ];
 
+/// git's own options that take the next word as their value.
+const VALUED: [&str; 6] = [
+    "-C",
+    "-c",
+    "--git-dir",
+    "--work-tree",
+    "--namespace",
+    "--config-env",
+];
+
+/// How many aliases deep to look for the command an alias stands for. git
+/// itself stops only at a loop.
+const ALIAS_DEPTH: usize = 16;
+
 /// How far above gitu to look for the git process: git may spawn its pager
 /// through a shell, and that shell through another.
 const ANCESTORS: usize = 3;
@@ -42,15 +56,10 @@ pub(crate) struct GitCommand {
 impl GitCommand {
     /// The invocation `argv` is, if it is one whose output gitu structures.
     pub(crate) fn of(argv: Vec<String>) -> Option<Self> {
-        let program = Path::new(argv.first()?).file_stem()?.to_str()?;
-        if !program.eq_ignore_ascii_case("git") {
-            return None;
-        }
-
-        let subcommand = argv
-            .iter()
-            .position(|arg| SUBCOMMANDS.contains(&arg.as_str()))?;
-        Some(Self { argv, subcommand })
+        let subcommand = subcommand_at(&argv)?;
+        SUBCOMMANDS
+            .contains(&argv[subcommand].as_str())
+            .then_some(Self { argv, subcommand })
     }
 
     /// What the patch is a diff of, which is what decides whether staging or
@@ -370,12 +379,6 @@ fn command_lines() -> ProcessRefreshKind {
     ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always)
 }
 
-/// `argv` with the alias it runs, if it runs one, replaced by what it stands
-/// for.
-fn expanded(argv: Vec<String>) -> Vec<String> {
-    argv
-}
-
 /// The argv of `pid`, if it is a git command gitu can put again.
 fn git_argv(system: &System, pid: Pid) -> Option<Vec<String>> {
     let argv: Vec<String> = system
@@ -386,6 +389,67 @@ fn git_argv(system: &System, pid: Pid) -> Option<Vec<String>> {
         .collect();
 
     GitCommand::of(expanded(argv)).map(|git| git.argv)
+}
+
+/// `argv` with the alias it runs, if it runs one, replaced by what it stands
+/// for, as git expands it: an alias may stand for another. One that does not
+/// come to a command, or comes back to itself, is left as it is.
+///
+/// git runs a command of its own, or a `git-<name>` on its path, in preference
+/// to an alias of the same name. gitu looks only at its own few subcommands,
+/// so an alias with the name of another command is wrongly expanded.
+fn expanded(argv: Vec<String>) -> Vec<String> {
+    let mut expanding = argv.clone();
+    for _ in 0..ALIAS_DEPTH {
+        let Some(at) = subcommand_at(&expanding) else {
+            return argv;
+        };
+        if SUBCOMMANDS.contains(&expanding[at].as_str()) {
+            return expanding;
+        }
+        let Some(words) = alias(&expanding[..at], &expanding[at]) else {
+            return expanding;
+        };
+        expanding.splice(at..=at, words);
+    }
+    argv
+}
+
+/// Where the subcommand of a git invocation is: the first word that is not one
+/// of git's own options or an option's value.
+fn subcommand_at(argv: &[String]) -> Option<usize> {
+    let program = Path::new(argv.first()?).file_stem()?.to_str()?;
+    if !program.eq_ignore_ascii_case("git") {
+        return None;
+    }
+
+    let mut value_follows = false;
+    argv.iter().enumerate().skip(1).find_map(|(i, arg)| {
+        if std::mem::take(&mut value_follows) {
+            return None;
+        }
+        value_follows = VALUED.contains(&arg.as_str());
+        (!arg.starts_with('-')).then_some(i)
+    })
+}
+
+/// The words alias `name` stands for, read as git reads it with `own`, git and
+/// its own options. A shell alias (`!…`) runs a command of its own and stands
+/// for none.
+fn alias(own: &[String], name: &str) -> Option<Vec<String>> {
+    let output = Command::new(&own[0])
+        .args(&own[1..])
+        .args(["config", "--get", &format!("alias.{name}")])
+        .output()
+        .ok()?;
+    let value = String::from_utf8(output.stdout).ok()?;
+    let value = value.trim_end_matches('\n');
+    if !output.status.success() || value.starts_with('!') {
+        return None;
+    }
+    shell_words::split(value)
+        .ok()
+        .filter(|words| !words.is_empty())
 }
 
 #[cfg(test)]
