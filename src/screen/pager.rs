@@ -326,13 +326,38 @@ fn built(
             // the escapes.
             let text = crate::diff_renderer::strip_ansi(&snapshot.text);
             let file_diffs = gitu_diff::Parser::new(&text)
-                .parse_diff()
+                .parse_patches()
                 .unwrap_or_default();
             // What came back has no diff in it: a log, a blame, a grep, a man
             // page. gitu has no structure of its own to impose, so the renderer
             // draws it.
+            // Folding is for finding a file in a patch that is not all in view.
+            // One still arriving is taken not to fit.
+            let fits = snapshot.done && drawn.lines().count() <= params.size.1 as usize;
+            let fold = config.general.start_folded && file_diffs.len() > 1 && !fits;
+            let patches = items::patches_of(&text, &file_diffs);
             if file_diffs.is_empty() {
                 items.extend(rows(repo, drawn));
+            } else if patches.len() > 1 {
+                // A log of patches. A renderer that does not say which of its
+                // rows are which leaves gitu nothing to place them by.
+                items.extend(
+                    snapshot
+                        .rendered
+                        .as_deref()
+                        .and_then(|rendered| {
+                            items::log_of_patches_items(
+                                config,
+                                repo,
+                                patches,
+                                rendered,
+                                snapshot.done,
+                                diff_type,
+                                *stat || fold,
+                            )
+                        })
+                        .unwrap_or_else(|| rows(repo, drawn)),
+                );
             } else {
                 let diff = Rc::new(Diff {
                     file_diffs,
@@ -340,10 +365,6 @@ fn built(
                     commit: named_commit.then(|| commit_named_by(&text)).flatten(),
                     text,
                 });
-                // Folding is for finding a file in a patch that is not all
-                // in view. One still arriving is taken not to fit.
-                let fits = snapshot.done && drawn.lines().count() <= params.size.1 as usize;
-                let fold = config.general.start_folded && diff.file_diffs.len() > 1 && !fits;
                 let drawn = items::drawn_diff_items(
                     config,
                     &diff,

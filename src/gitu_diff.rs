@@ -211,7 +211,17 @@ impl<'a> Parser<'a> {
     /// assert_eq!(diff[0].header.range, 0..97);
     /// ```
     pub fn parse_diff<'b>(&'b mut self) -> Result<'b, Vec<FileDiff>> {
-        log::trace!("Parser::parse_diff\n{:?}", self);
+        self.parse(false)
+    }
+
+    /// Parses a log of patches (`git log -p`): diffs that commits' messages
+    /// separate, and may follow. What is not a diff is skipped.
+    pub fn parse_patches<'b>(&'b mut self) -> Result<'b, Vec<FileDiff>> {
+        self.parse(true)
+    }
+
+    fn parse<'b>(&'b mut self, between_diffs: bool) -> Result<'b, Vec<FileDiff>> {
+        log::trace!("Parser::parse\n{:?}", self);
         let mut diffs = vec![];
 
         if self.input.is_empty() {
@@ -232,6 +242,12 @@ impl<'a> Parser<'a> {
                 errors,
                 parser: self.clone(),
             })?);
+            if between_diffs {
+                self.skip_until_diff_header().map_err(|errors| ParseError {
+                    errors,
+                    parser: self.clone(),
+                })?;
+            }
         }
 
         self.eof().map_err(|errors| ParseError {

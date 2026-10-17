@@ -948,6 +948,106 @@ pub(crate) fn rendered_log_items(repo: &Repository, rendered: &str) -> Option<Ve
     Some(log_items(repo, &commits_in(rendered)?))
 }
 
+/// The items of a log of patches (`git log -p`) whose renderer marks commits
+/// and annotates diff lines: each commit's rows, then its diff nested under
+/// it. `patches` are the commits' patches (see [`patches_of`]); each is a diff
+/// of its own, so that a path the log changes in several commits is placed in
+/// the right one. `None` if the renderer does not say which rows are which, or
+/// says of fewer commits' diffs than there are patches.
+pub(crate) fn log_of_patches_items(
+    config: &Config,
+    repo: &Repository,
+    patches: Vec<String>,
+    rendered: &str,
+    drawn_whole: bool,
+    diff_type: &DiffType,
+    default_collapsed: bool,
+) -> Option<Vec<Item>> {
+    use crate::diff_renderer::LineKind;
+
+    let parsed = crate::diff_renderer::parse_ansi_lines(rendered);
+    parsed.protocol_version?;
+    let blocks = crate::diff_renderer::commit_blocks(&parsed.lines);
+    // A renderer that leaves git's file header as git wrote it, unannotated,
+    // starts the diff at git's first line of it.
+    let is_diff_row = |line: &crate::diff_renderer::ParsedLine| {
+        line.text.starts_with("diff --git ")
+            || line
+                .records
+                .iter()
+                .any(|record| record.kind != LineKind::Commit)
+    };
+    let with_diffs = blocks
+        .iter()
+        .filter(|block| block.rows.iter().any(is_diff_row))
+        .count();
+    if blocks.iter().all(|block| block.commit.is_none())
+        || with_diffs == 0
+        || with_diffs > patches.len()
+        || (drawn_whole && with_diffs < patches.len())
+    {
+        return None;
+    }
+
+    let references = commit_refs(repo).unwrap_or_default();
+    let mut patches = patches.into_iter();
+    let mut items = Vec::new();
+    for block in &blocks {
+        let header_end = block
+            .rows
+            .iter()
+            .position(is_diff_row)
+            .unwrap_or(block.rows.len());
+        let (header, diff_rows) = block.rows.split_at(header_end);
+        let commit = RenderedCommit {
+            oid: block.commit.map(String::from),
+            rows: header
+                .iter()
+                .map(|row| Rc::new(rendered_spans(row)))
+                .collect(),
+        };
+        items.extend(commit_block_items(repo, &references, &commit));
+        if diff_rows.is_empty() {
+            continue;
+        }
+
+        let patch = patches.next()?;
+        let diff = Rc::new(Diff {
+            file_diffs: gitu_diff::Parser::new(&patch).parse_diff().ok()?,
+            diff_type: diff_type.clone(),
+            commit: commit.oid.clone(),
+            text: patch,
+        });
+        let diff_items = rendered_diff_items(
+            &diff,
+            diff_rows,
+            2,
+            default_collapsed,
+            commit.oid,
+            config.general.visit_context_lines,
+        );
+        items.extend(if drawn_whole {
+            diff_items
+        } else {
+            reached_files(diff_items)
+        });
+    }
+    Some(items)
+}
+
+/// The patch of each commit of a log of patches: the runs of `text`'s file
+/// diffs that the commits' messages separate. A patch of one commit is one.
+pub(crate) fn patches_of(text: &str, file_diffs: &[gitu_diff::FileDiff]) -> Vec<String> {
+    let mut runs: Vec<std::ops::Range<usize>> = Vec::new();
+    for file_diff in file_diffs {
+        match runs.last_mut() {
+            Some(run) if run.end == file_diff.range.start => run.end = file_diff.range.end,
+            _ => runs.push(file_diff.range.clone()),
+        }
+    }
+    runs.into_iter().map(|run| text[run].to_owned()).collect()
+}
+
 /// Refs a commit carries only decorate it, so failing to list them costs the
 /// decorations rather than the log.
 fn log_items(repo: &Repository, blocks: &[RenderedCommit]) -> Vec<Item> {
