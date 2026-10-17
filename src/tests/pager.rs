@@ -376,6 +376,18 @@ fn two_changed_files(ctx: &TestContext) {
     fs::write(ctx.dir.join("a_test.rs"), "beta changed\n").unwrap();
 }
 
+/// A third file whose every line changed, so the patch is taller than the
+/// test terminal's screen.
+fn taller_than_the_screen(ctx: &TestContext) {
+    let lines = |suffix: &str| {
+        (1..=30)
+            .map(|i| format!("{i}{suffix}\n"))
+            .collect::<String>()
+    };
+    commit(&ctx.dir, "tall.rs", &lines(""));
+    fs::write(ctx.dir.join("tall.rs"), lines(" changed")).unwrap();
+}
+
 /// A hidden file is not "diff not displayed": it is absent, as if the patch
 /// never had it. What is left is a diff like any other.
 #[test]
@@ -1695,6 +1707,7 @@ fn a_folded_file_shows_the_renderers_header_by_default() {
 fn files_start_folded_when_asked() {
     let mut ctx = setup_clone!();
     two_changed_files(&ctx);
+    taller_than_the_screen(&ctx);
     ctx.config().general.start_folded = true;
 
     ctx.init_app_as_pager_of(&["git", "diff"]);
@@ -1708,7 +1721,8 @@ fn files_start_folded_when_asked() {
 #[test]
 fn a_commit_opened_from_the_log_starts_folded_when_asked() {
     let mut ctx = with_renderer(setup_clone!());
-    fs::write(ctx.dir.join("secondfile"), "Also folded\n").unwrap();
+    let tall = (1..=30).map(|i| format!("{i}\n")).collect::<String>();
+    fs::write(ctx.dir.join("secondfile"), tall).unwrap();
     run(&ctx.dir, &["git", "add", "secondfile"]);
     commit(&ctx.dir, "firstfile", "This should be folded\n");
     ctx.config().general.start_folded = true;
@@ -1725,14 +1739,15 @@ fn a_commit_opened_from_the_log_starts_folded_when_asked() {
 fn files_start_folded_to_their_stat_rows() {
     let mut ctx = setup_clone!();
     a_replaced_line_and_three_added(&ctx);
+    taller_than_the_screen(&ctx);
     ctx.config().general.start_folded = true;
     ctx.config().general.file_header = crate::config::FileHeader::Stat;
 
     ctx.init_app_as_pager_of(&["git", "diff"]);
 
     let buffer = ctx.redact_buffer();
-    assert!(buffer.contains("a.rs        | 2 +-"), "{buffer}");
-    assert!(buffer.contains("longer_b.rs | 3 +++"), "{buffer}");
+    assert!(buffer.contains("a.rs        |  2 +-"), "{buffer}");
+    assert!(buffer.contains("longer_b.rs |  3 +++"), "{buffer}");
 }
 
 /// Unfolding everything at once heads the files with the renderer's headers,
@@ -1781,6 +1796,7 @@ fn unfolding_everything_from_a_diffstat_heads_the_files_with_the_renderers_heade
 fn an_unfolded_file_stays_unfolded_through_a_slow_rerender() {
     let mut ctx = setup_clone!();
     two_changed_files(&ctx);
+    taller_than_the_screen(&ctx);
     ctx.config().general.start_folded = true;
     let renderer = &mut ctx.config().general.diff_renderer;
     renderer.features = vec!["line-numbers".into()];
@@ -1809,6 +1825,7 @@ fn a_file_new_to_a_rebuild_starts_folded() {
     commit(&ctx.dir, "a.rs", "alpha\n");
     commit(&ctx.dir, "b.rs", "beta\n");
     fs::write(ctx.dir.join("a.rs"), "alpha changed\n").unwrap();
+    taller_than_the_screen(&ctx);
     ctx.config().general.start_folded = true;
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
 
@@ -1826,6 +1843,7 @@ fn a_file_new_to_a_rebuild_starts_folded() {
 fn a_diffstat_is_the_diff_folded_to_stat_rows() {
     let mut ctx = setup_clone!();
     two_changed_files(&ctx);
+    taller_than_the_screen(&ctx);
     ctx.config().general.diff_renderer.command = file_header_renderer();
     let stat = {
         ctx.init_app_as_pager_of(&["git", "diff", "--stat"]);
@@ -1905,4 +1923,19 @@ fn a_patch_of_one_file_starts_unfolded() {
 
     let buffer = ctx.redact_buffer();
     assert!(buffer.contains("alpha changed"), "{buffer}");
+}
+
+/// A patch that fits on one screen is all in view already, so it opens
+/// unfolded.
+#[test]
+fn a_patch_that_fits_on_one_screen_starts_unfolded() {
+    let mut ctx = setup_clone!();
+    two_changed_files(&ctx);
+    ctx.config().general.start_folded = true;
+
+    ctx.init_app_as_pager_of(&["git", "diff"]);
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("alpha changed"), "{buffer}");
+    assert!(buffer.contains("beta changed"), "{buffer}");
 }
