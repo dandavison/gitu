@@ -281,3 +281,128 @@ fn selected_summary(app: &crate::app::App) -> String {
         data => panic!("not a commit: {data:?}"),
     }
 }
+
+/// Three commits, the newest changing a file the oldest added, paged through
+/// a renderer that marks commits and annotates diff lines, as delta does.
+fn log_of_patches(ctx: &mut TestContext) -> crate::app::App {
+    commit(&ctx.dir, "a.rs", "alpha\n");
+    commit(&ctx.dir, "b.rs", "beta\n");
+    commit(&ctx.dir, "a.rs", "alpha changed\n");
+    ctx.config().general.diff_renderer.command = super::pager::osc_1717_passthrough();
+    ctx.init_app_as_pager_of(&["git", "log", "-p", "-3"])
+}
+
+/// Each item of the view, as the summary of the commit it is under and,
+/// within a diff, the file and line it is.
+fn under_commits(app: &crate::app::App) -> Vec<(String, String)> {
+    let mut summary = String::new();
+    app.screen()
+        .items()
+        .iter()
+        .filter_map(|item| match &item.data {
+            ItemData::Commit { summary: of, .. } => {
+                summary = of.clone();
+                None
+            }
+            ItemData::HunkLine {
+                diff,
+                file_i,
+                hunk_i,
+                line_range,
+                ..
+            } => Some((
+                summary.clone(),
+                format!(
+                    "{} {}",
+                    diff.file_diffs[*file_i].header.new_file.fmt(&diff.text),
+                    diff.hunk_content(*file_i, *hunk_i)[line_range.clone()].trim_end()
+                ),
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_log_of_patches_has_each_diff_under_its_commit() {
+    let mut ctx = setup_clone!();
+    let app = log_of_patches(&mut ctx);
+
+    let lines = under_commits(&app);
+    let lines: Vec<(&str, &str)> = lines
+        .iter()
+        .map(|(commit, line)| (commit.as_str(), line.as_str()))
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            ("modify a.rs", "a.rs -alpha"),
+            ("modify a.rs", "a.rs +alpha changed"),
+            ("add b.rs", "b.rs +beta"),
+            ("add a.rs", "a.rs +alpha"),
+        ]
+    );
+}
+
+#[test]
+fn a_log_of_patches_nests_each_diff_under_its_commit() {
+    let mut ctx = setup_clone!();
+    let app = log_of_patches(&mut ctx);
+
+    let items = app.screen().items();
+    let commit = items
+        .iter()
+        .position(
+            |item| matches!(&item.data, ItemData::Commit { summary, .. } if summary == "add b.rs"),
+        )
+        .unwrap();
+    let file = commit
+        + items[commit..]
+            .iter()
+            .position(|item| matches!(&item.data, ItemData::Delta { .. }))
+            .unwrap();
+    assert!(items[file].depth > items[commit].depth);
+}
+
+#[test]
+fn folding_a_commit_in_a_log_of_patches_hides_its_diff() {
+    let mut ctx = setup_clone!();
+    let mut app = log_of_patches(&mut ctx);
+
+    ctx.update(&mut app, keys("gg<tab>"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(!buffer.contains("alpha changed"), "{buffer}");
+    assert!(buffer.contains("+beta"), "{buffer}");
+}
+
+/// A hunk of a commit in the log is the commit's: reversing it undoes that
+/// commit's change in the working tree.
+#[test]
+fn a_hunk_in_a_log_of_patches_reverses_its_commits_change() {
+    let mut ctx = setup_clone!();
+    let mut app = log_of_patches(&mut ctx);
+
+    ctx.update(&mut app, keys("/alpha changed<enter>kv"));
+
+    assert_eq!(fs::read_to_string(ctx.dir.join("a.rs")).unwrap(), "alpha\n");
+}
+
+/// A renderer that marks commits but says nothing of the diff's lines gives
+/// gitu no way to place them, so the log is its commits and their rows.
+#[test]
+fn a_log_of_patches_drawn_without_line_records_is_its_commits() {
+    let mut ctx = with_renderer(setup_clone!());
+    commit(&ctx.dir, "a.rs", "alpha\n");
+    commit(&ctx.dir, "b.rs", "beta\n");
+    let app = ctx.init_app_as_pager_of(&["git", "log", "-p", "-2"]);
+
+    let commits = app
+        .screen()
+        .items()
+        .iter()
+        .filter(|item| matches!(item.data, ItemData::Commit { .. }))
+        .count();
+    assert_eq!(commits, 2);
+    assert!(ctx.redact_buffer().contains("+beta"));
+}
