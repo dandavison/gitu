@@ -114,7 +114,7 @@ pub(crate) fn create_diff_items(
     );
     match config.general.file_header {
         FileHeader::Delta => items,
-        FileHeader::Stat => headed_by_counted_stat(items, params.width()),
+        FileHeader::Stat => headed_by_counted_stat(items, params.width(), false),
     }
 }
 
@@ -157,9 +157,13 @@ pub(crate) fn drawn_diff_items(
 
 /// Each file headed by its line of a diffstat counted from the patch, folded or
 /// not, in place of the renderer's header, and the diff followed by the
-/// diffstat's summary. The lines are laid out as git lays out `--stat` in
-/// `width` columns.
-pub(crate) fn headed_by_counted_stat(mut items: Vec<Item>, width: usize) -> Vec<Item> {
+/// diffstat's summary if `summarised`. The lines are laid out as git lays out
+/// `--stat` in `width` columns.
+pub(crate) fn headed_by_counted_stat(
+    mut items: Vec<Item>,
+    width: usize,
+    summarised: bool,
+) -> Vec<Item> {
     let stats: Vec<(usize, FileStat)> = items
         .iter()
         .enumerate()
@@ -177,12 +181,14 @@ pub(crate) fn headed_by_counted_stat(mut items: Vec<Item>, width: usize) -> Vec<
         items[*item_i].header = row.clone();
         items[*item_i].folded = row;
     }
-    let summary = stat_summary(stats.iter().map(|(_, stat)| stat));
-    items.push(Item {
-        unselectable: true,
-        rendered: Some(Rc::new(vec![(summary, Style::new())])),
-        ..Default::default()
-    });
+    if summarised {
+        let summary = stat_summary(stats.iter().map(|(_, stat)| stat));
+        items.push(Item {
+            unselectable: true,
+            rendered: Some(Rc::new(vec![(summary, Style::new())])),
+            ..Default::default()
+        });
+    }
     items
 }
 

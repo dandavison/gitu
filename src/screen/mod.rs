@@ -569,11 +569,17 @@ impl Screen {
     /// they are already folded. Only the outermost are folded, and everything
     /// within them is opened, so that opening one shows what is inside it
     /// rather than another folded thing. A cursor inside what was folded away
-    /// goes to the heading that folded it.
+    /// goes to the heading that folded it. The status view's headings are its
+    /// files.
     pub(crate) fn toggle_all_sections(&mut self) {
         self.anchor = None;
 
-        let sections = || self.items.iter().filter(|item| item.data.is_section());
+        let sections = || {
+            self.items.iter().filter(|item| {
+                item.data.is_section()
+                    && (!self.is_status || matches!(item.data, ItemData::Delta { .. }))
+            })
+        };
         let Some(outermost) = sections().map(|item| item.depth).min() else {
             return;
         };

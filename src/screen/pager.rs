@@ -355,7 +355,7 @@ fn built(
                 // rows.
                 items.extend(match (*stat, config.general.file_header) {
                     (false, FileHeader::Delta) => drawn,
-                    _ => items::headed_by_counted_stat(drawn, params.width()),
+                    _ => items::headed_by_counted_stat(drawn, params.width(), true),
                 });
             }
             (items, *truncated)
