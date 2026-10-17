@@ -6,6 +6,11 @@
 # ///
 """Run bench-startup against each non-test commit of the fork, caching results by commit.
 
+A commit with the example `gitu` is benched as that example; a later one as
+`delta --gitu`, built from the delta checkout given against the commit. That
+checkout may not build against every commit; a commit it does not build against
+is recorded as a build error.
+
 A commit is skipped as a test commit if its subject starts with "Test" or it
 changes only tests and snapshots. Results already in the cache are not re-run.
 """
@@ -14,6 +19,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -35,6 +41,12 @@ def main() -> None:
     parser.add_argument("--results", type=Path, default=HERE / "results")
     parser.add_argument("--runs", type=int, default=10)
     parser.add_argument("--force", action="store_true", help="re-run cached commits")
+    parser.add_argument(
+        "--delta",
+        type=Path,
+        required=True,
+        help="a checkout of delta's gitu branch, to build `delta --gitu` from",
+    )
     args = parser.parse_args()
 
     start = git("rev-parse", args.range.split("..")[0]).strip()
@@ -47,12 +59,12 @@ def main() -> None:
             f"[{i + 1}/{len(commits)}] {git('log', '-1', '--format=%h %s', sha).strip()}",
             file=sys.stderr,
         )
-        bench(sha, out, args.runs)
+        bench(sha, out, args.runs, args.delta.resolve())
     subprocess.run([str(HERE / "chart"), "--results", str(args.results)], check=True)
 
 
-def bench(sha: str, out: Path, runs: int) -> None:
-    gitu = build(sha)
+def bench(sha: str, out: Path, runs: int, delta: Path) -> None:
+    gitu = build(sha, delta)
     if isinstance(gitu, str):
         result = {"build_error": gitu}
     else:
@@ -60,7 +72,7 @@ def bench(sha: str, out: Path, runs: int) -> None:
             [
                 str(HERE / "bench-startup"),
                 "--gitu",
-                str(gitu),
+                shlex.join(gitu),
                 "--out",
                 str(out),
                 "--runs",
@@ -79,16 +91,19 @@ def bench(sha: str, out: Path, runs: int) -> None:
     )
 
 
-def build(sha: str) -> Path | str:
-    """The gitu binary built at sha, or the build's error output."""
+def build(sha: str, delta: Path) -> list[str] | str:
+    """The command that runs gitu built at sha, or the build's error output."""
     if not WORKTREE.exists():
         git("worktree", "add", "--detach", str(WORKTREE), sha)
     subprocess.run(
         ["git", "-C", str(WORKTREE), "checkout", "-q", "--detach", sha], check=True
     )
     # gitu became an example rather than a binary when the crate became a library,
-    # and for one commit before that was a binary behind the feature "bin".
+    # and for one commit before that was a binary behind the feature "bin". Since
+    # the example was removed, gitu runs only as `delta --gitu`.
     example = (WORKTREE / "examples" / "gitu.rs").exists()
+    if not example and not (WORKTREE / "src" / "main.rs").exists():
+        return build_delta(delta)
     target = ["--example", "gitu"] if example else ["--bin", "gitu"]
     if 'required-features = ["bin"]' in (WORKTREE / "Cargo.toml").read_text():
         target += ["--features", "bin"]
@@ -102,7 +117,23 @@ def build(sha: str) -> Path | str:
     )
     if p.returncode != 0:
         return p.stderr[-2000:]
-    return CARGO_TARGET / "release" / ("examples/gitu" if example else "gitu")
+    return [str(CARGO_TARGET / "release" / ("examples/gitu" if example else "gitu"))]
+
+
+def build_delta(delta: Path) -> list[str] | str:
+    """`delta --gitu` built from the delta checkout against the worktree's commit."""
+    patch = f'patch.crates-io.delta-gitu.path="{WORKTREE}"'
+    p = subprocess.run(
+        ["cargo", "build", "--release", "--config", patch],
+        check=False,
+        cwd=delta,
+        env={**os.environ, "CARGO_TARGET_DIR": str(CARGO_TARGET)},
+        capture_output=True,
+        text=True,
+    )
+    if p.returncode != 0:
+        return p.stderr[-2000:]
+    return [str(CARGO_TARGET / "release" / "delta"), "--gitu"]
 
 
 def is_test_commit(sha: str) -> bool:

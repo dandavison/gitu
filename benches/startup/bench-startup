@@ -4,7 +4,7 @@
 # requires-python = ">=3.12"
 # dependencies = []
 # ///
-"""Time to first screen draw of a gitu binary, measured with hyperfine.
+"""Time to first screen draw of gitu, measured with hyperfine.
 
 gitu's --print draws the first frame and exits, so the time it takes is the time
 to the first draw. Each case runs gitu as git's pager (or alone, for status) in a
@@ -46,13 +46,18 @@ PAGED = {
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--gitu", type=Path, required=True)
+    parser.add_argument(
+        "--gitu",
+        required=True,
+        help="the command that runs gitu, e.g. '/path/to/delta --gitu'",
+    )
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--runs", type=int, default=10)
     args = parser.parse_args()
 
     ensure_fixture()
-    gitu = args.gitu.resolve()
+    gitu = shlex.split(args.gitu)
+    gitu[0] = str(Path(gitu[0]).resolve())
     result = {
         "delta": run(["delta", "--version"]).strip(),
         "git": run(["git", "--version"]).strip(),
@@ -69,10 +74,10 @@ def main() -> None:
     args.out.write_text(json.dumps(result, indent=2) + "\n")
 
 
-def cases(gitu: Path) -> dict[str, str | None]:
+def cases(gitu: list[str]) -> dict[str, str | None]:
     """Shell commands per case; None where this gitu cannot be git's pager."""
-    g = shlex.quote(str(gitu))
-    pages = "--pager" in run([str(gitu), "--help"])
+    g = shlex.join(gitu)
+    pages = "--pager" in run([*gitu, "--help"])
     pager = shlex.quote(f"{g} --pager --print")
     return {"status": f"{g} --print"} | {
         name: f"GIT_PAGER={pager} {cmd}" if pages else None
