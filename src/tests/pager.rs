@@ -1595,6 +1595,34 @@ fn hiding_a_file_drawn_late_leaves_the_cursor_on_the_next_file() {
     assert_eq!(selected_file(&app).as_deref(), Some("f.rs"));
 }
 
+/// Hiding the last file leaves the cursor on the file above it, as kill-line
+/// on the last line does, however late the render reaches it.
+#[test]
+fn hiding_the_last_file_leaves_the_cursor_on_the_file_above() {
+    let mut ctx = setup_clone!();
+    let lines = |prefix: &str| {
+        (1..=60)
+            .map(|i| format!("{prefix} {i}\n"))
+            .collect::<String>()
+    };
+    for file in [
+        "a.rs", "b.rs", "c.rs", "d.rs", "e.rs", "f.rs", "g.rs", "h.rs",
+    ] {
+        commit(&ctx.dir, file, &lines("old"));
+        fs::write(ctx.dir.join(file), lines("new")).unwrap();
+    }
+    ctx.config().general.diff_renderer.command = pausing_renderer();
+    let mut app = ctx.init_app_streaming_as_pager_of(&["git", "diff", "--stat"]);
+    finish_drawing(&mut ctx, &mut app);
+    ctx.update(&mut app, keys("jjjjjjj"));
+    assert_eq!(selected_file(&app).as_deref(), Some("h.rs"));
+
+    ctx.update(&mut app, keys("d"));
+    finish_drawing(&mut ctx, &mut app);
+
+    assert_eq!(selected_file(&app).as_deref(), Some("g.rs"));
+}
+
 fn finish_drawing(ctx: &mut TestContext, app: &mut App) {
     let started = Instant::now();
     while app.screen().is_drawing() {
