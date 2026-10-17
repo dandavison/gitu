@@ -22,7 +22,7 @@ use std::iter::{self, successors};
 use std::ops::RangeInclusive;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub(crate) mod blame;
 pub(crate) mod pager;
@@ -116,49 +116,82 @@ pub(crate) type Later = Box<dyn FnMut() -> Option<(Res<Vec<Item>>, bool)>>;
 /// command or renderer has drawn nothing.
 const FIRST_SCREEN_WAIT: Duration = Duration::from_millis(500);
 
-/// The items `build` makes of what `stream` has produced: once it has
-/// `params`' first two screenfuls to show or [`FIRST_SCREEN_WAIT`] has passed
-/// (or all of it, when not streaming); then, as [`Items::later`], the first
-/// two screenfuls if they were not there yet, and all of them once it is done.
+/// The items `build` makes of what `stream` has produced: once they show
+/// `params`' first two screenfuls or [`FIRST_SCREEN_WAIT`] has passed (or all
+/// of it, when not streaming); then, as [`Items::later`], the first two
+/// screenfuls if they were not there yet, and all of them once it is done.
+///
+/// A folded file shows one row of the many the renderer draws for it, so how
+/// many rows the stream needs is not known before they are built. Each build
+/// that shows too few waits for twice the rows, which keeps the builds' total
+/// cost within about twice the last's.
 pub(crate) fn streamed_items(
     stream: Stream,
     params: &RenderParams,
     build: impl Fn(Snapshot) -> Res<Vec<Item>> + 'static,
 ) -> Res<Items> {
     let first_screens = 2 * params.size.1 as usize;
-    if params.streaming {
-        stream.wait_at_most(first_screens, FIRST_SCREEN_WAIT);
-    } else {
-        stream.wait_for(usize::MAX);
-    }
-    let mut short = stream.rows() < first_screens;
-    let snapshot = stream.snapshot();
-    let done = snapshot.done;
-    // Until the renderer has drawn a row there is nothing to show: gitu's own
-    // rows in their place would be highlighted by running the renderer on each
-    // hunk, all before the first screen.
-    let now = if !done && snapshot.rendered.as_deref() == Some("") {
-        Vec::new()
-    } else {
-        build(snapshot)?
+    let deadline = Instant::now() + FIRST_SCREEN_WAIT;
+    let mut wanted = first_screens;
+    let (now, done) = loop {
+        if params.streaming {
+            stream.wait_at_most(wanted, deadline.saturating_duration_since(Instant::now()));
+        } else {
+            stream.wait_for(usize::MAX);
+        }
+        let snapshot = stream.snapshot();
+        let done = snapshot.done;
+        // Until the renderer has drawn a row there is nothing to show: gitu's
+        // own rows in their place would be highlighted by running the renderer
+        // on each hunk, all before the first screen.
+        let now = if !done && snapshot.rendered.as_deref() == Some("") {
+            Vec::new()
+        } else {
+            build(snapshot)?
+        };
+        if done || shown_rows(&now) >= first_screens || Instant::now() >= deadline {
+            break (now, done);
+        }
+        wanted = 2 * stream.rows().max(wanted);
     };
     if done {
         return Ok(now.into());
     }
 
+    let mut short = shown_rows(&now) < first_screens;
     Ok(Items {
         now,
         later: Some(Box::new(move || {
             if stream.is_done() {
                 Some((build(stream.snapshot()), true))
-            } else if short && stream.rows() >= first_screens {
-                short = false;
-                Some((build(stream.snapshot()), false))
+            } else if short && stream.rows() >= wanted {
+                let items = build(stream.snapshot());
+                short = items
+                    .as_ref()
+                    .is_ok_and(|items| shown_rows(items) < first_screens);
+                wanted = 2 * stream.rows();
+                Some((items, false))
             } else {
                 None
             }
         })),
     })
+}
+
+/// How many of `items` are shown while each is folded as it starts, taking
+/// each to be one row.
+fn shown_rows(items: &[Item]) -> usize {
+    let mut folded_at = None;
+    items
+        .iter()
+        .filter(|item| {
+            if folded_at.is_some_and(|depth| item.depth > depth) {
+                return false;
+            }
+            folded_at = (item.default_collapsed && item.data.is_section()).then_some(item.depth);
+            true
+        })
+        .count()
 }
 
 impl From<Vec<Item>> for Items {
