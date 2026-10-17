@@ -479,7 +479,7 @@ dependencies = [
 
 [[package]]
 name = "delta-gitu"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "anstyle-parse",
  "arboard",
