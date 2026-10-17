@@ -1939,3 +1939,28 @@ fn a_patch_that_fits_on_one_screen_starts_unfolded() {
     assert!(buffer.contains("alpha changed"), "{buffer}");
     assert!(buffer.contains("beta changed"), "{buffer}");
 }
+
+/// A view that opens with its files folded puts the cursor on the first of
+/// them, ready to unfold the one wanted.
+#[test]
+fn a_view_opening_folded_starts_on_its_first_file() {
+    let mut ctx = with_renderer(setup_clone!());
+    let tall = (1..=30).map(|i| format!("{i}\n")).collect::<String>();
+    fs::write(ctx.dir.join("secondfile"), tall).unwrap();
+    run(&ctx.dir, &["git", "add", "secondfile"]);
+    commit(&ctx.dir, "firstfile", "first\n");
+    ctx.config().general.start_folded = true;
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("ll<enter>"));
+
+    assert!(
+        matches!(
+            app.screen().get_selected_item().data,
+            crate::item_data::ItemData::Delta { file_i: 0, .. }
+        ),
+        "{:?}\n{}",
+        app.screen().get_selected_item().data,
+        ctx.redact_buffer()
+    );
+}
