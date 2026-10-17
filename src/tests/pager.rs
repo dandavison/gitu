@@ -1746,6 +1746,40 @@ fn files_start_folded_when_asked() {
     assert!(!buffer.contains("alpha changed"), "{buffer}");
 }
 
+/// Two screenfuls of the renderer's rows are only a few files once they are
+/// folded, so the first screen waits for enough files to fill it.
+#[test]
+fn files_starting_folded_fill_the_first_screen() {
+    let mut ctx = setup_clone!();
+    let lines = |suffix: &str| {
+        (1..=20)
+            .map(|i| format!("{i}{suffix}\n"))
+            .collect::<String>()
+    };
+    for i in 1..=45 {
+        commit(&ctx.dir, &format!("f{i:02}.rs"), &lines(""));
+        fs::write(ctx.dir.join(format!("f{i:02}.rs")), lines(" changed")).unwrap();
+    }
+    ctx.config().general.start_folded = true;
+    // Draws two files, then all but the last, then the last.
+    ctx.config().general.diff_renderer.command = osc_1717_passthrough()
+        .into_iter()
+        .map(|arg| {
+            arg.replace(
+                "BEGIN{",
+                r#"/diff --git /{files++; if (files == 3) {fflush(); system("sleep 0.05")} if (files == 45) {fflush(); system("sleep 2")}}
+        BEGIN{"#,
+            )
+        })
+        .collect();
+
+    ctx.init_app_streaming_as_pager_of(&["git", "diff"]);
+
+    let buffer = ctx.redact_buffer();
+    let files = buffer.lines().filter(|line| line.contains(".rs")).count();
+    assert!(files >= 15, "{buffer}");
+}
+
 #[test]
 fn a_commit_opened_from_the_log_starts_folded_when_asked() {
     let mut ctx = with_renderer(setup_clone!());
