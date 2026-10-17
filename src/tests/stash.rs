@@ -209,3 +209,21 @@ pub(crate) fn stash_apply_selected() {
     let snapshot_name = function_name!().rsplit("::").next().unwrap();
     snapshot_with_files(snapshot_name, ctx, "jja");
 }
+
+/// A file staged and unstaged in the stash is two files of the view.
+#[test]
+fn folding_a_stashed_staged_file_leaves_it_unstaged_open() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "a.rs", "alpha\n");
+    fs::write(ctx.dir.join("a.rs"), "alpha staged\n").unwrap();
+    run(&ctx.dir, &["git", "add", "a.rs"]);
+    fs::write(ctx.dir.join("a.rs"), "alpha unstaged\n").unwrap();
+    run(&ctx.dir, &["git", "stash", "push"]);
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("jj<enter>k<tab>"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(!buffer.contains("+alpha staged"), "{buffer}");
+    assert!(buffer.contains("+alpha unstaged"), "{buffer}");
+}
