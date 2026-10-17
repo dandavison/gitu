@@ -682,17 +682,24 @@ impl Screen {
     /// restored, on the row of the screen it was drawn on.
     /// Waits for the rows to be drawn as far as that row, so the cursor is on
     /// it when the user has control again. Where it is past the first
-    /// screenfuls this waits for the whole render.
+    /// screenfuls this waits for the whole render. A row the rebuild no longer
+    /// has, such as the last file once it is hidden, leaves the cursor on the
+    /// row before it.
     pub(crate) fn refresh_keeping_position(&mut self) -> Res<()> {
         let was_on = diff_position(&self.get_selected_item().data);
         let was_at = self.cursor_row();
         self.refresh()?;
 
-        if let Some(position) = was_on {
-            while !self.select_at_row(position, was_at) && self.is_drawing() {
-                if !self.finish()? {
-                    std::thread::sleep(Duration::from_millis(10));
-                }
+        let Some(position) = was_on else {
+            return Ok(());
+        };
+        while !self.select_at_row(position, was_at) {
+            if !self.is_drawing() {
+                self.select_before_row(position, was_at);
+                break;
+            }
+            if !self.finish()? {
+                std::thread::sleep(Duration::from_millis(10));
             }
         }
         Ok(())
@@ -701,9 +708,25 @@ impl Screen {
     /// Selects the row at `position` in the patch, drawn on row `row` of the
     /// screen as far as the content allows, and says whether there is one.
     fn select_at_row(&mut self, position: DiffPosition, row: Option<usize>) -> bool {
-        if !self.select_matching_in_view(|data| diff_position(data) == Some(position)) {
+        let item_i = self.find_matching(|data| diff_position(data) == Some(position));
+        self.select_on_row(item_i, row)
+    }
+
+    /// As [`Self::select_at_row`], for the last row before `position`.
+    fn select_before_row(&mut self, position: DiffPosition, row: Option<usize>) -> bool {
+        let item_i = self.rfind_item(|item| {
+            !item.unselectable && diff_position(&item.data).is_some_and(|at| at < position)
+        });
+        self.select_on_row(item_i, row)
+    }
+
+    fn select_on_row(&mut self, item_i: Option<usize>, row: Option<usize>) -> bool {
+        let Some(item_i) = item_i else {
             return false;
-        }
+        };
+        self.cursor = item_i;
+        self.scroll_fit_end();
+        self.scroll_fit_start();
         if let Some(row) = row {
             let at_cursor = Scroll {
                 item_anchor: self.cursor,
