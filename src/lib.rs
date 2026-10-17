@@ -176,6 +176,7 @@ fn paged(input: impl io::Read, git_argv: Option<Vec<String>>, limit: u64) -> Res
             text: String::new(),
             truncated: false,
             git_argv,
+            dir: None,
         });
     }
 
@@ -184,6 +185,7 @@ fn paged(input: impl io::Read, git_argv: Option<Vec<String>>, limit: u64) -> Res
         text: input.text,
         truncated: input.truncated,
         git_argv,
+        dir: None,
     })
 }
 

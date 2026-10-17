@@ -106,6 +106,20 @@ impl TestContext {
         self.init_app_paged_at(path, paged)
     }
 
+    /// [`Self::init_app_as_pager_of`], with `cmd` run in `dir`, a directory of
+    /// the repository.
+    pub fn init_app_as_pager_of_in(&mut self, dir: PathBuf, cmd: &[&str]) -> App {
+        let text = crate::tests::helpers::run(&dir, cmd);
+        let paged = Paged {
+            dir: Some(dir),
+            ..self.piped(
+                text,
+                Some(cmd.iter().map(|arg| (*arg).to_owned()).collect()),
+            )
+        };
+        self.init_app_paged(paged)
+    }
+
     /// [`Self::init_app_as_pager_of`], drawing the first screen while the rest
     /// is still being drawn, as gitu does outside tests.
     pub fn init_app_streaming_as_pager_of(&mut self, cmd: &[&str]) -> App {
@@ -159,6 +173,7 @@ impl TestContext {
             text: input.text,
             truncated: input.truncated,
             git_argv,
+            dir: None,
         }
     }
 

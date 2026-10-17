@@ -22,13 +22,16 @@ use crate::{
 };
 use git2::{Oid, Repository};
 use regex::Regex;
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, path::PathBuf, rc::Rc, sync::Arc};
 
 /// What git handed gitu as its pager: its output, and the argv of the command
 /// that produced it where gitu could find it.
 pub struct Paged {
     pub text: String,
     pub git_argv: Option<Vec<String>>,
+    /// The directory git ran the command in, where its paths are relative to.
+    /// `None` is the repository's root.
+    pub dir: Option<PathBuf>,
     /// Whether reading the input stopped at the byte limit rather than at its
     /// end (see [`crate::capped_input::Capped`]).
     pub truncated: bool,
@@ -123,6 +126,7 @@ fn live(
         Paged {
             text: String::new(),
             git_argv: Some(git_argv),
+            dir: None,
             truncated: false,
         },
     )
@@ -471,6 +475,7 @@ mod tests {
         Paged {
             text: text.to_owned(),
             git_argv,
+            dir: None,
             truncated: false,
         }
     }

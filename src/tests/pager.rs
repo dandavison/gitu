@@ -2026,3 +2026,20 @@ fn a_view_opening_folded_starts_on_its_first_file() {
         ctx.redact_buffer()
     );
 }
+
+/// A path in the command is relative to where git ran it.
+#[test]
+fn a_command_run_in_a_subdirectory_is_run_there_again() {
+    let mut ctx = setup_clone!();
+    fs::create_dir(ctx.dir.join("sub")).unwrap();
+    commit(&ctx.dir, "sub/lib.rs", "sub\n");
+    commit(&ctx.dir, "lib.rs", "top\n");
+    fs::write(ctx.dir.join("sub/lib.rs"), "sub changed\n").unwrap();
+    fs::write(ctx.dir.join("lib.rs"), "top changed\n").unwrap();
+
+    ctx.init_app_as_pager_of_in(ctx.dir.join("sub"), &["git", "diff", "--", "lib.rs"]);
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("sub changed"), "{buffer}");
+    assert!(!buffer.contains("top changed"), "{buffer}");
+}
