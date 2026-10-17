@@ -110,8 +110,9 @@ impl TestContext {
     /// the repository.
     pub fn init_app_as_pager_of_in(&mut self, dir: PathBuf, cmd: &[&str]) -> App {
         let text = crate::tests::helpers::run(&dir, cmd);
+        let prefix = dir.strip_prefix(&self.dir).unwrap().to_str().unwrap();
         let paged = Paged {
-            dir: Some(dir),
+            prefix: format!("{prefix}/"),
             ..self.piped(
                 text,
                 Some(cmd.iter().map(|arg| (*arg).to_owned()).collect()),
@@ -173,7 +174,7 @@ impl TestContext {
             text: input.text,
             truncated: input.truncated,
             git_argv,
-            dir: None,
+            prefix: String::new(),
         }
     }
 

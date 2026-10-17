@@ -51,6 +51,10 @@ pub(crate) struct GitCommand {
     /// Where the subcommand sits in `argv`. What precedes it is git's own
     /// (`-c k=v`, `--git-dir=…`) and has to stay in front of it.
     subcommand: usize,
+    /// Where git ran it, relative to the repository's root, as git's
+    /// `GIT_PREFIX` says: empty at the root, else ending in `/`. Its paths are
+    /// relative to there.
+    prefix: String,
 }
 
 impl GitCommand {
@@ -59,7 +63,20 @@ impl GitCommand {
         let subcommand = subcommand_at(&argv)?;
         SUBCOMMANDS
             .contains(&argv[subcommand].as_str())
-            .then_some(Self { argv, subcommand })
+            .then_some(Self {
+                argv,
+                subcommand,
+                prefix: String::new(),
+            })
+    }
+
+    /// The same command run in `prefix` (see [`Self::prefix`]).
+    pub(crate) fn run_in(self, prefix: String) -> Self {
+        Self { prefix, ..self }
+    }
+
+    pub(crate) fn prefix(&self) -> &str {
+        &self.prefix
     }
 
     /// What the patch is a diff of, which is what decides whether staging or
@@ -120,6 +137,7 @@ impl GitCommand {
         Self {
             argv,
             subcommand: self.subcommand,
+            prefix: self.prefix.clone(),
         }
     }
 
@@ -180,6 +198,7 @@ impl GitCommand {
                 .chain(rest.iter().cloned())
                 .collect(),
             subcommand: self.subcommand,
+            prefix: self.prefix.clone(),
         })
     }
 
@@ -187,7 +206,9 @@ impl GitCommand {
     /// [`pattern_of`]). What follows `--` is pathspecs; a command that names
     /// none limits nothing.
     pub(crate) fn file_patterns(&self) -> Vec<String> {
-        self.pathspecs().map(pattern_of).collect()
+        self.pathspecs()
+            .map(|pathspec| pattern_of(pathspec, &self.prefix))
+            .collect()
     }
 
     /// The same command asking for these paths in place of whatever it asked
@@ -207,6 +228,7 @@ impl GitCommand {
         Self {
             argv,
             subcommand: self.subcommand,
+            prefix: self.prefix.clone(),
         }
     }
 
@@ -257,16 +279,21 @@ fn pathspec_of(pattern: &str) -> String {
 }
 
 /// The pattern a pathspec came from, so that a command's paths can be offered
-/// back for editing. A pathspec gitu did not write is shown as it is.
-fn pattern_of(pathspec: &str) -> String {
+/// back for editing. A pathspec of git's own is relative to `prefix`, where git
+/// ran, and a pattern to the root, where the diff's paths are; one with magic
+/// gitu does not write is shown as it is.
+fn pattern_of(pathspec: &str, prefix: &str) -> String {
     if let Some(glob) = pathspec.strip_prefix(":(top,exclude)") {
         return format!("!{glob}");
     }
+    if let Some(glob) = pathspec.strip_prefix(":(top)") {
+        return glob.to_owned();
+    }
+    if pathspec.starts_with(':') {
+        return pathspec.to_owned();
+    }
 
-    pathspec
-        .strip_prefix(":(top)")
-        .unwrap_or(pathspec)
-        .to_owned()
+    format!("{prefix}{pathspec}")
 }
 
 /// The pattern that excludes one file and nothing else. A path holding

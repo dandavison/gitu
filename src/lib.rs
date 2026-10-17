@@ -38,6 +38,7 @@ use git2::Repository;
 use items::Item;
 use ops::Action;
 use std::{
+    env,
     io::{self, IsTerminal},
     path::{Path, PathBuf},
     process::Command,
@@ -176,7 +177,7 @@ fn paged(input: impl io::Read, git_argv: Option<Vec<String>>, limit: u64) -> Res
             text: String::new(),
             truncated: false,
             git_argv,
-            dir: None,
+            prefix: command_prefix(),
         });
     }
 
@@ -185,7 +186,22 @@ fn paged(input: impl io::Read, git_argv: Option<Vec<String>>, limit: u64) -> Res
         text: input.text,
         truncated: input.truncated,
         git_argv,
-        dir: None,
+        prefix: String::new(),
+    })
+}
+
+/// Where git ran the command it is paging (see [`GitCommand::prefix`]). git
+/// runs its pager from the repository's root and says in `GIT_PREFIX` where it
+/// was run; in a shell pipeline, gitu runs where git did.
+fn command_prefix() -> String {
+    env::var("GIT_PREFIX").unwrap_or_else(|_| {
+        Command::new("git")
+            .args(["rev-parse", "--show-prefix"])
+            .output()
+            .ok()
+            .and_then(|output| String::from_utf8(output.stdout).ok())
+            .map(|prefix| prefix.trim_end().to_owned())
+            .unwrap_or_default()
     })
 }
 
