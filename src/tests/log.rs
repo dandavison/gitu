@@ -406,3 +406,26 @@ fn a_log_of_patches_drawn_without_line_records_is_its_commits() {
     assert_eq!(commits, 2);
     assert!(ctx.redact_buffer().contains("+beta"));
 }
+
+/// shift+tab folds a log of patches one level further out each time: its
+/// files, then its commits, and then opens it all again.
+#[test]
+fn folding_everything_in_a_log_of_patches_cycles_through_its_levels() {
+    let mut ctx = setup_clone!();
+    let mut app = log_of_patches(&mut ctx);
+
+    ctx.update(&mut app, keys("<backtab>"));
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("add b.rs"), "{buffer}");
+    assert!(buffer.contains("b.rs"), "{buffer}");
+    assert!(!buffer.contains("+beta"), "{buffer}");
+
+    ctx.update(&mut app, keys("<backtab>"));
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("commit "), "{buffer}");
+    assert!(!buffer.contains("b.rs"), "{buffer}");
+
+    ctx.update(&mut app, keys("<backtab>"));
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("+alpha changed"), "{buffer}");
+}
