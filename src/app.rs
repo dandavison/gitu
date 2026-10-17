@@ -136,10 +136,6 @@ impl App {
                 let todo = RebaseTodo::read(&repo, file)?;
                 vec![rebase_todo_screen(&config, &repo, params.clone(), todo)?]
             }
-            // `completion` prints its script and exits in `main`, before the app is ever built.
-            Some(cli::Commands::Completion { .. }) => {
-                unreachable!("completion is handled before the app starts")
-            }
             None => vec![screen::status::create(
                 Arc::clone(&config),
                 Rc::clone(&repo),
