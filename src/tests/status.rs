@@ -77,3 +77,75 @@ fn selected_file(app: &crate::app::App) -> (DiffType, String) {
         data => panic!("not a file: {data:?}"),
     }
 }
+
+/// A file a refresh brings that the view has not had before starts folded, as
+/// the view's first files did.
+#[test]
+fn a_file_new_to_a_refresh_starts_folded() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "a.rs", "alpha\n");
+    commit(&ctx.dir, "b.rs", "beta\n");
+    fs::write(ctx.dir.join("a.rs"), "alpha changed\n").unwrap();
+    let mut app = ctx.init_app();
+
+    fs::write(ctx.dir.join("b.rs"), "beta changed\n").unwrap();
+    ctx.update(&mut app, keys(REFRESH));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("b.rs"), "{buffer}");
+    assert!(!buffer.contains("beta changed"), "{buffer}");
+}
+
+#[test]
+fn a_file_first_staged_is_folded_as_it_was_unstaged() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "a.rs", "alpha\n");
+    commit(&ctx.dir, "b.rs", "beta\n");
+    fs::write(ctx.dir.join("a.rs"), "alpha changed\n").unwrap();
+    fs::write(ctx.dir.join("b.rs"), "beta changed\n").unwrap();
+    ctx.config().general.status_cursor_on_changes = true;
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("<tab>"));
+
+    run(&ctx.dir, &["git", "add", "a.rs", "b.rs"]);
+    ctx.update(&mut app, keys(REFRESH));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("Staged changes"), "{buffer}");
+    assert!(buffer.contains("alpha changed"), "{buffer}");
+    assert!(buffer.contains("b.rs"), "{buffer}");
+    assert!(!buffer.contains("beta changed"), "{buffer}");
+}
+
+#[test]
+fn a_folded_file_stays_folded_when_it_changes() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "a.rs", "alpha\n");
+    fs::write(ctx.dir.join("a.rs"), "alpha changed\n").unwrap();
+    let mut app = ctx.init_app();
+    assert!(!ctx.redact_buffer().contains("alpha changed"));
+
+    fs::write(ctx.dir.join("a.rs"), "alpha changed again\n").unwrap();
+    ctx.update(&mut app, keys(REFRESH));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("a.rs"), "{buffer}");
+    assert!(!buffer.contains("alpha changed"), "{buffer}");
+}
+
+#[test]
+fn an_unfolded_file_stays_unfolded_when_it_changes() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "a.rs", "alpha\n");
+    fs::write(ctx.dir.join("a.rs"), "alpha changed\n").unwrap();
+    ctx.config().general.status_cursor_on_changes = true;
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("<tab>"));
+    assert!(ctx.redact_buffer().contains("alpha changed"));
+
+    fs::write(ctx.dir.join("a.rs"), "alpha changed again\n").unwrap();
+    ctx.update(&mut app, keys(REFRESH));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("alpha changed again"), "{buffer}");
+}
