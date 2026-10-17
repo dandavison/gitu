@@ -55,7 +55,6 @@ pub(crate) fn create(
         }),
     )?;
     screen.git_command = git_command;
-    screen.folds_new_items = true;
     // With its files folded there is no hunk to start on; the first file is
     // where the one wanted is chosen from.
     if !matches!(screen.get_selected_item().data, ItemData::Hunk { .. }) {
@@ -339,7 +338,7 @@ fn built(
                 // in view. One still arriving is taken not to fit.
                 let fits = snapshot.done && drawn.lines().count() <= params.size.1 as usize;
                 let fold = config.general.start_folded && diff.file_diffs.len() > 1 && !fits;
-                let drawn = items::identified_by_paths(items::drawn_diff_items(
+                let drawn = items::drawn_diff_items(
                     config,
                     &diff,
                     snapshot.rendered.as_deref(),
@@ -347,7 +346,7 @@ fn built(
                     0,
                     *stat || fold,
                     None,
-                ));
+                );
                 if let Some(preamble) = preamble(&snapshot.text, &diff.text) {
                     items.extend(items::plain_rows(&render(config, params, &preamble)));
                 }

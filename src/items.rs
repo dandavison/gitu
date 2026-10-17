@@ -543,7 +543,7 @@ fn rendered_diff_items(
 
     let mut items = Vec::new();
     for (file_i, file_diff) in diff.file_diffs.iter().enumerate() {
-        let file_hash = hash(diff.file_diff_header(file_i));
+        let file_hash = file_id(diff, file_i);
         // The renderer's file header, if it drew one: the row naming the file
         // is the selectable, collapsible File anchor. Decoration above it (a
         // box's top, an overline) stays above it, and the rest nests under it,
@@ -689,7 +689,7 @@ fn create_builtin_diff_items(
         .enumerate()
         .flat_map(move |(file_i, file_diff)| {
             iter::once(Item {
-                id: hash(diff.file_diff_header(file_i)),
+                id: file_id(diff, file_i),
                 default_collapsed,
                 depth,
                 data: ItemData::Delta {
@@ -1245,30 +1245,14 @@ pub(crate) fn blank_line() -> Item {
     }
 }
 
-/// Each file's items identified as the same file in a rebuild of the diff: by
-/// its paths and which of the files with those paths it is, not by its whole
-/// header, whose `index` line changes as parts of it are staged.
-pub(crate) fn identified_by_paths(mut items: Vec<Item>) -> Vec<Item> {
-    let ids: HashMap<ItemId, ItemId> = items
-        .iter()
-        .filter_map(|item| match &item.data {
-            ItemData::Delta { diff, file_i, .. } => Some((item.id, file_id(diff, *file_i))),
-            _ => None,
-        })
-        .collect();
-    for item in &mut items {
-        if let Some(&id) = ids.get(&item.id) {
-            item.id = id;
-        }
-    }
-    items
-}
-
+/// A file identified as the same file in a rebuild of the diff: by its paths
+/// and which of the files with those paths it is, not by its whole header,
+/// whose `index` line changes as the file is edited or parts of it are staged.
 fn file_id(diff: &Diff, file_i: usize) -> ItemId {
     file_id_as(diff, file_i, &diff.diff_type)
 }
 
-/// The id [`identified_by_paths`] gives the file in a diff of `diff_type`.
+/// The id [`file_id`] gives the file in a diff of `diff_type`.
 pub(crate) fn file_id_as(diff: &Diff, file_i: usize, diff_type: &DiffType) -> ItemId {
     let paths = |file_i| diff.file_diff_header(file_i).lines().next().unwrap_or("");
     let earlier = (0..file_i).filter(|&i| paths(i) == paths(file_i)).count();

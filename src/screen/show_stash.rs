@@ -48,18 +48,26 @@ pub(crate) fn create(
 
             let push_diff_section = |out: &mut Vec<Item>, header: SectionHeader, diff| {
                 let diff = Rc::new(diff);
+                let section = hash(["stash_diff_section", &commit.hash, &format!("{header:?}")]);
                 out.extend([
                     items::blank_line(),
                     Item {
-                        id: hash(["stash_diff_section", &commit.hash, &format!("{header:?}")]),
+                        id: section,
                         depth: 0,
                         data: ItemData::Header(header),
                         ..Default::default()
                     },
                 ]);
-                out.extend(items::create_diff_items(
-                    &config, &params, &diff, 1, false, None,
-                ));
+                // The sections' diffs are all tree to tree, so without the
+                // section a file's id would be the same in each.
+                out.extend(
+                    items::create_diff_items(&config, &params, &diff, 1, false, None)
+                        .into_iter()
+                        .map(|item| Item {
+                            id: hash((section, item.id)),
+                            ..item
+                        }),
+                );
             };
 
             if !staged.file_diffs.is_empty() {

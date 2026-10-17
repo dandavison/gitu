@@ -143,7 +143,6 @@ pub(crate) fn create(
     )?;
 
     screen.is_status = true;
-    screen.folds_new_items = true;
     // Unstaged files come before staged ones, and are the only other files here.
     if screen.config.general.status_cursor_on_changes
         && let Some(file) = screen.find_item(|item| matches!(item.data, ItemData::Delta { .. }))
@@ -225,11 +224,9 @@ fn create_status_section_items<'a>(
     }
     .into_iter()
     .chain(
-        items::identified_by_paths(items::create_diff_items(
-            config, params, diff, 1, true, None,
-        ))
-        .into_iter()
-        .map(folded_as_in_other_section),
+        items::create_diff_items(config, params, diff, 1, true, None)
+            .into_iter()
+            .map(folded_as_in_other_section),
     )
 }
 

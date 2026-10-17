@@ -212,10 +212,6 @@ pub(crate) struct Screen {
     /// Every item this screen has had. Only an item not seen before starts
     /// folded by default; whether one seen before is folded is the user's.
     seen: HashSet<ItemId>,
-    /// Whether an item a rebuild brings that the screen has not had before
-    /// starts folded as the screen's first items do. Pager views do; the
-    /// status screen shows such an item unfolded.
-    pub(crate) folds_new_items: bool,
     search: Option<Search>,
 }
 
@@ -266,12 +262,11 @@ impl Screen {
             item_heights: RefCell::new(vec![]),
             collapsed,
             seen: HashSet::new(),
-            folds_new_items: false,
             search: None,
         };
 
         let Items { now, later } = (screen.refresh_items)(screen.params())?;
-        screen.take_items(now, true);
+        screen.take_items(now);
         screen.later = later;
 
         screen.invalidate();
@@ -630,7 +625,7 @@ impl Screen {
         // are no longer the same lines.
         self.anchor = None;
         let Items { now, later } = (self.refresh_items)(self.params())?;
-        self.take_items(now, self.folds_new_items);
+        self.take_items(now);
         self.later = later;
 
         self.invalidate();
@@ -671,7 +666,7 @@ impl Screen {
             self.later = None;
         }
         let items = items?;
-        self.take_items(items, true);
+        self.take_items(items);
 
         self.invalidate();
         self.update_cursor();
@@ -780,22 +775,19 @@ impl Screen {
     }
 
     /// Make `items` the screen's, each folded as the user left it or, one the
-    /// screen has not had before and `fold_new` says may be, as it says it
-    /// starts. This is decided before anything is drawn, so nothing is shown
-    /// folded otherwise than it stays.
-    fn take_items(&mut self, items: Vec<Item>, fold_new: bool) {
-        if fold_new {
-            let folded: Vec<ItemId> = items
-                .iter()
-                .filter(|item| !self.seen.contains(&item.id))
-                .filter(|item| match item.folds_like {
-                    Some(like) if self.seen.contains(&like) => self.collapsed.contains(&like),
-                    _ => item.default_collapsed,
-                })
-                .map(|item| item.id)
-                .collect();
-            self.collapsed.extend(folded);
-        }
+    /// screen has not had before, as it says it starts. This is decided before
+    /// anything is drawn, so nothing is shown folded otherwise than it stays.
+    fn take_items(&mut self, items: Vec<Item>) {
+        let folded: Vec<ItemId> = items
+            .iter()
+            .filter(|item| !self.seen.contains(&item.id))
+            .filter(|item| match item.folds_like {
+                Some(like) if self.seen.contains(&like) => self.collapsed.contains(&like),
+                _ => item.default_collapsed,
+            })
+            .map(|item| item.id)
+            .collect();
+        self.collapsed.extend(folded);
         self.seen.extend(items.iter().map(|item| item.id));
         self.items = fill_empty(items);
     }
