@@ -195,21 +195,6 @@ impl<'a> Parser<'a> {
     /// Parses a diff file and returns a vector of Diff structures.
     ///
     /// The returned ranges refer to the original input bytes.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// let input = "diff --git a/file1.txt b/file2.txt\n\
-    /// index 0000000..1111111 100644\n\
-    /// --- a/file1.txt\n\
-    /// +++ b/file2.txt\n\
-    /// @@ -1,2 +1,2 @@\n\
-    /// -foo\n\
-    /// +bar\n";
-    ///
-    /// let diff = gitu::gitu_diff::Parser::new(input).parse_diff().unwrap();
-    /// assert_eq!(diff[0].header.range, 0..97);
-    /// ```
     pub fn parse_diff<'b>(&'b mut self) -> Result<'b, Vec<FileDiff>> {
         self.parse(false)
     }
@@ -823,6 +808,19 @@ mod tests {
         let mut parser = Parser::new("");
         let diffs = parser.parse_diff().unwrap();
         assert!(diffs.is_empty(), "Expected empty vector for empty input");
+    }
+
+    #[test]
+    fn the_file_header_range_ends_where_its_first_hunk_begins() {
+        let input = "diff --git a/file1.txt b/file2.txt\n\
+            index 0000000..1111111 100644\n\
+            --- a/file1.txt\n\
+            +++ b/file2.txt\n\
+            @@ -1,2 +1,2 @@\n\
+            -foo\n\
+            +bar\n";
+        let diff = Parser::new(input).parse_diff().unwrap();
+        assert_eq!(diff[0].header.range, 0..97);
     }
 
     #[test]
