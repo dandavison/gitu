@@ -458,6 +458,7 @@ pub(crate) fn init_test_config() -> Res<Config> {
     general.always_show_help.enabled = false;
     general.refresh_on_file_change.enabled = false;
     general.status_cursor_on_changes = false;
+    general.diff_renderer.command = crate::tests::helpers::ui::renderer();
 
     style.search_match = StyleConfigEntry {
         fg: None,

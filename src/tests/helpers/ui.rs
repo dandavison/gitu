@@ -69,8 +69,7 @@ impl TestContext {
             events: vec![],
         };
         let repo_ctx = RepoTestContext::setup_clone(test_name);
-        let mut config = config::init_test_config().unwrap();
-        config.general.diff_renderer.command = renderer();
+        let config = config::init_test_config().unwrap();
         Self {
             term,
             dir: repo_ctx.dir,
@@ -320,7 +319,7 @@ impl TestContext {
 /// The renderer tests draw through, as `delta --gitu` draws through delta:
 /// [`annotating_renderer`], or with `GITU_TEST_RENDERER=delta` the `delta` on
 /// `PATH`, set up to write the same bytes.
-fn renderer() -> Vec<String> {
+pub(crate) fn renderer() -> Vec<String> {
     match std::env::var("GITU_TEST_RENDERER").as_deref() {
         Err(_) => annotating_renderer(),
         Ok("delta") => [
