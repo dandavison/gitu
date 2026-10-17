@@ -6,14 +6,14 @@ expression: ctx.redact_buffer()
  Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Unstaged changes (1)                                                           |
- modified   testfile                                                            |
+ testfile                                                                       |
  @@ -1,2 +1,2 @@                                                                |
   test                                                                          |
  -testtest                                                                      |
 ▌+moretest                                                                      |
                                                                                 |
  Staged changes (1)                                                             |
- added      testfile…                                                           |
+ added: testfile…                                                               |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                       Author Name __ |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 1a2bc37441f14c16
+styles_hash: b475cff3792351d0

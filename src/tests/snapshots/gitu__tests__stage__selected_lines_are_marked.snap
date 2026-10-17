@@ -6,7 +6,7 @@ expression: ctx.redact_buffer()
  Your branch is ahead of 'origin/main' by 1 commit(s).                          |
                                                                                 |
  Unstaged changes (1)                                                           |
- modified   firstfile                                                           |
+ firstfile                                                                      |
  @@ -1,2 +1,2 @@                                                                |
  -testing                                                                       |
  -testtest                                                                      |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 65ce56e430d2c0ac
+styles_hash: 51e933dc7e16cfcd

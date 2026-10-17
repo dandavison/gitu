@@ -6,7 +6,7 @@ expression: ctx.redact_buffer()
  Your branch is ahead of 'origin/main' by 1 commit(s).                          |
                                                                                 |
  Staged changes (1)                                                             |
-▌deleted    to-delete…                                                          |
+▌removed: to-delete…                                                            |
                                                                                 |
  Recent commits                                                                 |
  0341425 main add to-delete                                      Author Name __ |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git add to-delete                                                             |
-styles_hash: f6d3f6ef453ef313
+styles_hash: 7c57af7d987c5dac

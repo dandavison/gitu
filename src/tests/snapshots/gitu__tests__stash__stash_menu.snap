@@ -9,7 +9,7 @@ expression: ctx.redact_buffer()
  file-two                                                                       |
                                                                                 |
  Staged changes (1)                                                             |
- added      file-one…                                                           |
+ added: file-one…                                                               |
                                                                                 |
  Recent commits                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  p     pop                                                                      |
  k     drop                                                                     |
  q/esc Quit/Close                                                               |
-styles_hash: 2d1df45600e515ea
+styles_hash: 377ad9bf69d48a20

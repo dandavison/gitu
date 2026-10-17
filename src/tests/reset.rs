@@ -2,7 +2,7 @@ use super::*;
 
 fn setup(ctx: TestContext) -> TestContext {
     commit(&ctx.dir, "unwanted-file", "");
-    with_renderer(ctx)
+    ctx
 }
 
 #[test]

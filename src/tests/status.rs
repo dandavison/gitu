@@ -5,7 +5,7 @@ use crate::git::diff::DiffType;
 
 #[test]
 fn status_from_the_log_view() {
-    let mut ctx = with_renderer(setup_clone!());
+    let mut ctx = setup_clone!();
     commit(&ctx.dir, "firstfile", "testing\n");
     fs::write(ctx.dir.join("firstfile"), "changed\n").unwrap();
 

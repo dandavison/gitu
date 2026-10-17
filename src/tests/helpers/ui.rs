@@ -8,7 +8,7 @@ use crate::{
     key_parser::parse_test_keys,
     screen::pager::Paged,
     term::{Term, TermBackend, TestBuffer},
-    tests::helpers::RepoTestContext,
+    tests::{helpers::RepoTestContext, pager::annotating_renderer},
 };
 use crossterm::event::{Event, KeyEvent, KeyModifiers, MouseButton, MouseEventKind};
 use git2::Repository;
@@ -69,13 +69,15 @@ impl TestContext {
             events: vec![],
         };
         let repo_ctx = RepoTestContext::setup_clone(test_name);
+        let mut config = config::init_test_config().unwrap();
+        config.general.diff_renderer.command = renderer();
         Self {
             term,
             dir: repo_ctx.dir,
             remote_dir: repo_ctx.remote_dir,
             size,
             debug: true,
-            config: Arc::new(config::init_test_config().unwrap()),
+            config: Arc::new(config),
         }
     }
 
@@ -312,6 +314,41 @@ impl TestContext {
             })
             .collect::<Vec<_>>()
             .join("\n")
+    }
+}
+
+/// The renderer tests draw through, as `delta --gitu` draws through delta:
+/// [`annotating_renderer`], or with `GITU_TEST_RENDERER=delta` the `delta` on
+/// `PATH`, set up to write the same bytes.
+fn renderer() -> Vec<String> {
+    match std::env::var("GITU_TEST_RENDERER").as_deref() {
+        Err(_) => annotating_renderer(),
+        Ok("delta") => [
+            "delta",
+            "--no-gitconfig",
+            "--detect-dark-light=never",
+            "--keep-plus-minus-markers",
+            "--commit-regex=^(▸|commit )",
+            "--commit-style=raw",
+            "--commit-decoration-style=none",
+            "--file-style=normal",
+            "--file-decoration-style=none",
+            "--hunk-header-style=raw",
+            "--hunk-header-decoration-style=none",
+            "--minus-style=normal",
+            "--minus-emph-style=normal",
+            "--minus-empty-line-marker-style=normal",
+            "--plus-style=normal",
+            "--plus-emph-style=normal",
+            "--plus-empty-line-marker-style=normal",
+            "--zero-style=normal",
+            "--whitespace-error-style=normal",
+            "--syntax-theme=none",
+            "--tabs=0",
+        ]
+        .map(String::from)
+        .to_vec(),
+        Ok(other) => panic!("GITU_TEST_RENDERER={other}: expected delta or unset"),
     }
 }
 

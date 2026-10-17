@@ -8,8 +8,6 @@ expression: ctx.redact_buffer()
  Unstaged changes (1)                                                           |
 ▌modified   höhöhö                                                              |
 ▌@@ -1 +1 @@                                                                    |
-▌-hehehe                                                                        |
-▌+hahaha                                                                        |
                                                                                 |
  Recent commits                                                                 |
  8efa733 main add höhöhö                                         Author Name __ |
@@ -22,4 +20,6 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 652a3fe56d70a1ec
+                                                                                |
+                                                                                |
+styles_hash: d919f0e2e3221781

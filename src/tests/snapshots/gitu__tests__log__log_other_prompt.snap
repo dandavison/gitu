@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  Author: Author Name <author@email.com>                                         |
 ────────────────────────────────────────────────────────────────────────────────|
 ? Log rev (default 6c08cf78a4544ae4dda8e6161a61070867c60246): › █               |
-styles_hash: 3f5bd825b42d60b4
+styles_hash: 80103a1bb469d3aa

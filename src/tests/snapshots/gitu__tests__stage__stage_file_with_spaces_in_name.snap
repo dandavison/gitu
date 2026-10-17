@@ -6,7 +6,7 @@ expression: ctx.redact_buffer()
  Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
 ▌Staged changes (1)                                                             |
-▌added      file with space.txt                                                 |
+▌added: file with space.txt                                                     |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                       Author Name __ |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git add file with space.txt                                                   |
-styles_hash: 64956c9840a901b0
+styles_hash: 7e1a4af646a3c588

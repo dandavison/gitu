@@ -192,16 +192,9 @@ fn recent_commits_with_no_limit() {
     snapshot!(ctx, "");
 }
 
-/// Draw through a renderer that marks commits, as delta does: its commit records
-/// are what make the log's commits cursor targets.
-pub(crate) fn with_renderer(mut ctx: TestContext) -> TestContext {
-    ctx.config().general.diff_renderer.command = pager::osc_1717_passthrough();
-    ctx
-}
-
 #[test]
 fn log() {
-    let ctx = with_renderer(setup_clone!());
+    let ctx = setup_clone!();
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     run(&ctx.dir, &["git", "tag", "-am", ".", "annotated"]);
     commit(&ctx.dir, "secondfile", "testing\ntesttest\n");
@@ -211,7 +204,7 @@ fn log() {
 
 #[test]
 fn show() {
-    let ctx = with_renderer(setup_clone!());
+    let ctx = setup_clone!();
     commit(&ctx.dir, "firstfile", "This should be visible\n");
     snapshot!(ctx, "ll<enter>");
 }
@@ -311,19 +304,19 @@ fn revert_abort() {
 
 #[test]
 fn revert_menu() {
-    let ctx = with_renderer(setup_clone!());
+    let ctx = setup_clone!();
     snapshot!(ctx, "llV");
 }
 
 #[test]
 fn revert_commit_prompt() {
-    let ctx = with_renderer(setup_clone!());
+    let ctx = setup_clone!();
     snapshot!(ctx, "llVV");
 }
 
 #[test]
 fn revert_commit() {
-    let ctx = with_renderer(setup_clone!());
+    let ctx = setup_clone!();
     snapshot!(ctx, "llV-EV<enter>");
 }
 

@@ -9,17 +9,17 @@ expression: ctx.redact_buffer()
      On main: firststash                                                        |
                                                                                 |
  Staged changes (1)                                                             |
- added      staged.txt                                                          |
+ added: staged.txt                                                              |
 ▌@@ -0,0 +1 @@                                                                  |
 ▌+staged                                                                        |
                                                                                 |
  Unstaged changes (1)                                                           |
- modified   unstaged.txt                                                        |
+ unstaged.txt                                                                   |
  @@ -0,0 +1 @@                                                                  |
  +unstaged                                                                      |
                                                                                 |
  Untracked files (1)                                                            |
- added      untracked.txt                                                       |
+ added: untracked.txt                                                           |
  @@ -0,0 +1 @@                                                                  |
  +untracked                                                                     |
-styles_hash: 836321733f1b4060
+styles_hash: 9a55adf2d2c46c5

@@ -9,7 +9,7 @@ expression: ctx.redact_buffer()
  file-two                                                                       |
                                                                                 |
  Staged changes (1)                                                             |
- added      file-one…                                                           |
+ added: file-one…                                                               |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                       Author Name __ |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 ? Stash message: › █                                                            |
-styles_hash: 4eeaf5493a814da2
+styles_hash: f703a3849845106c

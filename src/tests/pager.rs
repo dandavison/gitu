@@ -845,7 +845,6 @@ fn rendered_context_lines_are_visited_when_configured() {
     commit(&ctx.dir, "firstfile", "one\ntwo\nthree\n");
     fs::write(ctx.dir.join("firstfile"), "one\nCHANGED\nthree\n").unwrap();
     ctx.config().general.visit_context_lines = true;
-    ctx.config().general.diff_renderer.command = osc_1717_passthrough();
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
 
@@ -855,27 +854,43 @@ fn rendered_context_lines_are_visited_when_configured() {
     }
 }
 
-/// A renderer that changes nothing but speaks the protocol, so its rows carry
-/// the metadata that makes them content lines rather than plain text, and marks
-/// each commit as delta does for rows matching `commit-regex = ^(▸|commit )`.
-/// As git's pager it is handed git's colours, which it drops, as delta reads
-/// through them. Only a hunk's lines are content: a commit message's are
-/// indented as context lines are.
-pub(super) fn osc_1717_passthrough() -> Vec<String> {
+/// A renderer that draws as delta does with its styles plain: for the same
+/// input, `delta` with the arguments `GITU_TEST_RENDERER=delta` gives it (in
+/// `helpers/ui.rs`) writes the same bytes. It speaks the protocol, so its rows
+/// carry the metadata that makes them content lines rather than plain text, and
+/// it marks each commit as delta does for rows matching
+/// `commit-regex = ^(▸|commit )`. It draws a file's header as delta does, in
+/// place of git's header rows, and keeps git's colours only off a hunk's lines.
+/// Only a hunk's lines are content: a commit message's are indented as context
+/// lines are.
+pub(super) fn annotating_renderer() -> Vec<String> {
     [
         "awk",
         r#"
-        BEGIN{printf "\033]1717;1\033\\\n"}
-        {gsub(/\033\[[0-9;]*m/,"")}
+        BEGIN{osc="\033]1717;1";st="\033\\";handshake=osc st}
+        {raw=$0;gsub(/\033\[[0-9;]*m/,"");printf "%s",handshake;handshake=""}
         !/^[-+ \\]/{hunk=0}
-        /^(commit|▸) [0-9a-f]+/{printf "\033]1717;1;C;;;%s\033\\%s\n",$2,$0;next}
-        /^\+\+\+ /{file=substr($0,7);print;next}
-        /^--- /{print;next}
-        /^@@ /{o=$2;n=$3;sub(/^-/,"",o);sub(/^\+/,"",n);split(o,a,",");split(n,b,",");old=a[1];new=b[1];hunk=1;print;next}
-        hunk&&/^\+/{printf "\033]1717;1;a;%d;;%s\033\\%s\n",new++,file,$0;next}
-        hunk&&/^-/{printf "\033]1717;1;d;%d;%d;%s\033\\%s\n",new,old++,file,$0;next}
-        hunk&&/^ /{printf "\033]1717;1;c;%d;;%s\033\\%s\n",new++,file,$0;old++;next}
-        {print}
+        header&&/^(@@|diff |(commit|▸) [0-9a-f]+)/{file_header()}
+        /^(commit|▸) [0-9a-f]+/{printf "%s;C;;;%s%s%s\n",osc,$2,st,raw;next}
+        /^diff --git /{file=$0;sub(/^diff --git a\/.* b\//,"",file);label=file;suffix="";header=1;next}
+        /^diff --cc /{file=substr($0,11);label=file;suffix="";header=1;next}
+        /^new file mode /{label="added: " file}
+        /^deleted file mode /{label="removed: " file}
+        /^rename from /{from=substr($0,13)}
+        /^rename to /{label="renamed: " from " ⟶   " file}
+        /^copy from /{from=substr($0,11)}
+        /^copy to /{label="copied: " from " ⟶   " file}
+        /^old mode /{oldmode=$3}
+        /^new mode /{suffix=oldmode=="100644"&&$3=="100755"?" (mode +x)":oldmode=="100755"&&$3=="100644"?" (mode -x)":" (mode " oldmode " ⟶   " $3 ")"}
+        /^Binary files /{suffix=" (binary file)"}
+        header{next}
+        /^@@ /{o=$2;n=$3;sub(/^-/,"",o);sub(/^\+/,"",n);split(o,a,",");split(n,b,",");old=a[1];new=b[1];hunk=1;printf "%s;h;%d;;%s%s%s\n",osc,new,file,st,raw;next}
+        hunk&&/^\+/{printf "%s;a;%d;;%s%s%s\n",osc,new++,file,st,$0;next}
+        hunk&&/^-/{printf "%s;d;%d;%d;%s%s%s\n",osc,new,old++,file,st,$0;next}
+        hunk&&/^ /{printf "%s;c;%d;;%s%s%s\n",osc,new++,file,st,$0;old++;next}
+        {print raw}
+        END{if(header)file_header();printf "%s",handshake}
+        function file_header(){printf "\n%s;f;;;%s%s%s%s\n",osc,file,st,label,suffix;header=0}
         "#,
     ]
     .map(String::from)
@@ -1175,16 +1190,16 @@ fn menu_headings(ctx: &TestContext) -> Vec<String> {
         .collect()
 }
 
-/// [`osc_1717_passthrough`], drawing each hunk header its own way as delta
+/// [`annotating_renderer`], drawing each hunk header its own way as delta
 /// does, and saying so, so that the row gitu folds the hunk on is the
 /// renderer's.
 fn hunk_header_renderer() -> Vec<String> {
-    osc_1717_passthrough()
+    annotating_renderer()
         .into_iter()
         .map(|arg| {
             arg.replace(
-                r#"old=a[1];new=b[1];print;next}"#,
-                r#"old=a[1];new=b[1];printf "\033]1717;1;h;%d;;%s\033\\rendered hunk %d\n",new,file,new;next}"#,
+                r#"%s;h;%d;;%s%s%s\n",osc,new,file,st,raw;next}"#,
+                r#"%s;h;%d;;%srendered hunk %d\n",osc,new,file,st,new;next}"#,
             )
         })
         .collect()
@@ -1235,15 +1250,15 @@ fn a_stat_file_unfolds_under_its_stat_row_not_the_renderers_header() {
     assert!(!buffer.contains("==========="), "{buffer}");
 }
 
-/// [`osc_1717_passthrough`], drawing each file's header its own way, named and
+/// [`annotating_renderer`], drawing each file's header its own way, named and
 /// underlined, as delta does.
 fn file_header_renderer() -> Vec<String> {
-    osc_1717_passthrough()
+    annotating_renderer()
         .into_iter()
         .map(|arg| {
             arg.replace(
-                r#"/^\+\+\+ /{file=substr($0,7);print;next}"#,
-                r#"/^\+\+\+ /{file=substr($0,7);printf "\033]1717;1;f;;;%s\033\\~ %s ~\n\033]1717;1;f;;;%s\033\\===========\n",file,file,file;next}"#,
+                r#"function file_header(){printf "\n%s;f;;;%s%s%s%s\n",osc,file,st,label,suffix;header=0}"#,
+                r#"function file_header(){printf "%s;f;;;%s%s~ %s ~\n%s;f;;;%s%s===========\n",osc,file,st,file,osc,file,st;header=0}"#,
             )
         })
         .collect()
@@ -1377,7 +1392,7 @@ fn a_patch_that_fits_is_printed_however_slow_the_renderer() {
     let mut ctx = setup_clone!();
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
-    ctx.config().general.diff_renderer.command = slow_to_start(osc_1717_passthrough());
+    ctx.config().general.diff_renderer.command = slow_to_start(annotating_renderer());
 
     let mut app = ctx.init_app_streaming_as_pager_of(&["git", "diff"]);
     ctx.term.clear().unwrap();
@@ -1395,10 +1410,10 @@ fn slow_to_start(renderer: Vec<String>) -> Vec<String> {
         .collect()
 }
 
-/// [`osc_1717_passthrough`], drawing its first 80 rows and then pausing for
+/// [`annotating_renderer`], drawing its first 80 rows and then pausing for
 /// three seconds before the rest.
 pub(super) fn pausing_renderer() -> Vec<String> {
-    osc_1717_passthrough()
+    annotating_renderer()
         .into_iter()
         .map(|arg| arg.replace("BEGIN{", "NR==80{fflush(); system(\"sleep 3\")}\nBEGIN{"))
         .collect()
@@ -1670,7 +1685,6 @@ fn a_folded_file_shows_its_stat_row() {
 fn a_folded_file_shows_its_stat_row_whatever_drew_it() {
     let mut ctx = setup_clone!();
     a_replaced_line_and_three_added(&ctx);
-    ctx.config().general.diff_renderer.command = osc_1717_passthrough();
 
     let buffer = folded_to_stat_rows(&mut ctx);
 
@@ -1764,7 +1778,7 @@ fn files_starting_folded_fill_the_first_screen() {
     }
     ctx.config().general.start_folded = true;
     // Draws two files, then all but the last, then the last.
-    ctx.config().general.diff_renderer.command = osc_1717_passthrough()
+    ctx.config().general.diff_renderer.command = annotating_renderer()
         .into_iter()
         .map(|arg| {
             arg.replace(
@@ -1784,7 +1798,7 @@ fn files_starting_folded_fill_the_first_screen() {
 
 #[test]
 fn a_commit_opened_from_the_log_starts_folded_when_asked() {
-    let mut ctx = with_renderer(setup_clone!());
+    let mut ctx = setup_clone!();
     let tall = (1..=30).map(|i| format!("{i}\n")).collect::<String>();
     fs::write(ctx.dir.join("secondfile"), tall).unwrap();
     run(&ctx.dir, &["git", "add", "secondfile"]);
@@ -1864,7 +1878,7 @@ fn an_unfolded_file_stays_unfolded_through_a_slow_rerender() {
     ctx.config().general.start_folded = true;
     let renderer = &mut ctx.config().general.diff_renderer;
     renderer.features = vec!["line-numbers".into()];
-    renderer.command = osc_1717_passthrough()
+    renderer.command = annotating_renderer()
         .into_iter()
         .map(|arg| arg.replace("BEGIN{", "BEGIN{system(\"sleep 1\");"))
         .collect();
@@ -1928,7 +1942,7 @@ fn a_diffstat_is_the_diff_folded_to_stat_rows() {
 fn a_patch_part_drawn_is_shown_as_the_renderer_drew_it() {
     let mut ctx = setup_clone!();
     two_changed_files(&ctx);
-    ctx.config().general.diff_renderer.command = osc_1717_passthrough()
+    ctx.config().general.diff_renderer.command = annotating_renderer()
         .into_iter()
         .map(|arg| arg.replace("BEGIN{", "NR==6{fflush(); system(\"sleep 2\")}\nBEGIN{"))
         .collect();
@@ -1951,7 +1965,7 @@ fn a_patch_part_drawn_is_shown_as_the_renderer_drew_it() {
 fn a_part_drawn_patch_has_only_the_files_drawn_so_far() {
     let mut ctx = setup_clone!();
     two_changed_files(&ctx);
-    ctx.config().general.diff_renderer.command = osc_1717_passthrough()
+    ctx.config().general.diff_renderer.command = annotating_renderer()
         .into_iter()
         .map(|arg| {
             arg.replace(
@@ -2008,7 +2022,7 @@ fn a_patch_that_fits_on_one_screen_starts_unfolded() {
 /// them, ready to unfold the one wanted.
 #[test]
 fn a_view_opening_folded_starts_on_its_first_file() {
-    let mut ctx = with_renderer(setup_clone!());
+    let mut ctx = setup_clone!();
     let tall = (1..=30).map(|i| format!("{i}\n")).collect::<String>();
     fs::write(ctx.dir.join("secondfile"), tall).unwrap();
     run(&ctx.dir, &["git", "add", "secondfile"]);

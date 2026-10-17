@@ -6,7 +6,7 @@ expression: out
  Your branch is ahead of 'origin/main' by 1 commit(s).                          |
                                                                                 |
  Unstaged changes (1)                                                           |
- modified   file-one                                                            |
+ file-one                                                                       |
  @@ -1,3 +1,4 @@                                                                |
 ▌ FOO                                                                           |
  +blahonga                                                                      |
@@ -22,7 +22,7 @@ expression: out
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git apply --reverse --recount                                                 |
-styles_hash: cfc20df181328906
+styles_hash: d4102a219a16f343
 
 [file before]
 blahonga

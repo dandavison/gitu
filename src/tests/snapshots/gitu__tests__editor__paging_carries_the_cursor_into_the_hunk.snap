@@ -20,6 +20,6 @@ expression: ctx.redact_buffer()
  +line 18 (file-2)                                                              |
  +line 19 (file-2)                                                              |
  +line 20 (file-2)                                                              |
- modified   file-3                                                              |
+ file-3                                                                         |
  @@ -0,0 +1,20 @@                                                               |
-styles_hash: d2be434b909a935e
+styles_hash: 58a39647d4cea585

@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  m     mixed                                                                    |
  h     hard                                                                     |
  q/esc Quit/Close                                                               |
-styles_hash: 7e980b5bafa6113a
+styles_hash: 9b5b805a03f1df7c

@@ -31,7 +31,7 @@ fn setup_todo(ctx: TestContext) -> TestContext {
     commit(&ctx.dir, "second-file", "");
     commit(&ctx.dir, "third-file", "");
     // One row per commit, so a commit's row is its summary.
-    with_log_args(with_renderer(ctx), &["--format=▸ %h %s"])
+    with_log_args(ctx, &["--format=▸ %h %s"])
 }
 
 /// Open the interactive rebase todo for the three commits: `l l` to the log,

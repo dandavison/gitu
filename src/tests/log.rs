@@ -6,7 +6,7 @@ fn setup(ctx: TestContext) -> TestContext {
     commit(&ctx.dir, "third commit", "");
     commit(&ctx.dir, "second commit", "");
     commit(&ctx.dir, "first commit", "");
-    with_renderer(ctx)
+    ctx
 }
 
 #[test]
@@ -253,7 +253,7 @@ fn log_keeps_the_first_commit_when_the_renderer_greets_on_its_line() {
 /// one of those now on screen, so the next op acts on what is being looked at.
 #[test]
 fn paging_lands_on_a_commit_of_the_new_page() {
-    let mut ctx = with_renderer(setup_clone!());
+    let mut ctx = setup_clone!();
     for i in 1..=40 {
         commit(&ctx.dir, &format!("file-{i:02}"), "");
     }
@@ -288,7 +288,6 @@ fn log_of_patches(ctx: &mut TestContext) -> crate::app::App {
     commit(&ctx.dir, "a.rs", "alpha\n");
     commit(&ctx.dir, "b.rs", "beta\n");
     commit(&ctx.dir, "a.rs", "alpha changed\n");
-    ctx.config().general.diff_renderer.command = super::pager::osc_1717_passthrough();
     ctx.init_app_as_pager_of(&["git", "log", "-p", "-3"])
 }
 
@@ -392,7 +391,7 @@ fn a_hunk_in_a_log_of_patches_reverses_its_commits_change() {
 /// gitu no way to place them, so the log is its commits and their rows.
 #[test]
 fn a_log_of_patches_drawn_without_line_records_is_its_commits() {
-    let mut ctx = with_renderer(setup_clone!());
+    let mut ctx = setup_clone!();
     commit(&ctx.dir, "a.rs", "alpha\n");
     commit(&ctx.dir, "b.rs", "beta\n");
     let app = ctx.init_app_as_pager_of(&["git", "log", "-p", "-2"]);

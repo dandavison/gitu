@@ -10,7 +10,7 @@ expression: ctx.redact_buffer()
                                                                                 |
      Commit body goes here                                                      |
                                                                                 |
- added      firstfile                                                           |
+ added: firstfile                                                               |
 ▌@@ -0,0 +1 @@                                                                  |
 ▌+This should be visible                                                        |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: e2602511950a00b7
+styles_hash: 70e5cd655ace6b14

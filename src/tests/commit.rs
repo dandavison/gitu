@@ -12,7 +12,7 @@ fn commit_menu() {
 
 #[test]
 fn commit_instant_fixup() {
-    let mut ctx = with_renderer(setup_clone!());
+    let mut ctx = setup_clone!();
     let mut state = ctx.init_app();
 
     commit(&ctx.dir, "instant_fixup.txt", "initial\n");
@@ -26,7 +26,7 @@ fn commit_instant_fixup() {
 
 #[test]
 fn commit_instant_fixup_stashes_changes_and_keeps_empty() {
-    let mut ctx = with_renderer(setup_clone!());
+    let mut ctx = setup_clone!();
     let mut state = ctx.init_app();
 
     commit(&ctx.dir, "instant_fixup.txt", "initial\n");
@@ -45,7 +45,7 @@ fn commit_instant_fixup_stashes_changes_and_keeps_empty() {
 
 #[test]
 fn commit_instant_fixup_picks_commit() {
-    let mut ctx = with_renderer(setup_clone!());
+    let mut ctx = setup_clone!();
     let mut state = ctx.init_app();
 
     commit(&ctx.dir, "alpha.txt", "a\n");
@@ -61,7 +61,7 @@ fn commit_instant_fixup_picks_commit() {
 
 #[test]
 fn commit_fixup_picker() {
-    let ctx = with_renderer(setup_clone!());
+    let ctx = setup_clone!();
 
     commit(&ctx.dir, "alpha.txt", "a\n");
     commit(&ctx.dir, "beta.txt", "b\n");
@@ -83,7 +83,7 @@ fn commit_extend() {
 fn commit_fixup_picker_keeps_the_cursor_visible() {
     // Moving past the last row the keymap panel leaves visible scrolls the log,
     // rather than putting the cursor behind the panel.
-    let ctx = with_renderer(setup_clone!());
+    let ctx = setup_clone!();
     for i in 1..=10 {
         commit(&ctx.dir, &format!("file-{i}"), "");
     }

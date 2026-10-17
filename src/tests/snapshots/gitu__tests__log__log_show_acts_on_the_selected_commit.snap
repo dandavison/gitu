@@ -10,7 +10,7 @@ expression: ctx.redact_buffer()
                                                                                 |
      Commit body goes here                                                      |
                                                                                 |
-▌added      second commit                                                       |
+▌added: second commit                                                           |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 73804203cd1d5bb5
+styles_hash: 50e5af0b4acb341b

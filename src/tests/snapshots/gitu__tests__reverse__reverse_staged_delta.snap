@@ -1,16 +1,15 @@
 ---
 source: src/tests/reverse.rs
-assertion_line: 17
 expression: out
 ---
  On branch main                                                                 |
  Your branch is ahead of 'origin/main' by 1 commit(s).                          |
                                                                                 |
  Unstaged changes (1)                                                           |
-▌modified   file-one…                                                           |
+▌file-one…                                                                      |
                                                                                 |
  Staged changes (1)                                                             |
- modified   file-one…                                                           |
+ file-one…                                                                      |
                                                                                 |
  Recent commits                                                                 |
  9f4a45e main add file-one                                       Author Name __ |
@@ -23,7 +22,7 @@ expression: out
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git apply --reverse                                                           |
-styles_hash: f31fa05a65d56d90
+styles_hash: c1c9aafa9d4317
 
 [file before]
 blahonga

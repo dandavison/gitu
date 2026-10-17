@@ -1,13 +1,12 @@
 ---
 source: src/tests/commit.rs
-assertion_line: 43
 expression: ctx.redact_buffer()
 ---
  On branch main                                                                 |
  Your branch is ahead of 'origin/main' by 3 commit(s).                          |
                                                                                 |
  Unstaged changes (1)                                                           |
- modified   instant_fixup.txt…                                                  |
+ instant_fixup.txt…                                                             |
                                                                                 |
  Recent commits                                                                 |
  bada738 main empty commit                                       Author Name __ |
@@ -23,4 +22,4 @@ $ git rebase -i -q --autostash --keep-empty --autosquash                        
 efc77f3bea683ce4ea27f2e9d7d1bdf04c91a57f^                                       |
 Applied autostash.                                                              |
 Created autostash: d682ced                                                      |
-styles_hash: 370882d56ea30c4e
+styles_hash: 37afd7dabe650b10

@@ -6,11 +6,10 @@ expression: ctx.redact_buffer()
 ▌Your branch is ahead of 'origin/main' by 1 commit(s).                          |
                                                                                 |
  Unstaged changes (1)                                                           |
- modified   non_utf8.txt                                                        |
+ non_utf8.txt                                                                   |
  @@ -1 +1 @@                                                                    |
  -File with valid UTF-8                                                         |
- \ No newline at end of file                                                    |
- +FileFile with invalid UTF-8: ��                                               |
+ +File with invalid UTF-8: ��                                                   |
                                                                                 |
  Recent commits                                                                 |
  7c3d61a main add non_utf8.txt                                   Author Name __ |
@@ -22,4 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 30aa89db154a524c
+                                                                                |
+styles_hash: e6cc99eec710104c

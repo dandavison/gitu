@@ -6,7 +6,7 @@ expression: ctx.redact_buffer()
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Staged changes (1)                                                             |
- added      new_file.txt…                                                       |
+ added: new_file.txt…                                                           |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                       Author Name __ |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  F     instant fixup      author)                                               |
  q/esc Quit/Close      -s Add Signed-off-by line (--signoff)                    |
                        -v Show diff of changes to be committed (--verbose)      |
-styles_hash: 2968cf780a08ad0e
+styles_hash: 4690a19dde7cbfb9

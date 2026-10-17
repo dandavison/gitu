@@ -6,7 +6,7 @@ expression: ctx.redact_buffer()
 ▌Your branch is ahead of 'origin/main' by 1 commit(s).                          |
                                                                                 |
  Unstaged changes (1)                                                           |
- modified   tab.txt                                                             |
+ tab.txt                                                                        |
  @@ -1 +1 @@                                                                    |
  -this has no tab prefixed                                                      |
  +    this has a tab prefixed                                                   |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 9ceed5bf09b4f615
+styles_hash: e6cc99eec710104c

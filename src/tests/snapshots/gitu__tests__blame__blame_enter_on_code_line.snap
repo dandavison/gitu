@@ -8,7 +8,7 @@ expression: ctx.redact_buffer()
                                                                                 |
      Commit body goes here                                                      |
                                                                                 |
- modified   file                                                                |
+ file                                                                           |
  @@ -1,3 +1,3 @@                                                                |
   unchanged-top                                                                 |
  -original                                                                      |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 79199f6dbf9cd674
+styles_hash: d44dc516e7a94c67

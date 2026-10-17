@@ -6,12 +6,12 @@ expression: ctx.redact_buffer()
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Unstaged changes (1)                                                           |
- added      unstaged.txt                                                        |
+ added: unstaged.txt                                                            |
  @@ -0,0 +1 @@                                                                  |
  +unstaged                                                                      |
                                                                                 |
  Staged changes (1)                                                             |
- added      staged.txt                                                          |
+ added: staged.txt                                                              |
  @@ -0,0 +1 @@                                                                  |
  +staged                                                                        |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 9e15de10235efbcb
+styles_hash: 552851d9b49c03be

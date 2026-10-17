@@ -5,7 +5,7 @@ expression: ctx.redact_buffer()
 ▌Cherry-picking other-branch                                                    |
                                                                                 |
  Unstaged changes (1)                                                           |
- unmerged   conflict-file                                                       |
+ conflict-file                                                                  |
                                                                                 |
  Staged changes (1)                                                             |
  unmerged   conflict-file                                                       |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 7af2b19ecff6e61c
+styles_hash: 9297d695c8031c4c
