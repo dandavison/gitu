@@ -36,6 +36,5 @@ You can see which commit formats contribute to a changelog in [cliff.toml](cliff
 ### Releases
 
 In order to create a release (by a maintainer).
-Run the [bump.sh](bump.sh) script. This will create a commit with appropriate changes
-to prepare for a release and tag it with a version.
-Push this commit (and tag) to **master** in order to kick off the release Github Actions.
+Run `make bump-version`. This bumps the patch version in Cargo.toml, builds, and commits.
+Then publish the crate with `cargo publish`.
