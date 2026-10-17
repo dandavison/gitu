@@ -779,12 +779,16 @@ impl Screen {
     /// folded otherwise than it stays.
     fn take_items(&mut self, items: Vec<Item>, fold_new: bool) {
         if fold_new {
-            self.collapsed.extend(
-                items
-                    .iter()
-                    .filter(|item| item.default_collapsed && !self.seen.contains(&item.id))
-                    .map(|item| item.id),
-            );
+            let folded: Vec<ItemId> = items
+                .iter()
+                .filter(|item| !self.seen.contains(&item.id))
+                .filter(|item| match item.folds_like {
+                    Some(like) if self.seen.contains(&like) => self.collapsed.contains(&like),
+                    _ => item.default_collapsed,
+                })
+                .map(|item| item.id)
+                .collect();
+            self.collapsed.extend(folded);
         }
         self.seen.extend(items.iter().map(|item| item.id));
         self.items = fill_empty(items);

@@ -1,5 +1,6 @@
 ---
 source: src/tests/stash.rs
+assertion_line: 86
 expression: ctx.redact_buffer()
 ---
  On branch main                                                                 |
@@ -7,9 +8,7 @@ expression: ctx.redact_buffer()
                                                                                 |
 ▌Staged changes (2)                                                             |
 ▌added      file-one…                                                           |
-▌added      file-two                                                            |
-▌@@ -0,0 +1 @@                                                                  |
-▌+blahonga                                                                      |
+▌added      file-two…                                                           |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                       Author Name __ |
@@ -20,6 +19,8 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
+                                                                                |
+                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 ! Cannot stash: working tree is empty                                           |
-styles_hash: cef1b68b62a4b57
+styles_hash: 8501a57471f3cde2

@@ -1,7 +1,7 @@
 use crate::Res;
 use crate::config::{Config, FileHeader};
 use crate::error::Error;
-use crate::git::diff::Diff;
+use crate::git::diff::{Diff, DiffType};
 use crate::gitu_diff;
 use crate::highlight;
 use crate::item_data::ItemData;
@@ -76,6 +76,9 @@ pub(crate) struct Item {
     /// Whether this is decoration drawn below the previous item that is not, and
     /// so hidden while that item shows a row in place of its own.
     pub(crate) decorates_previous: bool,
+    /// The item whose fold this one takes when it is new to the screen, if
+    /// the screen has had that item.
+    pub(crate) folds_like: Option<ItemId>,
 }
 
 /// Build the items for a diff. When the configured renderer speaks the OSC-1717
@@ -1256,11 +1259,16 @@ pub(crate) fn identified_by_paths(mut items: Vec<Item>) -> Vec<Item> {
 }
 
 fn file_id(diff: &Diff, file_i: usize) -> ItemId {
+    file_id_as(diff, file_i, &diff.diff_type)
+}
+
+/// The id [`identified_by_paths`] gives the file in a diff of `diff_type`.
+pub(crate) fn file_id_as(diff: &Diff, file_i: usize, diff_type: &DiffType) -> ItemId {
     let paths = |file_i| diff.file_diff_header(file_i).lines().next().unwrap_or("");
     let earlier = (0..file_i).filter(|&i| paths(i) == paths(file_i)).count();
     hash((
         "file",
-        format!("{:?}", diff.diff_type),
+        format!("{diff_type:?}"),
         &diff.commit,
         paths(file_i),
         earlier,

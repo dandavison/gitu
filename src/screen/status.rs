@@ -4,7 +4,11 @@ use crate::{
     Res,
     config::Config,
     error::Error,
-    git::{self, diff::Diff, status::BranchStatus},
+    git::{
+        self,
+        diff::{Diff, DiffType},
+        status::BranchStatus,
+    },
     item_data::{ItemData, SectionHeader},
     items::{self, Item, hash},
 };
@@ -139,6 +143,7 @@ pub(crate) fn create(
     )?;
 
     screen.is_status = true;
+    screen.folds_new_items = true;
     // Unstaged files come before staged ones, and are the only other files here.
     if screen.config.general.status_cursor_on_changes
         && let Some(file) = screen.find_item(|item| matches!(item.data, ItemData::Delta { .. }))
@@ -219,9 +224,27 @@ fn create_status_section_items<'a>(
         ]
     }
     .into_iter()
-    .chain(items::create_diff_items(
-        config, params, diff, 1, true, None,
-    ))
+    .chain(
+        items::identified_by_paths(items::create_diff_items(
+            config, params, diff, 1, true, None,
+        ))
+        .into_iter()
+        .map(folded_as_in_other_section),
+    )
+}
+
+/// A file first staged or unstaged is folded as it was in the section it came
+/// from.
+fn folded_as_in_other_section(mut item: Item) -> Item {
+    if let ItemData::Delta { diff, file_i, .. } = &item.data {
+        let other = match diff.diff_type {
+            DiffType::WorkdirToIndex => DiffType::IndexToTree,
+            DiffType::IndexToTree => DiffType::WorkdirToIndex,
+            DiffType::TreeToTree => unreachable!("status diffs are staged or unstaged"),
+        };
+        item.folds_like = Some(items::file_id_as(diff, *file_i, &other));
+    }
+    item
 }
 
 fn create_stash_list_section_items<'a>(

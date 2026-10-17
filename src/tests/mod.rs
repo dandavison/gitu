@@ -490,6 +490,7 @@ fn crlf_diff() {
     commit(&ctx.dir, "crlf.txt", "unchanged\r\nunchanged\r\n");
     fs::write(ctx.dir.join("crlf.txt"), "unchanged\r\nchanged\r\n").unwrap();
     ctx.update(&mut app, keys(REFRESH));
+    ctx.update(&mut app, keys("jj<tab>gg"));
 
     insta::assert_snapshot!(ctx.redact_buffer());
 }
@@ -502,6 +503,7 @@ fn tab_diff() {
     commit(&ctx.dir, "tab.txt", "this has no tab prefixed\n");
     fs::write(ctx.dir.join("tab.txt"), "\tthis has a tab prefixed\n").unwrap();
     ctx.update(&mut app, keys(REFRESH));
+    ctx.update(&mut app, keys("jj<tab>gg"));
 
     insta::assert_snapshot!(ctx.redact_buffer());
 }
@@ -518,6 +520,7 @@ fn non_utf8_diff() {
     )
     .unwrap();
     ctx.update(&mut app, keys(REFRESH));
+    ctx.update(&mut app, keys("jj<tab>gg"));
 
     insta::assert_snapshot!(ctx.redact_buffer());
 }
@@ -533,6 +536,7 @@ fn ext_diff() {
     run(&ctx.dir, &["git", "add", "staged.txt"]);
     run(&ctx.dir, &["git", "config", "diff.external", "/dev/null"]);
     ctx.update(&mut app, keys(REFRESH));
+    ctx.update(&mut app, keys("jj<tab>jjj<tab>gg"));
 
     insta::assert_snapshot!(ctx.redact_buffer());
 }

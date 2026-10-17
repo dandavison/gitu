@@ -19,7 +19,7 @@ fn commit_instant_fixup() {
     commit(&ctx.dir, "instant_fixup.txt", "mistake\n");
     fs::write(ctx.dir.join("instant_fixup.txt"), "fixed\n").unwrap();
     run(&ctx.dir, &["git", "add", "."]);
-    ctx.update(&mut state, keys("grjjjjjcF<enter>"));
+    ctx.update(&mut state, keys("grjjjjcF<enter>"));
 
     insta::assert_snapshot!(ctx.redact_buffer());
 }
@@ -38,7 +38,7 @@ fn commit_instant_fixup_stashes_changes_and_keeps_empty() {
     fs::write(ctx.dir.join("instant_fixup.txt"), "fixed\n").unwrap();
     run(&ctx.dir, &["git", "add", "."]);
     fs::write(ctx.dir.join("instant_fixup.txt"), "unstaged\n").unwrap();
-    ctx.update(&mut state, keys("grjjjjjjjjjcF<enter>"));
+    ctx.update(&mut state, keys("grjjjjjjjcF<enter>"));
 
     insta::assert_snapshot!(ctx.redact_buffer());
 }
