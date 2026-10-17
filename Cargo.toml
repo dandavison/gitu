@@ -39,9 +39,8 @@ strip = true
 
 [features]
 default = ["syntax-highlighting"]
-# gitu's own syntax highlighting of diffs and blame. Its tree-sitter grammars
-# make up most of the binary, and a host whose diff renderer highlights does not
-# need them.
+# gitu's own syntax highlighting of blame. Its tree-sitter grammars make up
+# most of the binary.
 syntax-highlighting = ["dep:tree-sitter", "dep:tree-sitter-highlight", "dep:tree-sitter-rust", "dep:tree-sitter-toml-ng", "dep:tree-sitter-javascript", "dep:tree-sitter-c", "dep:tree-sitter-json", "dep:tree-sitter-cpp", "dep:tree-sitter-ruby", "dep:tree-sitter-haskell", "dep:tree-sitter-go", "dep:tree-sitter-c-sharp", "dep:tree-sitter-python", "dep:tree-sitter-typescript", "dep:tree-sitter-bash", "dep:tree-sitter-php", "dep:tree-sitter-java", "dep:tree-sitter-scala", "dep:tree-sitter-ocaml", "dep:tree-sitter-html", "dep:tree-sitter-elixir"]
 
 [dependencies]
@@ -91,11 +90,9 @@ tree-sitter-elixir = { version = "=0.3.4", optional = true }
 regex = "1.12.2"
 strip-ansi-escapes = "0.2.1"
 unicode-segmentation = "1.12.0"
-cached = "0.56.0"
 strum = { version = "0.26.3", features = ["derive"] }
 tinyvec = "1.10.0"
 smashquote = "0.1.2"
-imara-diff = { version = "0.2.0", default-features = false }
 fuzzy-matcher = "0.3.7"
 unicode-width = "0.2.0"
 url = "2.5.7"

@@ -162,9 +162,6 @@ pub struct StyleConfig {
     pub hunk_header: StyleConfigEntry,
 
     #[serde(default)]
-    pub diff_highlight: DiffHighlightConfig,
-
-    #[serde(default)]
     pub syntax_highlight: SyntaxHighlightConfig,
 
     #[serde(default)]
@@ -226,22 +223,6 @@ pub struct MenuStyleConfig {
     /// Inactive argument value display
     #[serde(default)]
     pub inactive_arg: StyleConfigEntry,
-}
-
-#[derive(Default, Debug, Deserialize)]
-pub struct DiffHighlightConfig {
-    #[serde(default)]
-    pub tag_old: StyleConfigEntry,
-    #[serde(default)]
-    pub tag_new: StyleConfigEntry,
-    #[serde(default)]
-    pub unchanged_old: StyleConfigEntry,
-    #[serde(default)]
-    pub unchanged_new: StyleConfigEntry,
-    #[serde(default)]
-    pub changed_old: StyleConfigEntry,
-    #[serde(default)]
-    pub changed_new: StyleConfigEntry,
 }
 
 #[derive(Default, Debug, Deserialize)]

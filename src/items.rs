@@ -81,10 +81,7 @@ pub(crate) struct Item {
     pub(crate) folds_like: Option<ItemId>,
 }
 
-/// Build the items for a diff. When the configured renderer speaks the OSC-1717
-/// protocol, the diff is rendered freely by it (e.g. delta, side-by-side) and its
-/// styled rows drive the content lines; otherwise the built-in items are used
-/// (styled per-hunk by [`highlight`], including a `--color-only` renderer).
+/// Build the items for a diff drawn by the configured renderer.
 pub(crate) fn create_diff_items(
     config: &Config,
     params: &RenderParams,
@@ -118,10 +115,9 @@ pub(crate) fn create_diff_items(
     }
 }
 
-/// The items for a diff the renderer has drawn as `rendered`, or gitu's own
-/// when it did not draw it (or drew it without OSC-1717 records). `drawn_whole`
-/// says whether `rendered` is all of the renderer's drawing or only what it has
-/// drawn so far.
+/// The items for a diff the renderer has drawn as `rendered` (`None` if it
+/// failed). `drawn_whole` says whether `rendered` is all of the renderer's
+/// drawing or only what it has drawn so far.
 pub(crate) fn drawn_diff_items(
     config: &Config,
     diff: &Rc<Diff>,
@@ -131,28 +127,20 @@ pub(crate) fn drawn_diff_items(
     default_collapsed: bool,
     commit: Option<String>,
 ) -> Vec<Item> {
-    rendered
-        .and_then(|rendered| {
-            create_rendered_diff_items(
-                config,
-                rendered,
-                drawn_whole,
-                diff,
-                depth,
-                default_collapsed,
-                commit.clone(),
-            )
-        })
-        .unwrap_or_else(|| {
-            create_builtin_diff_items(
-                diff,
-                depth,
-                default_collapsed,
-                commit,
-                config.general.visit_context_lines,
-            )
-            .collect()
-        })
+    let parsed = crate::diff_renderer::parse_ansi_lines(rendered.unwrap_or_default());
+    let items = rendered_diff_items(
+        diff,
+        &parsed.lines,
+        depth,
+        default_collapsed,
+        commit,
+        config.general.visit_context_lines,
+    );
+    if drawn_whole {
+        items
+    } else {
+        reached_files(items)
+    }
 }
 
 /// Each file headed by its line of a diffstat counted from the patch, folded or
@@ -341,52 +329,6 @@ fn stat_summary<'a>(stats: impl Iterator<Item = &'a FileStat>) -> String {
     summary
 }
 
-/// Lay the OSC-1717 renderer's drawing of the diff out under gitu's own
-/// file/hunk structure (so collapse, navigation and file/hunk/line staging keep
-/// working). Each rendered content row is mapped back to its content-line
-/// coordinates via its metadata; decoration rows are dropped. Returns `None`
-/// (fall back to built-in) if the renderer doesn't speak the protocol.
-fn create_rendered_diff_items(
-    config: &Config,
-    output: &str,
-    drawn_whole: bool,
-    diff: &Rc<Diff>,
-    depth: usize,
-    default_collapsed: bool,
-    commit: Option<String>,
-) -> Option<Vec<Item>> {
-    let parsed = crate::diff_renderer::parse_ansi_lines(output);
-    parsed.protocol_version?; // Not an OSC-1717 renderer: fall back to built-in.
-
-    // The handshake says the renderer speaks the protocol, not that it said
-    // anything with it: having drawn the whole diff without content records,
-    // it has nothing to lay out. Part way through, it may not have reached a
-    // content line yet.
-    let has_hunks = diff.file_diffs.iter().any(|file| !file.hunks.is_empty());
-    let annotated_a_line = parsed
-        .lines
-        .iter()
-        .flat_map(|line| &line.records)
-        .any(|record| record.kind.is_content());
-    if drawn_whole && has_hunks && !annotated_a_line {
-        return None;
-    }
-
-    let items = rendered_diff_items(
-        diff,
-        &parsed.lines,
-        depth,
-        default_collapsed,
-        commit,
-        config.general.visit_context_lines,
-    );
-    Some(if drawn_whole {
-        items
-    } else {
-        reached_files(items)
-    })
-}
-
 /// The items of the files a renderer part way through its drawing has reached.
 /// It draws the files in order, so a file it has not drawn a row of, and every
 /// file after it, is left out rather than shown undrawn until it is.
@@ -408,8 +350,8 @@ fn reached_files(mut items: Vec<Item>) -> Vec<Item> {
 }
 
 /// Lay the renderer's rows out under gitu's file/hunk structure. Split from
-/// [`create_rendered_diff_items`] so the mapping can be exercised on rows
-/// without running a renderer.
+/// [`drawn_diff_items`] so the mapping can be exercised on rows without running
+/// a renderer.
 fn rendered_diff_items(
     diff: &Rc<Diff>,
     lines: &[crate::diff_renderer::ParsedLine],
@@ -673,99 +615,6 @@ fn rendered_spans(line: &crate::diff_renderer::ParsedLine) -> RenderedRow {
                 text
             };
             (text, *style)
-        })
-        .collect()
-}
-
-fn create_builtin_diff_items(
-    diff: &Rc<Diff>,
-    depth: usize,
-    default_collapsed: bool,
-    commit: Option<String>,
-    visit_context_lines: bool,
-) -> impl Iterator<Item = Item> + '_ {
-    diff.file_diffs
-        .iter()
-        .enumerate()
-        .flat_map(move |(file_i, file_diff)| {
-            iter::once(Item {
-                id: file_id(diff, file_i),
-                default_collapsed,
-                depth,
-                data: ItemData::Delta {
-                    diff: Rc::clone(diff),
-                    file_i,
-                    commit: commit.clone(),
-                },
-                ..Default::default()
-            })
-            .chain(file_diff.hunks.iter().cloned().enumerate().flat_map(
-                move |(hunk_i, _hunk)| {
-                    create_hunk_items(
-                        Rc::clone(diff),
-                        file_i,
-                        hunk_i,
-                        depth + 1,
-                        visit_context_lines,
-                    )
-                },
-            ))
-        })
-}
-
-fn create_hunk_items(
-    diff: Rc<Diff>,
-    file_i: usize,
-    hunk_i: usize,
-    depth: usize,
-    visit_context_lines: bool,
-) -> impl Iterator<Item = Item> {
-    let hunk_hash = hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]);
-    iter::once(Item {
-        id: hunk_hash,
-        depth,
-        data: ItemData::Hunk {
-            diff: Rc::clone(&diff),
-            file_i,
-            hunk_i,
-        },
-        ..Default::default()
-    })
-    .chain(format_diff_hunk_items(
-        diff,
-        file_i,
-        hunk_i,
-        depth + 1,
-        hunk_hash,
-        visit_context_lines,
-    ))
-}
-
-fn format_diff_hunk_items(
-    diff: Rc<Diff>,
-    file_i: usize,
-    hunk_i: usize,
-    depth: usize,
-    hunk_hash: u64,
-    visit_context_lines: bool,
-) -> Vec<Item> {
-    let hunk_content = diff.hunk_content(file_i, hunk_i);
-
-    highlight::line_range_iterator(hunk_content)
-        .enumerate()
-        .map(|(line_index, (line_range, line))| Item {
-            id: hunk_hash,
-            unselectable: !visit_context_lines && line.starts_with(' '),
-            depth,
-            data: ItemData::HunkLine {
-                diff: Rc::clone(&diff),
-                file_i,
-                hunk_i,
-                line_i: line_index,
-                line_range,
-                line_indices: vec![line_index],
-            },
-            ..Default::default()
         })
         .collect()
 }

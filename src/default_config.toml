@@ -40,24 +40,18 @@ visit_context_lines = true
 # when nothing is unstaged; off, it opens at the top.
 status_cursor_on_changes = true
 
-# Render diffs with an external command (e.g. delta) instead of Gitu's
-# built-in syntax/diff highlighting. The command receives a unified diff on
-# stdin and emits ANSI-colored output.
-#
-# Gitu advertises the OSC-1717 diff-line-metadata protocol to the command (via
-# the OSC1717 env var). If the renderer speaks it, the diff may be
-# rendered freely — dropping +/- markers, side-by-side, gutters — and Gitu maps
-# each rendered row back to its patch line for staging. If it doesn't, the
-# command must preserve line structure (`--color-only`), which Gitu maps 1:1.
+# The command that draws diffs. It receives a unified diff on stdin and emits
+# ANSI-colored output carrying OSC-1717 diff-line metadata, which Gitu
+# advertises to it via the OSC1717 env var. The renderer may draw the diff
+# freely — dropping +/- markers, side-by-side, gutters — and Gitu maps each
+# rendered row back to its patch line for staging. Gitu draws no diff line
+# itself: a row the renderer does not annotate is not shown. `delta --gitu`
+# makes itself the renderer whatever this says.
 #
 # A `{width}` token in the command is replaced with the number of columns Gitu
 # will render into (and COLUMNS is exported), so a reflowing renderer fills the
 # viewport rather than defaulting too narrow over the pipe.
-#
-# A structure-preserving command works either way; a renderer that speaks
-# OSC-1717 can be run freely, e.g.:
-#   diff_renderer.command = ["delta", "--side-by-side", "--width", "{width}"]
-diff_renderer.command = []
+diff_renderer.command = ["delta"]
 
 # Renderer features that `renderer_features` offers, to turn on and off while
 # viewing a diff. They are passed to the renderer as DELTA_FEATURES=+<names>,
@@ -145,13 +139,6 @@ prompt = { fg = "cyan", mods = "DIM" }
 section_header = { fg = "yellow" }
 file_header = { fg = "magenta" }
 hunk_header = { fg = "blue" }
-
-diff_highlight.tag_old = { fg = "red", mods = "BOLD" }
-diff_highlight.tag_new = { fg = "green", mods = "BOLD" }
-diff_highlight.unchanged_old = { mods = "DIM" }
-diff_highlight.unchanged_new = { mods = "DIM" }
-diff_highlight.changed_old = { fg = "red" }
-diff_highlight.changed_new = { fg = "green" }
 
 syntax_highlight.enabled = true
 syntax_highlight.attribute = { fg = "yellow" }

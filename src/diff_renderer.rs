@@ -4,14 +4,11 @@
 //! we parse back into per-line styled runs. In a log, its commit records say
 //! which commit each row belongs to.
 //!
-//! Two cooperation levels are supported:
-//! - A `--color-only` renderer preserves line structure 1:1, and
-//!   [`crate::highlight`] maps its runs onto hunk content lines by position.
-//! - A renderer speaking the OSC-1717 diff-line-metadata protocol may restructure
-//!   the diff freely (drop `+`/`-` markers, side-by-side, gutters) and annotate
-//!   each rendered line with its patch-space identity `(file, kind, new/old line)`.
-//!   We advertise the protocol via the `OSC1717` env var and attach each
-//!   record to the line that follows it.
+//! The renderer speaks the OSC-1717 diff-line-metadata protocol: it may
+//! restructure the diff freely (drop `+`/`-` markers, side-by-side, gutters) and
+//! annotates each rendered line with its patch-space identity `(file, kind,
+//! new/old line)`. We advertise the protocol via the `OSC1717` env var and
+//! attach each record to the line that follows it.
 
 use crate::Res;
 use crate::error::Error;
@@ -49,17 +46,6 @@ pub(crate) enum LineKind {
     HunkHeader,
     FileHeader,
     Commit,
-}
-
-impl LineKind {
-    /// Whether the row is a line of the diff itself, rather than one of the
-    /// renderer's own header or decoration rows.
-    pub(crate) fn is_content(self) -> bool {
-        matches!(
-            self,
-            LineKind::Context | LineKind::Added | LineKind::Deleted
-        )
-    }
 }
 
 /// A run of rendered log rows belonging to one commit, as split by the `C`

@@ -4,7 +4,6 @@ use crate::style::Style;
 
 use crate::config::Config;
 use crate::gitu_diff::Status;
-use crate::highlight;
 use crate::item_data::{ItemData, Ref, SectionHeader};
 use crate::items::{Item, RenderedRow};
 use crate::rebase_todo::TodoEntry;
@@ -158,30 +157,8 @@ pub(crate) fn layout_item<'a>(
                 (content.into(), base.patch(Style::from(&style.hunk_header))),
             );
         }
-        ItemData::HunkLine {
-            diff,
-            file_i,
-            hunk_i,
-            line_range,
-            line_i,
-            line_indices: _,
-        } => {
-            let hunk_highlights =
-                highlight::highlight_hunk(item.id, config, diff, *file_i, *hunk_i);
-            let hunk_line = &diff.hunk_content(*file_i, *hunk_i)[line_range.clone()];
-
-            for (highlight_range, highlight_style) in hunk_highlights.get_line_highlights(*line_i) {
-                layout_span(
-                    layout,
-                    (
-                        hunk_line[highlight_range.clone()]
-                            .replace('\t', "    ")
-                            .into(),
-                        base.patch(*highlight_style),
-                    ),
-                );
-            }
-        }
+        // The renderer draws every diff line.
+        ItemData::HunkLine { .. } => {}
         ItemData::Stash { message, id, .. } => {
             layout_span(
                 layout,
