@@ -370,3 +370,23 @@ fn choosing_a_renderer_feature_marks_it() {
         "picking it again turns it off"
     );
 }
+
+/// ctrl+z stops gitu as a terminal's job control stops any program. In raw
+/// mode the terminal sends it as a key, so gitu has to be bound to it.
+#[test]
+fn suspending_is_bound_to_ctrl_z() {
+    let mut ctx = setup_clone!();
+    let ctrl_z = [(
+        crossterm::event::KeyModifiers::CONTROL,
+        crossterm::event::KeyCode::Char('z'),
+    )];
+
+    let ops: Vec<&str> = ctx
+        .config()
+        .bindings
+        .match_bindings(&crate::menu::Menu::Root, &ctrl_z)
+        .map(|binding| binding.op.as_ref())
+        .collect();
+
+    assert_eq!(ops, ["suspend"]);
+}
