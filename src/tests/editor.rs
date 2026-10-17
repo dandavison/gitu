@@ -28,7 +28,7 @@ fn scroll_down() {
     insta::assert_snapshot!(ctx.redact_buffer());
 }
 
-/// One key folds the whole view down to its headings, and opens it again.
+/// One key folds the whole view down to its files, and opens it again.
 #[test]
 fn folding_everything_and_opening_it_again() {
     let (mut ctx, mut app) = setup_scroll(setup_clone!());
@@ -38,8 +38,8 @@ fn folding_everything_and_opening_it_again() {
     ctx.update(&mut app, keys("<backtab>"));
     let opened = ctx.redact_buffer();
 
-    assert!(!folded.contains("file-1"), "still open:\n{folded}");
-    assert!(folded.contains("Unstaged changes"), "{folded}");
+    assert!(!folded.contains("line 1 (file-1)"), "still open:\n{folded}");
+    assert!(folded.contains("file-1"), "{folded}");
     assert!(
         opened.contains("line 1 (file-1)"),
         "still folded:\n{opened}"
@@ -54,7 +54,7 @@ fn folding_everything_is_bound_to_shift_tab() {
     ctx.update(&mut app, keys("<shift+backtab>"));
 
     assert!(
-        !ctx.redact_buffer().contains("file-1"),
+        !ctx.redact_buffer().contains("line 1 (file-1)"),
         "shift+tab did nothing:\n{}",
         ctx.redact_buffer()
     );
@@ -76,7 +76,7 @@ fn shift_tab_reaches_a_backtab_binding() {
     ctx.update(&mut app, keys("<shift+backtab>"));
 
     assert!(
-        !ctx.redact_buffer().contains("file-1"),
+        !ctx.redact_buffer().contains("line 1 (file-1)"),
         "shift-tab did nothing:\n{}",
         ctx.redact_buffer()
     );

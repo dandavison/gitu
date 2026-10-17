@@ -149,3 +149,40 @@ fn an_unfolded_file_stays_unfolded_when_it_changes() {
     let buffer = ctx.redact_buffer();
     assert!(buffer.contains("alpha changed again"), "{buffer}");
 }
+
+#[test]
+fn folding_everything_folds_the_files_not_the_sections() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "a.rs", "alpha\n");
+    commit(&ctx.dir, "b.rs", "beta\n");
+    fs::write(ctx.dir.join("a.rs"), "alpha changed\n").unwrap();
+    fs::write(ctx.dir.join("b.rs"), "beta changed\n").unwrap();
+    run(&ctx.dir, &["git", "add", "b.rs"]);
+    ctx.config().general.status_cursor_on_changes = true;
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("<tab>"));
+
+    ctx.update(&mut app, keys("<backtab>"));
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("a.rs"), "{buffer}");
+    assert!(buffer.contains("b.rs"), "{buffer}");
+    assert!(!buffer.contains("alpha changed"), "{buffer}");
+
+    ctx.update(&mut app, keys("<backtab>"));
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("alpha changed"), "{buffer}");
+    assert!(buffer.contains("beta changed"), "{buffer}");
+}
+
+#[test]
+fn files_headed_by_stat_rows_have_no_summary_row() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "a.rs", "alpha\n");
+    fs::write(ctx.dir.join("a.rs"), "alpha changed\n").unwrap();
+    ctx.config().general.file_header = crate::config::FileHeader::Stat;
+    let _app = ctx.init_app();
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("a.rs | 2 +-"), "{buffer}");
+    assert!(!buffer.contains("1 file changed"), "{buffer}");
+}
