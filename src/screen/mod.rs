@@ -593,12 +593,12 @@ impl Screen {
         self.clamp_scroll();
     }
 
-    /// Fold the view down to its outermost headings, or open all of it when
-    /// they are already folded. Only the outermost are folded, and everything
-    /// within them is opened, so that opening one shows what is inside it
-    /// rather than another folded thing. A cursor inside what was folded away
-    /// goes to the heading that folded it. The status view's headings are its
-    /// files.
+    /// Fold the view one level further out: its files, where they are under
+    /// other headings (a log of patches' commits), then its outermost headings,
+    /// then open all of it. Only the level folded is folded, and everything
+    /// within it is opened, so that opening one shows what is inside it rather
+    /// than another folded thing. A cursor inside what was folded away goes to
+    /// the heading that folded it. The status view's headings are its files.
     pub(crate) fn toggle_all_sections(&mut self) {
         self.anchor = None;
 
@@ -615,13 +615,22 @@ impl Screen {
             .filter(|item| item.depth == outermost)
             .map(|item| item.id)
             .collect();
+        let files: Vec<ItemId> = sections()
+            .filter(|item| item.depth > outermost && matches!(item.data, ItemData::Delta { .. }))
+            .map(|item| item.id)
+            .collect();
 
-        let folded = headings.iter().all(|id| self.collapsed.contains(id));
+        let folded = |ids: &[ItemId]| ids.iter().all(|id| self.collapsed.contains(id));
+        let fold = if folded(&headings) {
+            vec![]
+        } else if files.is_empty() || folded(&files) {
+            headings
+        } else {
+            files
+        };
+        self.renderer_headers = fold.is_empty();
         self.collapsed.clear();
-        if !folded {
-            self.collapsed.extend(headings);
-        }
-        self.renderer_headers = folded;
+        self.collapsed.extend(fold);
         if let Some(heading) = self.hidden_by(self.cursor, 0) {
             self.cursor = heading;
         }
