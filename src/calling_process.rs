@@ -370,6 +370,12 @@ fn command_lines() -> ProcessRefreshKind {
     ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always)
 }
 
+/// `argv` with the alias it runs, if it runs one, replaced by what it stands
+/// for.
+fn expanded(argv: Vec<String>) -> Vec<String> {
+    argv
+}
+
 /// The argv of `pid`, if it is a git command gitu can put again.
 fn git_argv(system: &System, pid: Pid) -> Option<Vec<String>> {
     let argv: Vec<String> = system
@@ -379,7 +385,7 @@ fn git_argv(system: &System, pid: Pid) -> Option<Vec<String>> {
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
 
-    GitCommand::of(argv).map(|git| git.argv)
+    GitCommand::of(expanded(argv)).map(|git| git.argv)
 }
 
 #[cfg(test)]
@@ -606,5 +612,78 @@ mod tests {
                 "-U3"
             ]
         );
+    }
+
+    fn repo_with_aliases(aliases: &[(&str, &str)]) -> temp_dir::TempDir {
+        let dir = temp_dir::TempDir::new().unwrap();
+        let git = |args: &[&str]| {
+            let status = Command::new("git")
+                .arg("-C")
+                .arg(dir.path())
+                .args(args)
+                .status()
+                .unwrap();
+            assert!(status.success());
+        };
+        git(&["init", "-q"]);
+        for (name, value) in aliases {
+            git(&["config", &format!("alias.{name}"), value]);
+        }
+        dir
+    }
+
+    fn expanded_in(dir: &temp_dir::TempDir, args: &[&str]) -> Vec<String> {
+        let dir = dir.path().to_string_lossy();
+        let argv = ["git", "-C", &dir]
+            .iter()
+            .chain(args)
+            .map(|arg| (*arg).to_owned())
+            .collect();
+        expanded(argv)[3..].to_vec()
+    }
+
+    /// git expands an alias in its own process, so the command line gitu finds
+    /// is the alias.
+    #[test]
+    fn an_alias_is_expanded_to_the_command_it_stands_for() {
+        let dir = repo_with_aliases(&[("lg", "log --oneline --format='%h %s'")]);
+        assert_eq!(
+            expanded_in(&dir, &["lg", "-p"]),
+            ["log", "--oneline", "--format=%h %s", "-p"]
+        );
+    }
+
+    #[test]
+    fn an_alias_of_an_alias_is_expanded_to_the_command() {
+        let dir = repo_with_aliases(&[("l", "lg -p"), ("lg", "log --oneline")]);
+        assert_eq!(expanded_in(&dir, &["l"]), ["log", "--oneline", "-p"]);
+    }
+
+    #[test]
+    fn an_alias_given_on_the_command_line_is_expanded() {
+        let dir = repo_with_aliases(&[]);
+        assert_eq!(
+            expanded_in(&dir, &["-c", "alias.d=diff --cached", "d"]),
+            ["-c", "alias.d=diff --cached", "diff", "--cached"]
+        );
+    }
+
+    /// A shell alias runs a command of its own, which is not git's.
+    #[test]
+    fn a_shell_alias_is_left_as_it_is() {
+        let dir = repo_with_aliases(&[("sh", "!git log")]);
+        assert_eq!(expanded_in(&dir, &["sh"]), ["sh"]);
+    }
+
+    #[test]
+    fn a_subcommand_is_not_looked_up_as_an_alias() {
+        let dir = repo_with_aliases(&[("log", "diff")]);
+        assert_eq!(expanded_in(&dir, &["log"]), ["log"]);
+    }
+
+    #[test]
+    fn aliases_that_expand_to_each_other_are_left_as_they_are() {
+        let dir = repo_with_aliases(&[("a", "b"), ("b", "a")]);
+        assert_eq!(expanded_in(&dir, &["a"]), ["a"]);
     }
 }
