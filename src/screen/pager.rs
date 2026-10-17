@@ -329,13 +329,17 @@ fn built(
                     commit: named_commit.then(|| commit_named_by(&text)).flatten(),
                     text,
                 });
+                // Folding is for finding a file in a patch that is not all
+                // in view. One still arriving is taken not to fit.
+                let fits = snapshot.done && drawn.lines().count() <= params.size.1 as usize;
+                let fold = config.general.start_folded && diff.file_diffs.len() > 1 && !fits;
                 let drawn = items::identified_by_paths(items::drawn_diff_items(
                     config,
                     &diff,
                     snapshot.rendered.as_deref(),
                     snapshot.done,
                     0,
-                    *stat || (config.general.start_folded && diff.file_diffs.len() > 1),
+                    *stat || fold,
                     None,
                 ));
                 if let Some(preamble) = preamble(&snapshot.text, &diff.text) {
