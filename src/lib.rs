@@ -11,7 +11,6 @@ pub mod error;
 mod file_watcher;
 mod git;
 pub mod gitu_diff;
-mod highlight;
 mod item_data;
 mod items;
 mod key_parser;
@@ -24,7 +23,6 @@ mod screen;
 mod search;
 mod stream;
 pub mod style;
-mod syntax_parser;
 pub mod term;
 #[cfg(test)]
 mod tests;

@@ -4,8 +4,8 @@ use std::{rc::Rc, sync::Arc};
 use crate::{
     Res,
     config::Config,
-    git, highlight,
-    item_data::{BlameFile, ItemData, SectionHeader},
+    git,
+    item_data::{ItemData, SectionHeader},
     items::{Item, hash},
 };
 use git2::Repository;
@@ -27,16 +27,6 @@ pub(crate) fn create(
             let commit_display = commit.as_deref().unwrap_or("HEAD").to_string();
             let blame_lines = git::blame(repo.as_ref(), &file_path, commit.as_deref())?;
 
-            let full_content = blame_lines
-                .iter()
-                .map(|l| l.content.as_str())
-                .collect::<Vec<_>>()
-                .join("\n");
-
-            let highlights = highlight::highlight_blame_file(&config, &file_path, full_content);
-
-            let blame_file = Rc::new(BlameFile { highlights });
-
             let header = Item {
                 id: hash(("blame_header", file_path.as_str(), commit_display.as_str())),
                 depth: 0,
@@ -47,13 +37,12 @@ pub(crate) fn create(
 
             let entries = blame_lines
                 .into_iter()
-                .enumerate()
-                .scan(None::<String>, |prev_hash, (line_i, line)| {
+                .scan(None::<String>, |prev_hash, line| {
                     let is_new_chunk = prev_hash.as_deref() != Some(line.commit_hash.as_str());
                     *prev_hash = Some(line.commit_hash.clone());
-                    Some((line_i, line, is_new_chunk))
+                    Some((line, is_new_chunk))
                 })
-                .flat_map(|(line_i, line, is_new_chunk)| {
+                .flat_map(|(line, is_new_chunk)| {
                     let mut items = Vec::new();
 
                     if is_new_chunk {
@@ -78,8 +67,6 @@ pub(crate) fn create(
                         id: hash(("blame_code", line.commit_hash.as_str(), line.line_num)),
                         depth: 0,
                         data: ItemData::BlameCodeLine {
-                            blame_file: Rc::clone(&blame_file),
-                            line_i,
                             line_num: line.line_num,
                             orig_line_num: line.orig_line_num,
                             content: line.content,

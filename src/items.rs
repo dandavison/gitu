@@ -3,7 +3,6 @@ use crate::config::{Config, FileHeader};
 use crate::error::Error;
 use crate::git::diff::{Diff, DiffType};
 use crate::gitu_diff;
-use crate::highlight;
 use crate::item_data::ItemData;
 use crate::item_data::Ref;
 use crate::rebase_todo::{RebaseTodo, TodoAction, TodoEntry};
@@ -18,6 +17,7 @@ use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::iter;
+use std::ops::Range;
 use std::process::Command;
 use std::rc::Rc;
 use std::time::SystemTime;
@@ -434,10 +434,9 @@ fn rendered_diff_items(
                     .collect();
                 let (hunk_hash, line_ranges) =
                     hunk_lines.entry((file_i, hunk_i)).or_insert_with(|| {
-                        let lines =
-                            highlight::line_range_iterator(diff.hunk_content(file_i, hunk_i))
-                                .map(|(range, _)| range)
-                                .collect::<Vec<_>>();
+                        let lines = line_range_iterator(diff.hunk_content(file_i, hunk_i))
+                            .map(|(range, _)| range)
+                            .collect::<Vec<_>>();
                         (
                             hash([diff.file_diff_header(file_i), diff.hunk(file_i, hunk_i)]),
                             lines,
@@ -560,6 +559,31 @@ fn rendered_diff_items(
         }
     }
     items
+}
+
+/// Construct a newline inclusive iterator over each line in a chunk of text.
+fn line_range_iterator(content: &str) -> impl Iterator<Item = (Range<usize>, &str)> {
+    content
+        .split_inclusive('\n')
+        .scan(0usize, |prev_line_end, current_line| {
+            let line_start = *prev_line_end;
+
+            let actual_line_length = current_line.len();
+
+            let visual_line_length = if current_line.ends_with("\r\n") {
+                actual_line_length - 2
+            } else {
+                actual_line_length - 1
+            };
+
+            let actual_line_end = line_start + actual_line_length;
+
+            let visual_line_end = line_start + visual_line_length;
+
+            *prev_line_end = actual_line_end;
+
+            Some((line_start..visual_line_end, current_line))
+        })
 }
 
 /// A header's rows split around the first that says something, rather than

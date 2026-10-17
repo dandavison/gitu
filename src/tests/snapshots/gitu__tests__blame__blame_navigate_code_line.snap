@@ -8,7 +8,7 @@ expression: ctx.redact_buffer()
  dc615266 modify file                                                           |
     2 SELECT-THIS-LINE                                                          |
 ▌1fcc61bc add file                                                              |
-    3 unchanged-botto                                                           |
+    3 unchanged-bottom                                                          |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: bf87595f7dd29626
+styles_hash: 76487f78f5c0cf0d

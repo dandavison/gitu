@@ -4,8 +4,6 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
-    ignore:
-      - dependency-name: "tree-sitter*"
     groups:
       minor/patch:
         applies-to: version-updates

@@ -246,11 +246,7 @@ pub(crate) fn layout_item<'a>(
             layout_span(layout, (summary.as_str().into(), base));
         }
         ItemData::BlameCodeLine {
-            blame_file,
-            line_i,
-            line_num,
-            content,
-            ..
+            line_num, content, ..
         } => {
             let base = base.patch(Style::from(&style.blame.code_line));
 
@@ -262,17 +258,7 @@ pub(crate) fn layout_item<'a>(
                 ),
             );
 
-            for (range, highlight_style) in blame_file.highlights.get_line_highlights(*line_i) {
-                if !range.is_empty() && range.end <= content.len() {
-                    layout_span(
-                        layout,
-                        (
-                            content[range.clone()].replace('\t', "    ").into(),
-                            base.patch(*highlight_style),
-                        ),
-                    );
-                }
-            }
+            layout_span(layout, (content.replace('\t', "    ").into(), base));
         }
     }
 }

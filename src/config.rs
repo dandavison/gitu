@@ -162,9 +162,6 @@ pub struct StyleConfig {
     pub hunk_header: StyleConfigEntry,
 
     #[serde(default)]
-    pub syntax_highlight: SyntaxHighlightConfig,
-
-    #[serde(default)]
     pub picker: PickerStyleConfig,
 
     pub cursor: SymbolStyleConfigEntry,
@@ -223,57 +220,6 @@ pub struct MenuStyleConfig {
     /// Inactive argument value display
     #[serde(default)]
     pub inactive_arg: StyleConfigEntry,
-}
-
-#[derive(Default, Debug, Deserialize)]
-pub struct SyntaxHighlightConfig {
-    #[serde(default)]
-    pub enabled: bool,
-    #[serde(default)]
-    pub attribute: StyleConfigEntry,
-    #[serde(default)]
-    pub comment: StyleConfigEntry,
-    #[serde(default)]
-    pub constant_builtin: StyleConfigEntry,
-    #[serde(default)]
-    pub constant: StyleConfigEntry,
-    #[serde(default)]
-    pub constructor: StyleConfigEntry,
-    #[serde(default)]
-    pub embedded: StyleConfigEntry,
-    #[serde(default)]
-    pub function_builtin: StyleConfigEntry,
-    #[serde(default)]
-    pub function: StyleConfigEntry,
-    #[serde(default)]
-    pub keyword: StyleConfigEntry,
-    #[serde(default)]
-    pub number: StyleConfigEntry,
-    #[serde(default)]
-    pub module: StyleConfigEntry,
-    #[serde(default)]
-    pub property: StyleConfigEntry,
-    #[serde(default)]
-    pub operator: StyleConfigEntry,
-    #[serde(default)]
-    pub punctuation_bracket: StyleConfigEntry,
-    #[serde(default)]
-    pub punctuation_delimiter: StyleConfigEntry,
-    #[serde(default)]
-    pub string_special: StyleConfigEntry,
-    #[serde(default)]
-    pub string: StyleConfigEntry,
-    #[serde(default)]
-    pub tag: StyleConfigEntry,
-    #[serde(default)]
-    #[serde(rename = "type")]
-    pub type_regular: StyleConfigEntry,
-    #[serde(default)]
-    pub type_builtin: StyleConfigEntry,
-    #[serde(default)]
-    pub variable_builtin: StyleConfigEntry,
-    #[serde(default)]
-    pub variable_parameter: StyleConfigEntry,
 }
 
 #[derive(Default, Debug, Deserialize)]

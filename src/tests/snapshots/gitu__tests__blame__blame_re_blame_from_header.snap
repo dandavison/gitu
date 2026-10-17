@@ -6,7 +6,7 @@ expression: ctx.redact_buffer()
  1fcc61bc add file                                                              |
     1 unchanged-top                                                             |
 ▌   2 original                                                                  |
-    3 unchanged-botto                                                           |
+    3 unchanged-bottom                                                          |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 281b71913767ed49
+styles_hash: a2991c8c46f11714

@@ -1,8 +1,6 @@
 use std::{cell::RefCell, ops::Range, path::PathBuf, rc::Rc};
 
-use crate::{
-    Res, error::Error, git::diff::Diff, highlight::BlameHighlights, rebase_todo::RebaseTodo,
-};
+use crate::{Res, error::Error, git::diff::Diff, rebase_todo::RebaseTodo};
 
 #[derive(Clone, Debug)]
 pub(crate) enum ItemData {
@@ -70,19 +68,12 @@ pub(crate) enum ItemData {
         blamed_line_num: u32, // line number in the blamed file (for blame-view nav)
     },
     BlameCodeLine {
-        blame_file: Rc<BlameFile>,
-        line_i: usize,
         line_num: u32,
         orig_line_num: u32,
         content: String,
         commit_hash: String,
         file_path: String,
     },
-}
-
-#[derive(Debug)]
-pub(crate) struct BlameFile {
-    pub highlights: BlameHighlights,
 }
 
 impl ItemData {

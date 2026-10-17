@@ -453,23 +453,6 @@ fn inside_submodule() {
 }
 
 #[test]
-fn syntax_highlighted() {
-    let ctx = setup_clone!();
-    commit(
-        &ctx.dir,
-        "syntax-highlighted.rs",
-        "fn main() {\n    println!(\"Hey\");\n}\n",
-    );
-    fs::write(
-        ctx.dir.join("syntax-highlighted.rs"),
-        "fn main() {\n    println!(\"Bye\");\n}\n",
-    )
-    .unwrap();
-
-    snapshot!(ctx, "jj<tab>");
-}
-
-#[test]
 fn crlf_diff() {
     let mut ctx = setup_clone!();
     let mut app = ctx.init_app();
