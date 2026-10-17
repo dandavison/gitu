@@ -1549,12 +1549,11 @@ mod tests {
         );
     }
 
-    /// The handshake says a renderer speaks the protocol, not that it said
-    /// anything with it. One that greets and then annotates no row at all would
-    /// leave a diff of headers with no content, which is worse than the built-in
-    /// rendering it displaced — so the built-in rendering stands.
+    /// Every diff line is drawn by the renderer: a renderer that annotates no
+    /// row leaves the diff's files and hunks with no lines, rather than gitu
+    /// drawing them itself.
     #[test]
-    fn a_render_carrying_no_content_records_falls_back_to_the_built_in_one() {
+    fn a_render_carrying_no_content_records_has_no_lines() {
         let diff = diff_from(DIFF);
         let mut config = crate::config::init_test_config().unwrap();
         config.general.diff_renderer.command = ["sh", "-c", r"printf '\033]1717;1\033\\\n'"]
@@ -1563,13 +1562,10 @@ mod tests {
 
         let items = create_diff_items(&config, &Default::default(), &diff, 0, false, None);
 
-        assert_eq!(
-            items
+        assert!(
+            !items
                 .iter()
-                .filter(|item| matches!(item.data, ItemData::HunkLine { .. }))
-                .count(),
-            2,
-            "both content lines of the diff are still there"
+                .any(|item| matches!(item.data, ItemData::HunkLine { .. }))
         );
     }
 
