@@ -4,6 +4,7 @@
 
 use std::io::{self, Read, Write};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -31,6 +32,9 @@ pub(crate) struct Snapshot {
     pub text: String,
     /// Whether reading stopped at the limit rather than at the end.
     pub truncated: bool,
+    /// How many bytes of the input the renderer has taken; all of them without
+    /// a renderer.
+    taken: usize,
     /// What the renderer drew, up to its last whole row. `None` without a
     /// renderer, or when it could not draw.
     pub rendered: Option<String>,
@@ -56,6 +60,8 @@ struct State {
     rendered: Option<Vec<u8>>,
     rendered_rows: usize,
     rendered_done: bool,
+    /// How many bytes of the input have been written to the renderer.
+    fed: usize,
     abandoned: bool,
     /// The input's command, until it closes its output and is waited for.
     command: Option<Child>,
@@ -92,6 +98,19 @@ impl Shared {
 /// Applies its change to the state when dropped, so that a thread that ends by
 /// panicking still says it has finished.
 struct OnExit<'a>(&'a Shared, fn(&mut State));
+
+impl Snapshot {
+    /// The text the renderer has taken, cut back to what is whole. Building
+    /// from it rather than from all of the text is cheaper when what the
+    /// renderer has not reached is not shown.
+    pub(crate) fn taken(&self) -> &str {
+        let end = (0..=self.taken.min(self.text.len()))
+            .rev()
+            .find(|&end| self.text.is_char_boundary(end))
+            .unwrap_or_default();
+        crate::capped_input::whole(&self.text[..end])
+    }
+}
 
 impl Drop for OnExit<'_> {
     fn drop(&mut self) {
@@ -219,6 +238,11 @@ impl Stream {
         });
 
         Snapshot {
+            taken: if state.has_renderer {
+                state.fed
+            } else {
+                state.input.len()
+            },
             text,
             truncated: state.truncated,
             rendered,
@@ -295,11 +319,13 @@ impl Drop for Stream {
 
 /// Read `source` into the shared state and on into the renderer, up to one
 /// byte past `limit` (so that stopping there is distinguishable from input
-/// exactly that long). A command still writing past the limit is killed.
+/// exactly that long). A command still writing past the limit is killed. The
+/// renderer is fed on a thread of its own, so the input is read as fast as it
+/// is written rather than as fast as the renderer takes it.
 fn read(
-    shared: &Shared,
+    shared: &Arc<Shared>,
     mut source: Box<dyn Read + Send>,
-    mut sink: Option<ChildStdin>,
+    sink: Option<ChildStdin>,
     stderr: Option<ChildStderr>,
     limit: u64,
 ) {
@@ -311,6 +337,13 @@ fn read(
             let _ = pipe.read_to_string(&mut said);
             said
         })
+    });
+
+    let feeder = sink.map(|stdin| {
+        let (sender, chunks) = mpsc::channel();
+        let shared = Arc::clone(shared);
+        thread::spawn(move || feed(&shared, stdin, chunks));
+        sender
     });
 
     let mut buffer = vec![0; 64 * 1024];
@@ -331,10 +364,8 @@ fn read(
         total += keep as u64;
         let chunk = &buffer[..keep];
 
-        if let Some(stdin) = &mut sink
-            && stdin.write_all(chunk).is_err()
-        {
-            sink = None;
+        if let Some(feeder) = &feeder {
+            let _ = feeder.send(chunk.to_vec());
         }
 
         let mut abandoned = false;
@@ -348,7 +379,7 @@ fn read(
             break;
         }
     }
-    drop(sink);
+    drop(feeder);
 
     let mut refused = None;
     let mut command = None;
@@ -375,6 +406,16 @@ fn read(
         state.refused = refused;
         state.input_done = true;
     });
+}
+
+/// Write `chunks` to the renderer as they arrive, until it stops taking them.
+fn feed(shared: &Shared, mut stdin: ChildStdin, chunks: Receiver<Vec<u8>>) {
+    for chunk in chunks {
+        if stdin.write_all(&chunk).is_err() {
+            return;
+        }
+        shared.lock().fed += chunk.len();
+    }
 }
 
 /// Read the renderer's output into the shared state as it draws it.

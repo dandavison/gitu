@@ -322,9 +322,19 @@ fn built(
             truncated,
         } => {
             let mut items = Vec::new();
+            // Files folded to stat rows are shown before the renderer reaches
+            // them; other files are not, and only what the renderer has taken
+            // need be parsed.
+            let stat_folded = *stat
+                || (config.general.start_folded && config.general.file_header == FileHeader::Stat);
+            let input = if snapshot.done || stat_folded {
+                &snapshot.text
+            } else {
+                snapshot.taken()
+            };
             // The output arrives coloured; the parser reads none of it through
             // the escapes.
-            let text = crate::diff_renderer::strip_ansi(&snapshot.text);
+            let text = crate::diff_renderer::strip_ansi(input);
             let file_diffs = gitu_diff::Parser::new(&text)
                 .parse_patches()
                 .unwrap_or_default();
