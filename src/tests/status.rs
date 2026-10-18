@@ -231,3 +231,24 @@ fn status_is_drawn_before_the_renderer_finishes() {
         app.update(&mut ctx.term, None).unwrap();
     }
 }
+
+/// With files headed by stat rows, a folded file needs nothing from the
+/// renderer, so status's first screen does not wait for the renderer to reach
+/// its files.
+#[test]
+fn status_with_stat_rows_is_drawn_before_the_renderer_reaches_its_files() {
+    let mut ctx = setup_clone!();
+    super::pager::changed_files_and_a_renderer_stopping_after_two(&mut ctx, 12);
+    ctx.config().general.file_header = crate::config::FileHeader::Stat;
+
+    let started = Instant::now();
+    ctx.init_app_streaming_with_args(Default::default());
+
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "{:?}",
+        started.elapsed()
+    );
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("f12.rs"), "{buffer}");
+}

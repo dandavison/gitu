@@ -1796,6 +1796,44 @@ fn files_starting_folded_fill_the_first_screen() {
     assert!(files >= 15, "{buffer}");
 }
 
+/// A file folded to its stat row needs nothing from the renderer, so a
+/// diffstat's first screen does not wait for the renderer to reach its files.
+#[test]
+fn a_diffstat_is_drawn_before_the_renderer_reaches_its_files() {
+    let mut ctx = setup_clone!();
+    changed_files_and_a_renderer_stopping_after_two(&mut ctx, 12);
+
+    let started = std::time::Instant::now();
+    ctx.init_app_streaming_as_pager_of(&["git", "diff", "--stat"]);
+
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(2),
+        "{:?}",
+        started.elapsed()
+    );
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("f12.rs"), "{buffer}");
+}
+
+/// Files `f01.rs`… changed in the worktree, and a renderer that stops for 3s
+/// once it has drawn two of them.
+pub(super) fn changed_files_and_a_renderer_stopping_after_two(ctx: &mut TestContext, count: usize) {
+    for i in 1..=count {
+        commit(&ctx.dir, &format!("f{i:02}.rs"), "old\n");
+        fs::write(ctx.dir.join(format!("f{i:02}.rs")), "new\n").unwrap();
+    }
+    ctx.config().general.diff_renderer.command = annotating_renderer()
+        .into_iter()
+        .map(|arg| {
+            arg.replace(
+                "BEGIN{",
+                r#"/diff --git /{files++; if (files == 3) {fflush(); system("sleep 3")}}
+        BEGIN{"#,
+            )
+        })
+        .collect();
+}
+
 #[test]
 fn a_commit_opened_from_the_log_starts_folded_when_asked() {
     let mut ctx = setup_clone!();
