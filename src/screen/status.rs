@@ -2,7 +2,7 @@ use super::{Screen, streamed_items};
 use crate::items::RenderParams;
 use crate::{
     Res,
-    config::Config,
+    config::{Config, FileHeader},
     error::Error,
     git::{
         self,
@@ -257,11 +257,12 @@ fn create_status_section_items(
         SectionID::StagedChanges => ItemData::AllStaged(diff.file_diffs.len()),
         _ => unreachable!("no other status section should be created"),
     };
+    let folded_to_stat_rows = config.general.file_header == FileHeader::Stat;
     let drawn = items::drawn_diff_items(
         config,
         diff,
         snapshot.rendered.as_deref(),
-        snapshot.done,
+        !snapshot.done && !folded_to_stat_rows,
         1,
         true,
         None,

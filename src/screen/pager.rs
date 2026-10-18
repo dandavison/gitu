@@ -365,11 +365,13 @@ fn built(
                     commit: named_commit.then(|| commit_named_by(&text)).flatten(),
                     text,
                 });
+                let folded_to_stat_rows =
+                    (*stat || fold) && (*stat || config.general.file_header == FileHeader::Stat);
                 let drawn = items::drawn_diff_items(
                     config,
                     &diff,
                     snapshot.rendered.as_deref(),
-                    snapshot.done,
+                    !snapshot.done && !folded_to_stat_rows,
                     0,
                     *stat || fold,
                     None,

@@ -104,7 +104,7 @@ pub(crate) fn create_diff_items(
         config,
         diff,
         rendered.as_deref(),
-        true,
+        false,
         depth,
         default_collapsed,
         commit,
@@ -125,13 +125,13 @@ pub(crate) fn headed_as_configured(
 }
 
 /// The items for a diff the renderer has drawn as `rendered` (`None` if it
-/// failed). `drawn_whole` says whether `rendered` is all of the renderer's
-/// drawing or only what it has drawn so far.
+/// failed). `cut_unreached` leaves out the files a renderer still drawing has
+/// not reached; a file folded to a row gitu draws needs nothing from it.
 pub(crate) fn drawn_diff_items(
     config: &Config,
     diff: &Rc<Diff>,
     rendered: Option<&str>,
-    drawn_whole: bool,
+    cut_unreached: bool,
     depth: usize,
     default_collapsed: bool,
     commit: Option<String>,
@@ -145,10 +145,10 @@ pub(crate) fn drawn_diff_items(
         commit,
         config.general.visit_context_lines,
     );
-    if drawn_whole {
-        items
-    } else {
+    if cut_unreached {
         reached_files(items)
+    } else {
+        items
     }
 }
 
