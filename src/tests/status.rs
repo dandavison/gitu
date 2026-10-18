@@ -1,7 +1,9 @@
 //! Reaching the status screen from wherever gitu is.
 
+use super::pager::draws_lines_of;
 use super::*;
 use crate::git::diff::DiffType;
+use std::time::{Duration, Instant};
 
 #[test]
 fn status_from_the_log_view() {
@@ -185,4 +187,47 @@ fn files_headed_by_stat_rows_have_no_summary_row() {
     let buffer = ctx.redact_buffer();
     assert!(buffer.contains("a.rs | 2 +-"), "{buffer}");
     assert!(!buffer.contains("1 file changed"), "{buffer}");
+}
+
+/// Status is drawn once the renderer has drawn its first screen of the
+/// unstaged diff, and the rest, staged files included, once it has drawn that.
+#[test]
+fn status_is_drawn_before_the_renderer_finishes() {
+    let mut ctx = setup_clone!();
+    let lines = |prefix: &str| {
+        (1..=60)
+            .map(|i| format!("{prefix} {i}\n"))
+            .collect::<String>()
+    };
+    commit(&ctx.dir, "a.rs", &lines("old a"));
+    commit(&ctx.dir, "b.rs", "old b\n");
+    commit(&ctx.dir, "c.rs", "old c\n");
+    fs::write(ctx.dir.join("a.rs"), lines("new a")).unwrap();
+    fs::write(ctx.dir.join("b.rs"), "new b\n").unwrap();
+    fs::write(ctx.dir.join("c.rs"), "new c\n").unwrap();
+    run(&ctx.dir, &["git", "add", "c.rs"]);
+    ctx.config().general.diff_renderer.command = super::pager::pausing_renderer();
+
+    let started = Instant::now();
+    let mut app = ctx.init_app_streaming_with_args(Default::default());
+
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "{:?}",
+        started.elapsed()
+    );
+    assert!(draws_lines_of(&app, "a.rs"));
+    assert!(
+        !draws_lines_of(&app, "b.rs"),
+        "drawn before the renderer reached it"
+    );
+
+    while !(draws_lines_of(&app, "b.rs") && draws_lines_of(&app, "c.rs")) {
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "the rest never arrived"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+        app.update(&mut ctx.term, None).unwrap();
+    }
 }
