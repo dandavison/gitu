@@ -1,7 +1,7 @@
 use crate::config::StyleConfig;
 use crate::error::Error;
 use crate::search::RunText;
-use crate::stream::{Snapshot, Stream};
+use crate::stream::{Snapshot, Streams};
 use crate::style::Style;
 use crate::term::TermBackend;
 use crate::ui::layout::{LayoutTree, Payload, opts};
@@ -116,7 +116,7 @@ pub(crate) type Later = Box<dyn FnMut() -> Option<(Res<Vec<Item>>, bool)>>;
 /// command or renderer has drawn nothing.
 const FIRST_SCREEN_WAIT: Duration = Duration::from_millis(500);
 
-/// The items `build` makes of what `stream` has produced: once they show
+/// The items `build` makes of what `streams` have produced: once they show
 /// `params`' first two screenfuls or [`FIRST_SCREEN_WAIT`] has passed (or all
 /// of it, when not streaming); then, as [`Items::later`], the first two
 /// screenfuls if they were not there yet, and all of them once it is done.
@@ -126,33 +126,35 @@ const FIRST_SCREEN_WAIT: Duration = Duration::from_millis(500);
 /// that shows too few waits for twice the rows, which keeps the builds' total
 /// cost within about twice the last's.
 pub(crate) fn streamed_items(
-    stream: Stream,
+    streams: Streams,
     params: &RenderParams,
-    build: impl Fn(Snapshot) -> Res<Vec<Item>> + 'static,
+    build: impl Fn(Vec<Snapshot>) -> Res<Vec<Item>> + 'static,
 ) -> Res<Items> {
     let first_screens = 2 * params.size.1 as usize;
     let deadline = Instant::now() + FIRST_SCREEN_WAIT;
     let mut wanted = first_screens;
     let (now, done) = loop {
         if params.streaming {
-            stream.wait_at_most(wanted, deadline.saturating_duration_since(Instant::now()));
+            streams.wait_at_most(wanted, deadline.saturating_duration_since(Instant::now()));
         } else {
-            stream.wait_for(usize::MAX);
+            streams.wait_for(usize::MAX);
         }
-        let snapshot = stream.snapshot();
-        let done = snapshot.done;
-        // Until the renderer has drawn a row there is nothing to show: gitu's
-        // own rows in their place would be highlighted by running the renderer
-        // on each hunk, all before the first screen.
-        let now = if !done && snapshot.rendered.as_deref() == Some("") {
+        let snapshots = streams.snapshots();
+        let done = snapshots.iter().all(|snapshot| snapshot.done);
+        // Until the renderer has drawn a row there is nothing to show.
+        let now = if !done
+            && snapshots
+                .iter()
+                .all(|snapshot| snapshot.rendered.as_deref() == Some(""))
+        {
             Vec::new()
         } else {
-            build(snapshot)?
+            build(snapshots)?
         };
         if done || shown_rows(&now) >= first_screens || Instant::now() >= deadline {
             break (now, done);
         }
-        wanted = 2 * stream.rows().max(wanted);
+        wanted = 2 * streams.rows().max(wanted);
     };
     if done {
         return Ok(now.into());
@@ -162,14 +164,14 @@ pub(crate) fn streamed_items(
     Ok(Items {
         now,
         later: Some(Box::new(move || {
-            if stream.is_done() {
-                Some((build(stream.snapshot()), true))
-            } else if short && stream.rows() >= wanted {
-                let items = build(stream.snapshot());
+            if streams.is_done() {
+                Some((build(streams.snapshots()), true))
+            } else if short && streams.rows() >= wanted {
+                let items = build(streams.snapshots());
                 short = items
                     .as_ref()
                     .is_ok_and(|items| shown_rows(items) < first_screens);
-                wanted = 2 * stream.rows();
+                wanted = 2 * streams.rows();
                 Some((items, false))
             } else {
                 None

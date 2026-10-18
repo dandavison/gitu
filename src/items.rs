@@ -109,6 +109,15 @@ pub(crate) fn create_diff_items(
         default_collapsed,
         commit,
     );
+    headed_as_configured(config, params, items)
+}
+
+/// A diff's items with each file headed as `general.file_header` says.
+pub(crate) fn headed_as_configured(
+    config: &Config,
+    params: &RenderParams,
+    items: Vec<Item>,
+) -> Vec<Item> {
     match config.general.file_header {
         FileHeader::Delta => items,
         FileHeader::Stat => headed_by_counted_stat(items, params.width(), false),

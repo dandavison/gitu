@@ -6,7 +6,7 @@ use std::io::{self, Read, Write};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Where the text comes from: a command gitu runs, or text already in hand.
 pub(crate) enum Input {
@@ -225,6 +225,60 @@ impl Stream {
             done,
             refused: state.refused.clone(),
         }
+    }
+}
+
+/// Streams shown one after another as if they were one: the rows to show are
+/// those of each stream that is done, and of the first that is not.
+pub(crate) struct Streams(pub(crate) Vec<Stream>);
+
+impl Streams {
+    /// Wait until there are `rows` rows to show, or everything is done.
+    pub(crate) fn wait_for(&self, rows: usize) {
+        let mut before = 0;
+        for stream in &self.0 {
+            stream.wait_for(rows.saturating_sub(before));
+            if !stream.is_done() {
+                return;
+            }
+            before += stream.rows();
+        }
+    }
+
+    /// [`Self::wait_for`], giving up after `timeout`.
+    pub(crate) fn wait_at_most(&self, rows: usize, timeout: Duration) {
+        let deadline = Instant::now() + timeout;
+        let mut before = 0;
+        for stream in &self.0 {
+            stream.wait_at_most(
+                rows.saturating_sub(before),
+                deadline.saturating_duration_since(Instant::now()),
+            );
+            if !stream.is_done() {
+                return;
+            }
+            before += stream.rows();
+        }
+    }
+
+    /// How many rows there are to show so far.
+    pub(crate) fn rows(&self) -> usize {
+        let mut rows = 0;
+        for stream in &self.0 {
+            rows += stream.rows();
+            if !stream.is_done() {
+                break;
+            }
+        }
+        rows
+    }
+
+    pub(crate) fn is_done(&self) -> bool {
+        self.0.iter().all(Stream::is_done)
+    }
+
+    pub(crate) fn snapshots(&self) -> Vec<Snapshot> {
+        self.0.iter().map(Stream::snapshot).collect()
     }
 }
 

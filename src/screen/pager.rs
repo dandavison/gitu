@@ -18,7 +18,7 @@ use crate::{
     gitu_diff,
     item_data::ItemData,
     items::{self, Item, RenderParams},
-    stream::{Input, Snapshot, Stream},
+    stream::{Input, Snapshot, Stream, Streams},
 };
 use git2::{Oid, Repository};
 use regex::Regex;
@@ -212,8 +212,8 @@ impl Source {
     ) -> Res<Items> {
         let (stream, shape) = self.start(config, repo, params)?;
         let (config, repo, built_params) = (Arc::clone(config), Rc::clone(repo), params.clone());
-        streamed_items(stream, params, move |snapshot| {
-            built(&config, &repo, &built_params, &shape, snapshot)
+        streamed_items(Streams(vec![stream]), params, move |mut snapshots| {
+            built(&config, &repo, &built_params, &shape, snapshots.remove(0))
         })
     }
 

@@ -1,4 +1,4 @@
-use super::Screen;
+use super::{Screen, streamed_items};
 use crate::items::RenderParams;
 use crate::{
     Res,
@@ -11,10 +11,12 @@ use crate::{
     },
     item_data::{ItemData, SectionHeader},
     items::{self, Item, hash},
+    stream::{Input, Snapshot, Stream, Streams},
 };
 use git2::Repository;
 use std::{hash::Hash, path::PathBuf, rc::Rc, sync::Arc};
 
+#[derive(Clone, Copy)]
 enum SectionID {
     RebaseStatus,
     MergeStatus,
@@ -52,7 +54,7 @@ pub(crate) fn create(
     repo: Rc<Repository>,
     params: RenderParams,
 ) -> Res<Screen> {
-    let mut screen = Screen::new(
+    let mut screen = Screen::streamed(
         Arc::clone(&config),
         params,
         Box::new(move |params: RenderParams| {
@@ -66,7 +68,7 @@ pub(crate) fn create(
 
             let untracked = untracked_list(&untracked_files);
 
-            let items = if let Some(rebase) = git::rebase_status(&repo)? {
+            let head = if let Some(rebase) = git::rebase_status(&repo)? {
                 vec![Item {
                     id: hash(SectionID::RebaseStatus),
                     data: ItemData::Header(SectionHeader::Rebase(rebase.head_name, rebase.onto)),
@@ -113,32 +115,49 @@ pub(crate) fn create(
                 ]
             })
             .chain(untracked)
-            .chain(create_status_section_items(
-                &config,
-                &params,
-                SectionID::UnstagedChanges,
-                &Rc::new(git::diff_unstaged(
-                    repo.as_ref(),
-                    params.context.as_deref(),
-                )?),
-            ))
-            .chain(create_status_section_items(
-                &config,
-                &params,
-                SectionID::StagedChanges,
-                &Rc::new(git::diff_staged(repo.as_ref(), params.context.as_deref())?),
-            ))
-            .chain(create_stash_list_section_items(
-                repo.as_ref(),
-                config.general.stash_list_limit,
-            ))
-            .chain(create_log_section_items(
-                repo.as_ref(),
-                config.general.recent_commits_limit,
-            ))
-            .collect();
+            .collect::<Vec<_>>();
 
-            Ok(items)
+            let context = params.context.as_deref();
+            let sections = [
+                (
+                    SectionID::UnstagedChanges,
+                    git::diff_unstaged(repo.as_ref(), context)?,
+                ),
+                (
+                    SectionID::StagedChanges,
+                    git::diff_staged(repo.as_ref(), context)?,
+                ),
+            ]
+            .into_iter()
+            .filter(|(_, diff)| !diff.file_diffs.is_empty())
+            .map(|(section, diff)| (section, Rc::new(diff)))
+            .collect::<Vec<_>>();
+
+            let tail =
+                create_stash_list_section_items(repo.as_ref(), config.general.stash_list_limit)
+                    .chain(create_log_section_items(
+                        repo.as_ref(),
+                        config.general.recent_commits_limit,
+                    ))
+                    .collect::<Vec<_>>();
+
+            let streams = Streams(
+                sections
+                    .iter()
+                    .map(|(_, diff)| rendering(&config, &params, diff))
+                    .collect::<Res<_>>()?,
+            );
+            let (config, built_params) = (Arc::clone(&config), params.clone());
+            streamed_items(streams, &params, move |snapshots| {
+                Ok(status_items(
+                    &config,
+                    &built_params,
+                    &head,
+                    &sections,
+                    snapshots,
+                    &tail,
+                ))
+            })
         }),
     )?;
 
@@ -196,38 +215,74 @@ fn branch_status_items(status: &BranchStatus, config: &Config) -> Res<Vec<Item>>
     Ok(items)
 }
 
-fn create_status_section_items<'a>(
-    config: &'a Config,
-    params: &'a RenderParams,
-    section: SectionID,
-    diff: &'a Rc<Diff>,
-) -> impl Iterator<Item = Item> + 'a {
-    if diff.file_diffs.is_empty() {
-        vec![]
-    } else {
-        let count = diff.file_diffs.len();
-        let item_data = match section {
-            SectionID::UnstagedChanges => ItemData::AllUnstaged(count),
-            SectionID::StagedChanges => ItemData::AllStaged(count),
-            _ => unreachable!("no other status section should be created"),
-        };
+/// `diff` drawn by the renderer as it is drawn.
+fn rendering(config: &Config, params: &RenderParams, diff: &Diff) -> Res<Stream> {
+    let renderer =
+        crate::diff_renderer::renderer_command(&config.general.diff_renderer.command, params, None);
+    Stream::start(Input::Text(diff.text.clone()), renderer, u64::MAX).map_err(Error::GitDiff)
+}
 
-        vec![
-            items::blank_line(),
-            Item {
-                id: hash(section),
-                depth: 0,
-                data: item_data,
-                ..Default::default()
-            },
-        ]
+/// The status items, with each section's diff as the renderer has drawn it
+/// so far. A section is shown only once those above it are drawn whole.
+fn status_items(
+    config: &Config,
+    params: &RenderParams,
+    head: &[Item],
+    sections: &[(SectionID, Rc<Diff>)],
+    snapshots: Vec<Snapshot>,
+    tail: &[Item],
+) -> Vec<Item> {
+    let mut items = head.to_vec();
+    for ((section, diff), snapshot) in sections.iter().zip(snapshots) {
+        items.extend(create_status_section_items(
+            config, params, *section, diff, &snapshot,
+        ));
+        if !snapshot.done {
+            return items;
+        }
     }
+    items.extend_from_slice(tail);
+    items
+}
+
+fn create_status_section_items(
+    config: &Config,
+    params: &RenderParams,
+    section: SectionID,
+    diff: &Rc<Diff>,
+    snapshot: &Snapshot,
+) -> Vec<Item> {
+    let item_data = match section {
+        SectionID::UnstagedChanges => ItemData::AllUnstaged(diff.file_diffs.len()),
+        SectionID::StagedChanges => ItemData::AllStaged(diff.file_diffs.len()),
+        _ => unreachable!("no other status section should be created"),
+    };
+    let drawn = items::drawn_diff_items(
+        config,
+        diff,
+        snapshot.rendered.as_deref(),
+        snapshot.done,
+        1,
+        true,
+        None,
+    );
+
+    [
+        items::blank_line(),
+        Item {
+            id: hash(section),
+            depth: 0,
+            data: item_data,
+            ..Default::default()
+        },
+    ]
     .into_iter()
     .chain(
-        items::create_diff_items(config, params, diff, 1, true, None)
+        items::headed_as_configured(config, params, drawn)
             .into_iter()
             .map(folded_as_in_other_section),
     )
+    .collect()
 }
 
 /// A file first staged or unstaged is folded as it was in the section it came
