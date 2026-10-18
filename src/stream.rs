@@ -461,6 +461,24 @@ mod tests {
         assert_eq!(snapshot.rendered.as_deref(), Some("a\nb\n"));
     }
 
+    /// The input is read as fast as it is written, not as fast as the renderer
+    /// takes it: what the files are is known before the renderer reaches them.
+    #[test]
+    fn the_input_is_read_before_the_renderer_takes_it() {
+        let text = PATCH.repeat(20_000);
+        let renderer = command(&["sh", "-c", "sleep 3; cat"]);
+        let started = Instant::now();
+        let stream = Stream::start(Input::Text(text.clone()), Some(renderer), u64::MAX).unwrap();
+
+        while stream.snapshot().text.len() < text.len() {
+            assert!(
+                started.elapsed() < Duration::from_secs(2),
+                "the input waited for the renderer"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
     /// While a command is still writing, what it has written so far is cut back
     /// to its last whole hunk.
     #[test]
