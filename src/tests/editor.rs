@@ -286,7 +286,14 @@ fn a_letter_in_the_feature_list_sets_the_selected_features_key() {
     assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
 
     assert!(fs::read_to_string(&path).unwrap().starts_with("# mine\n"));
-    assert_eq!(saved_feature_keys(&path), [("side-by-side".into(), 'x')]);
+    assert_eq!(
+        saved_feature_keys(&path),
+        [
+            ("keep-plus-minus-markers".into(), '+'),
+            ("line-numbers".into(), 'L'),
+            ("side-by-side".into(), 'x')
+        ]
+    );
 }
 
 #[test]
@@ -297,7 +304,13 @@ fn the_same_letter_again_unsets_the_key() {
 
     ctx.update(&mut app, keys("-xx<esc>x"));
     assert!(app.state.features.is_empty());
-    assert_eq!(saved_feature_keys(&path), []);
+    assert_eq!(
+        saved_feature_keys(&path),
+        [
+            ("keep-plus-minus-markers".into(), '+'),
+            ("line-numbers".into(), 'L')
+        ]
+    );
 }
 
 #[test]
@@ -311,7 +324,14 @@ fn another_letter_replaces_the_key() {
 
     ctx.update(&mut app, keys("w"));
     assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
-    assert_eq!(saved_feature_keys(&path), [("side-by-side".into(), 'w')]);
+    assert_eq!(
+        saved_feature_keys(&path),
+        [
+            ("keep-plus-minus-markers".into(), '+'),
+            ("line-numbers".into(), 'L'),
+            ("side-by-side".into(), 'w')
+        ]
+    );
 }
 
 #[test]
@@ -322,7 +342,71 @@ fn a_key_set_for_one_feature_is_taken_from_another() {
 
     ctx.update(&mut app, keys("-x<down>x<esc>x"));
     assert_eq!(&*app.state.features, ["line-numbers".to_string()]);
-    assert_eq!(saved_feature_keys(&path), [("line-numbers".into(), 'x')]);
+    assert_eq!(
+        saved_feature_keys(&path),
+        [
+            ("keep-plus-minus-markers".into(), '+'),
+            ("line-numbers".into(), 'x')
+        ]
+    );
+}
+
+/// side-by-side, line numbers and +/- markers have keys without the user
+/// setting any.
+#[test]
+fn the_default_features_have_keys_by_default() {
+    let dir = temp_dir::TempDir::new().unwrap();
+    assert_eq!(
+        saved_feature_keys(&dir.path().join("config.toml")),
+        [
+            ("keep-plus-minus-markers".into(), '+'),
+            ("line-numbers".into(), 'L'),
+            ("side-by-side".into(), 'S')
+        ]
+    );
+}
+
+#[test]
+fn plus_toggles_the_plus_minus_markers_by_default() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("+"));
+    assert_eq!(
+        &*app.state.features,
+        ["keep-plus-minus-markers".to_string()]
+    );
+}
+
+/// The feature keys a user's config gives are all of them, as are those the
+/// list saves.
+#[test]
+fn a_users_feature_keys_replace_the_default_ones() {
+    let dir = temp_dir::TempDir::new().unwrap();
+    let path = dir.path().join("config.toml");
+    fs::write(
+        &path,
+        "[general]\ndiff_renderer.feature_keys = { side-by-side = \"x\" }\n",
+    )
+    .unwrap();
+
+    assert_eq!(saved_feature_keys(&path), [("side-by-side".into(), 'x')]);
+}
+
+#[test]
+fn a_default_key_unset_in_the_list_stays_unset() {
+    let mut ctx = setup_clone!();
+    let (_dir, path) = config_file(&mut ctx, "");
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("-S<esc>"));
+    assert_eq!(
+        saved_feature_keys(&path),
+        [
+            ("keep-plus-minus-markers".into(), '+'),
+            ("line-numbers".into(), 'L')
+        ]
+    );
 }
 
 /// A letter that already does something at the top level stays as it is.
@@ -333,7 +417,7 @@ fn a_letter_bound_at_the_top_level_is_refused() {
     let mut app = ctx.init_app();
 
     ctx.update(&mut app, keys("-s<esc>"));
-    assert!(app.state.feature_keys.is_empty());
+    assert!(!app.state.feature_keys.values().any(|key| *key == 's'));
     assert!(!path.exists());
 }
 
