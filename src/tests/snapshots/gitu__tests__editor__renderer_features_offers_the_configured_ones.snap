@@ -12,9 +12,9 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
  Features                                                                       |
-▌    side-by-side                                                               |
-     line-numbers                                                               |
-     keep-plus-minus-markers                                                    |
+▌  S side-by-side                                                               |
+   L line-numbers                                                               |
+   + keep-plus-minus-markers                                                    |
                                                                                 |
                                                                                 |
                                                                                 |

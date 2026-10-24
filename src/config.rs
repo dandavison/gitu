@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 use crate::style::{Color, Modifier, Style};
 use crate::{Bindings, Res, error::Error, key_parser, menu::Menu, ops::Op};
@@ -340,7 +343,7 @@ pub fn init_config(path: Option<PathBuf>) -> Res<Config> {
     }
 
     let FigmentConfig {
-        general,
+        mut general,
         style,
         bindings: bindings_config,
     } = Figment::new()
@@ -349,6 +352,9 @@ pub fn init_config(path: Option<PathBuf>) -> Res<Config> {
         .extract()
         .map_err(Box::new)
         .map_err(Error::Config)?;
+    if let Some(feature_keys) = users_feature_keys(&config_path)? {
+        general.diff_renderer.feature_keys = feature_keys;
+    }
     let bindings = Bindings::try_from(bindings_config.menus)?;
     let picker_bindings = PickerBindings::try_from(bindings_config.picker)?;
     check_feature_keys(&general.diff_renderer.feature_keys, &bindings)?;
@@ -360,6 +366,21 @@ pub fn init_config(path: Option<PathBuf>) -> Res<Config> {
         bindings,
         picker_bindings,
     })
+}
+
+/// The feature keys in the user's config file, which are all of them rather than
+/// additions to the default ones, so that a default key can be unset.
+fn users_feature_keys(path: &Path) -> Res<Option<BTreeMap<String, char>>> {
+    const FEATURE_KEYS: &str = "general.diff_renderer.feature_keys";
+    let figment = Figment::from(Toml::file(path));
+    if !figment.contains(FEATURE_KEYS) {
+        return Ok(None);
+    }
+    figment
+        .extract_inner(FEATURE_KEYS)
+        .map(Some)
+        .map_err(Box::new)
+        .map_err(Error::Config)
 }
 
 /// A feature's key is a top-level key, so one that is bound already would do two

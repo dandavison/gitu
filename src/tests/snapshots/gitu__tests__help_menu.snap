@@ -3,8 +3,8 @@ source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
 ────────────────────────────────────────────────────────────────────────────────|
- Commands                            Submenus          Section                  |
- Y                Show Refs          b   Branch        tab Fold                 |
+ Commands                            Submenus                    Section        |
+ Y                Show Refs          b   Branch                  tab Fold       |
  g+s              Status             c   Commit                                 |
  -                Features           f   Fetch                                  |
  shift+tab        Fold all           h/? Help                                   |
@@ -19,7 +19,7 @@ expression: ctx.redact_buffer()
  shift+down       Select down        A   Cherry-pick                            |
  alt+k/alt+up     Prev section       z   Stash                                  |
  alt+j/alt+down   Next section                                                  |
- alt+h/alt+left   Parent section                                                |
- g+g              Top                                                           |
- G                Bottom                                                        |
-styles_hash: 25a78679933df06
+ alt+h/alt+left   Parent section     Features                                   |
+ g+g              Top                + keep-plus-minus-markers                  |
+ G                Bottom             L line-numbers                             |
+styles_hash: 559d328b620eef96

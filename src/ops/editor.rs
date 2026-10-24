@@ -496,7 +496,9 @@ fn set_feature_key(app: &mut App, feature: &str, key: char) {
         app.state.feature_keys.insert(feature.to_owned(), key);
     }
 
-    if let Err(e) = crate::config_edit::set_feature_key(&app.state.config.path, feature, key) {
+    if let Err(e) =
+        crate::config_edit::set_feature_keys(&app.state.config.path, &app.state.feature_keys)
+    {
         app.display_error(e.to_string());
     }
 }

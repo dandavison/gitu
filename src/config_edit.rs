@@ -2,31 +2,29 @@
 //! as they wrote it.
 
 use crate::{Res, error::Error};
-use std::{fs, io, path::Path};
+use std::{collections::BTreeMap, fs, io, path::Path};
 use toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value};
 
-/// Make `key` toggle `feature`, taking it from any feature that had it; or,
-/// with `None`, give `feature` no key.
-pub(crate) fn set_feature_key(path: &Path, feature: &str, key: Option<char>) -> Res<()> {
-    let key = key.map(String::from);
+/// Make the file's feature keys `keys`, all of them, since the file's replace
+/// the default ones. An entry that is unchanged stays as written.
+pub(crate) fn set_feature_keys(path: &Path, keys: &BTreeMap<String, char>) -> Res<()> {
     edit(path, |doc| {
         let feature_keys = feature_keys(doc);
-        let replaced: Vec<String> = feature_keys
-            .as_table_like()
-            .expect("feature_keys is a table")
-            .iter()
-            .filter(|(name, held)| *name == feature || held.as_str() == key.as_deref())
-            .map(|(name, _)| name.to_owned())
-            .collect();
-
         let table = feature_keys
             .as_table_like_mut()
             .expect("feature_keys is a table");
-        for name in replaced {
+        let changed: Vec<String> = table
+            .iter()
+            .filter(|(name, held)| keys.get(*name).map(char::to_string).as_deref() != held.as_str())
+            .map(|(name, _)| name.to_owned())
+            .collect();
+        for name in changed {
             table.remove(&name);
         }
-        if let Some(key) = key {
-            table.insert(feature, toml_edit::value(key));
+        for (feature, key) in keys {
+            if !table.contains_key(feature) {
+                table.insert(feature, toml_edit::value(String::from(*key)));
+            }
         }
 
         // An inline table holds no comments, so normalising its spacing loses
@@ -90,6 +88,12 @@ mod tests {
     use std::fs;
     use temp_dir::TempDir;
 
+    fn keys(keys: &[(&str, char)]) -> BTreeMap<String, char> {
+        keys.iter()
+            .map(|(feature, key)| ((*feature).to_owned(), *key))
+            .collect()
+    }
+
     fn feature_keys(path: &Path) -> Vec<(String, char)> {
         init_config(Some(path.to_owned()))
             .unwrap()
@@ -105,7 +109,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("gitu/config.toml");
 
-        set_feature_key(&path, "side-by-side", Some('x')).unwrap();
+        set_feature_keys(&path, &keys(&[("side-by-side", 'x')])).unwrap();
 
         assert_eq!(feature_keys(&path), [("side-by-side".into(), 'x')]);
     }
@@ -125,7 +129,7 @@ mod tests {
                     root.discard = [\"k\"]\n";
         fs::write(&path, mine).unwrap();
 
-        set_feature_key(&path, "side-by-side", Some('x')).unwrap();
+        set_feature_keys(&path, &keys(&[("side-by-side", 'x')])).unwrap();
 
         let written = fs::read_to_string(&path).unwrap();
         for line in mine.lines() {
@@ -142,20 +146,27 @@ mod tests {
                     line-numbers = \"w\"  # mine\n";
         fs::write(&path, mine).unwrap();
 
-        set_feature_key(&path, "side-by-side", Some('x')).unwrap();
+        set_feature_keys(
+            &path,
+            &keys(&[("line-numbers", 'w'), ("side-by-side", 'x')]),
+        )
+        .unwrap();
 
         let written = fs::read_to_string(&path).unwrap();
         assert!(written.starts_with(mine), "{written}");
     }
 
     #[test]
-    fn a_feature_given_no_key_loses_it() {
+    fn a_feature_left_out_loses_its_key() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("config.toml");
 
-        set_feature_key(&path, "side-by-side", Some('x')).unwrap();
-        set_feature_key(&path, "line-numbers", Some('w')).unwrap();
-        set_feature_key(&path, "side-by-side", None).unwrap();
+        set_feature_keys(
+            &path,
+            &keys(&[("side-by-side", 'x'), ("line-numbers", 'w')]),
+        )
+        .unwrap();
+        set_feature_keys(&path, &keys(&[("line-numbers", 'w')])).unwrap();
 
         assert_eq!(feature_keys(&path), [("line-numbers".into(), 'w')]);
     }
@@ -165,9 +176,12 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("config.toml");
 
-        set_feature_key(&path, "side-by-side", Some('x')).unwrap();
-        set_feature_key(&path, "line-numbers", Some('w')).unwrap();
-        set_feature_key(&path, "line-numbers", Some('x')).unwrap();
+        set_feature_keys(
+            &path,
+            &keys(&[("side-by-side", 'x'), ("line-numbers", 'w')]),
+        )
+        .unwrap();
+        set_feature_keys(&path, &keys(&[("line-numbers", 'x')])).unwrap();
 
         assert_eq!(feature_keys(&path), [("line-numbers".into(), 'x')]);
     }
@@ -181,7 +195,7 @@ mod tests {
         fs::write(&target, "[general]\n").unwrap();
         std::os::unix::fs::symlink(&target, &link).unwrap();
 
-        set_feature_key(&link, "side-by-side", Some('x')).unwrap();
+        set_feature_keys(&link, &keys(&[("side-by-side", 'x')])).unwrap();
 
         assert!(fs::symlink_metadata(&link).unwrap().is_symlink());
         assert_eq!(feature_keys(&target), [("side-by-side".into(), 'x')]);

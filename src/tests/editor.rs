@@ -168,12 +168,10 @@ fn renderer_features_offers_the_configured_ones() {
     snapshot!(setup_clone!(), "-");
 }
 
+/// Give `feature` the only key, as a user's config does: its feature keys replace
+/// the default ones.
 fn with_feature_key(ctx: &mut TestContext, feature: &str, key: char) {
-    ctx.config()
-        .general
-        .diff_renderer
-        .feature_keys
-        .insert(feature.into(), key);
+    ctx.config().general.diff_renderer.feature_keys = [(feature.into(), key)].into();
 }
 
 /// A config file of the test's own, holding `text`, for setting a key to write
