@@ -692,6 +692,20 @@ mod tests {
         );
     }
 
+    /// delta's `keep-plus-minus-markers` is `plus-minus-markers` in gitu.
+    #[test]
+    fn the_plus_minus_markers_reach_delta_by_deltas_name() {
+        assert_eq!(
+            run(
+                &echo_features(),
+                None,
+                &params_with(&["plus-minus-markers", "side-by-side"]),
+                None
+            ),
+            Some("+keep-plus-minus-markers side-by-side".to_string())
+        );
+    }
+
     #[test]
     fn selecting_no_features_leaves_the_variable_unset() {
         // Not "+": the user's configuration must apply entirely untouched.

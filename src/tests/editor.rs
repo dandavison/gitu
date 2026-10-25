@@ -287,8 +287,8 @@ fn a_letter_in_the_feature_list_sets_the_selected_features_key() {
     assert_eq!(
         saved_feature_keys(&path),
         [
-            ("keep-plus-minus-markers".into(), '+'),
             ("line-numbers".into(), 'L'),
+            ("plus-minus-markers".into(), '+'),
             ("side-by-side".into(), 'x')
         ]
     );
@@ -305,8 +305,8 @@ fn the_same_letter_again_unsets_the_key() {
     assert_eq!(
         saved_feature_keys(&path),
         [
-            ("keep-plus-minus-markers".into(), '+'),
-            ("line-numbers".into(), 'L')
+            ("line-numbers".into(), 'L'),
+            ("plus-minus-markers".into(), '+')
         ]
     );
 }
@@ -325,8 +325,8 @@ fn another_letter_replaces_the_key() {
     assert_eq!(
         saved_feature_keys(&path),
         [
-            ("keep-plus-minus-markers".into(), '+'),
             ("line-numbers".into(), 'L'),
+            ("plus-minus-markers".into(), '+'),
             ("side-by-side".into(), 'w')
         ]
     );
@@ -343,8 +343,8 @@ fn a_key_set_for_one_feature_is_taken_from_another() {
     assert_eq!(
         saved_feature_keys(&path),
         [
-            ("keep-plus-minus-markers".into(), '+'),
-            ("line-numbers".into(), 'x')
+            ("line-numbers".into(), 'x'),
+            ("plus-minus-markers".into(), '+')
         ]
     );
 }
@@ -357,8 +357,8 @@ fn the_default_features_have_keys_by_default() {
     assert_eq!(
         saved_feature_keys(&dir.path().join("config.toml")),
         [
-            ("keep-plus-minus-markers".into(), '+'),
             ("line-numbers".into(), 'L'),
+            ("plus-minus-markers".into(), '+'),
             ("side-by-side".into(), 'S')
         ]
     );
@@ -370,10 +370,7 @@ fn plus_toggles_the_plus_minus_markers_by_default() {
     let mut app = ctx.init_app();
 
     ctx.update(&mut app, keys("+"));
-    assert_eq!(
-        &*app.state.features,
-        ["keep-plus-minus-markers".to_string()]
-    );
+    assert_eq!(&*app.state.features, ["plus-minus-markers".to_string()]);
 }
 
 /// The feature keys a user's config gives are all of them, as are those the
@@ -401,8 +398,8 @@ fn a_default_key_unset_in_the_list_stays_unset() {
     assert_eq!(
         saved_feature_keys(&path),
         [
-            ("keep-plus-minus-markers".into(), '+'),
-            ("line-numbers".into(), 'L')
+            ("line-numbers".into(), 'L'),
+            ("plus-minus-markers".into(), '+')
         ]
     );
 }
