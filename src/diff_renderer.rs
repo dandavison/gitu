@@ -330,7 +330,19 @@ fn feature_overlay(features: &[String]) -> Option<String> {
     if features.is_empty() {
         return None;
     }
-    Some(format!("+{}", features.join(" ")))
+    let names: Vec<&str> = features
+        .iter()
+        .map(|feature| deltas_name(feature))
+        .collect();
+    Some(format!("+{}", names.join(" ")))
+}
+
+/// delta's name for a feature gitu offers.
+fn deltas_name(feature: &str) -> &str {
+    match feature {
+        "plus-minus-markers" => "keep-plus-minus-markers",
+        feature => feature,
+    }
 }
 
 /// The renderer features to offer: those gitu is configured with, in order. An

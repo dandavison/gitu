@@ -53,13 +53,13 @@ status_cursor_on_changes = true
 # not delta's built-in features. A feature is free to restructure the diff
 # however it likes: Gitu maps each rendered row back to its patch line from the
 # metadata the renderer emits, not from how the row looks.
-diff_renderer.features = ["side-by-side", "line-numbers", "keep-plus-minus-markers"]
+diff_renderer.features = ["side-by-side", "line-numbers", "plus-minus-markers"]
 
 # Top-level keys that toggle features. A key already bound at the top level is
 # refused. Feature keys in your config replace these, rather than adding to
 # them. In the `renderer_features` list, a letter sets the selected feature's
 # key, the same letter again unsets it, and Gitu writes them all here.
-diff_renderer.feature_keys = { side-by-side = "S", line-numbers = "L", keep-plus-minus-markers = "+" }
+diff_renderer.feature_keys = { side-by-side = "S", line-numbers = "L", plus-minus-markers = "+" }
 
 # Arguments given to the `git log` Gitu runs for the log view (`l l`, `l o`),
 # e.g. a pretty format of your own:
