@@ -198,11 +198,11 @@ struct FileStat {
 impl FileStat {
     fn of(diff: &Diff, file_i: usize) -> Self {
         let header = &diff.file_diffs[file_i].header;
+        let old = header.old_file.fmt(&diff.text);
         let new = header.new_file.fmt(&diff.text);
         let name = match header.status {
-            gitu_diff::Status::Renamed | gitu_diff::Status::Copied => {
-                format!("{} => {new}", header.old_file.fmt(&diff.text))
-            }
+            gitu_diff::Status::Renamed | gitu_diff::Status::Copied => format!("{old} => {new}"),
+            gitu_diff::Status::Deleted => old.into_owned(),
             _ => new.into_owned(),
         };
         let lines = || {
