@@ -1734,6 +1734,18 @@ fn stat_rows_are_laid_out_as_git_lays_them_out() {
 }
 
 #[test]
+fn a_deleted_files_stat_row_shows_its_path() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "a.rs", "alpha\n");
+    fs::remove_file(ctx.dir.join("a.rs")).unwrap();
+
+    let buffer = folded_to_stat_rows(&mut ctx);
+
+    assert!(buffer.contains("a.rs | 1 -"), "{buffer}");
+    assert!(!buffer.contains("/dev/null"), "{buffer}");
+}
+
+#[test]
 fn a_folded_file_shows_the_renderers_header_by_default() {
     let mut ctx = setup_clone!();
     a_replaced_line_and_three_added(&ctx);
