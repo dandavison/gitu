@@ -1,6 +1,11 @@
 # This file contains Gitu's default configuration.
 # It is possible to override settings with an equivalent file at:
 # `~/.config/gitu/config.toml`
+# and to override both in git config's `delta-tui` section, e.g.
+#   [delta-tui]
+#       start-folded = true
+#   [delta-tui "style"]
+#       hunk-header = bold blue
 
 [general]
 always_show_help.enabled = false

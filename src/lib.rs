@@ -6,6 +6,7 @@ pub mod cli;
 mod cmd_log;
 pub mod config;
 mod config_edit;
+mod config_git;
 mod diff_renderer;
 pub mod error;
 mod file_watcher;

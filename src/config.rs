@@ -1,15 +1,13 @@
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-};
+use std::{collections::BTreeMap, path::PathBuf};
 
+use crate::config_git::{self, FEATURE_KEYS};
 use crate::style::{Color, Modifier, Style};
 use crate::{Bindings, Res, error::Error, key_parser, menu::Menu, ops::Op};
 use crossterm::event::{KeyCode, KeyModifiers};
 use etcetera::{BaseStrategy, choose_base_strategy};
 use figment::{
     Figment,
-    providers::{Format, Toml},
+    providers::{Format, Serialized, Toml},
 };
 use serde::Deserialize;
 
@@ -334,29 +332,41 @@ fn parse_picker_keys(
 }
 
 pub fn init_config(path: Option<PathBuf>) -> Res<Config> {
-    init_config_from(path.unwrap_or_else(config_path), None)
+    let git_config = git2::Repository::open_from_env()
+        .and_then(|repo| repo.config())
+        .or_else(|_| git2::Config::open_default())
+        .ok();
+    init_config_from(path.unwrap_or_else(config_path), git_config.as_ref())
 }
 
 /// The config in the gitu config file at `config_path`, under what `git_config`
 /// holds in its `delta-tui` section.
-fn init_config_from(config_path: PathBuf, _git_config: Option<&git2::Config>) -> Res<Config> {
+fn init_config_from(config_path: PathBuf, git_config: Option<&git2::Config>) -> Res<Config> {
     if config_path.exists() {
         log::info!("Loading config file at {config_path:?}");
     } else {
         log::info!("No config file at {config_path:?}");
     }
 
+    let defaults = Figment::from(Toml::string(DEFAULT_CONFIG));
+    let file = Figment::from(Toml::file(&config_path));
+    let git = match git_config {
+        Some(git_config) => Figment::from(Serialized::defaults(config_git::read(
+            git_config, &defaults,
+        )?)),
+        None => Figment::new(),
+    };
     let FigmentConfig {
         mut general,
         style,
         bindings: bindings_config,
-    } = Figment::new()
-        .merge(Toml::string(DEFAULT_CONFIG))
-        .merge(Toml::file(&config_path))
+    } = defaults
+        .merge(file.clone())
+        .merge(git.clone())
         .extract()
         .map_err(Box::new)
         .map_err(Error::Config)?;
-    if let Some(feature_keys) = users_feature_keys(&config_path)? {
+    if let Some(feature_keys) = users_feature_keys(&git)?.or(users_feature_keys(&file)?) {
         general.diff_renderer.feature_keys = feature_keys;
     }
     let bindings = Bindings::try_from(bindings_config.menus)?;
@@ -372,11 +382,9 @@ fn init_config_from(config_path: PathBuf, _git_config: Option<&git2::Config>) ->
     })
 }
 
-/// The feature keys in the user's config file, which are all of them rather than
-/// additions to the default ones, so that a default key can be unset.
-fn users_feature_keys(path: &Path) -> Res<Option<BTreeMap<String, char>>> {
-    const FEATURE_KEYS: &str = "general.diff_renderer.feature_keys";
-    let figment = Figment::from(Toml::file(path));
+/// The feature keys in one layer of the user's config, which are all of them
+/// rather than additions to those under it, so that a key can be unset.
+fn users_feature_keys(figment: &Figment) -> Res<Option<BTreeMap<String, char>>> {
     if !figment.contains(FEATURE_KEYS) {
         return Ok(None);
     }
