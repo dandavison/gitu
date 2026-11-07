@@ -836,8 +836,10 @@ pub(crate) fn rendered_log_items(repo: &Repository, rendered: &str) -> Option<Ve
 /// of its own, so that a path the log changes in several commits is placed in
 /// the right one. `None` if the renderer does not say which rows are which, or
 /// says of fewer commits' diffs than there are patches.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn log_of_patches_items(
     config: &Config,
+    params: &RenderParams,
     repo: &Repository,
     patches: Vec<String>,
     rendered: &str,
@@ -900,13 +902,17 @@ pub(crate) fn log_of_patches_items(
             commit: commit.oid.clone(),
             text: patch,
         });
-        let diff_items = rendered_diff_items(
-            &diff,
-            diff_rows,
-            2,
-            default_collapsed,
-            commit.oid,
-            config.general.visit_context_lines,
+        let diff_items = headed_as_configured(
+            config,
+            params,
+            rendered_diff_items(
+                &diff,
+                diff_rows,
+                2,
+                default_collapsed,
+                commit.oid,
+                config.general.visit_context_lines,
+            ),
         );
         items.extend(if drawn_whole {
             diff_items

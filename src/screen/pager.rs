@@ -358,6 +358,7 @@ fn built(
                         .and_then(|rendered| {
                             items::log_of_patches_items(
                                 config,
+                                params,
                                 repo,
                                 patches,
                                 rendered,
