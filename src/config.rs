@@ -334,8 +334,12 @@ fn parse_picker_keys(
 }
 
 pub fn init_config(path: Option<PathBuf>) -> Res<Config> {
-    let config_path = path.unwrap_or_else(config_path);
+    init_config_from(path.unwrap_or_else(config_path), None)
+}
 
+/// The config in the gitu config file at `config_path`, under what `git_config`
+/// holds in its `delta-tui` section.
+fn init_config_from(config_path: PathBuf, _git_config: Option<&git2::Config>) -> Res<Config> {
     if config_path.exists() {
         log::info!("Loading config file at {config_path:?}");
     } else {
@@ -447,13 +451,16 @@ pub(crate) fn init_test_config() -> Res<Config> {
 
 #[cfg(test)]
 mod tests {
-    use crate::style::Color;
+    use std::fs;
+
+    use crate::style::{Color, Modifier};
     use figment::{
         Figment,
         providers::{Format, Toml},
     };
+    use temp_dir::TempDir;
 
-    use super::{DEFAULT_CONFIG, FigmentConfig};
+    use super::{Config, DEFAULT_CONFIG, FigmentConfig, init_config_from};
 
     #[test]
     fn config_merges() {
@@ -470,5 +477,176 @@ mod tests {
 
         assert_eq!(config.style.hunk_header.bg, Some(Color::LightGreen));
         assert_eq!(config.style.hunk_header.fg, Some(Color::Blue));
+    }
+
+    /// The config read from a gitu config file holding `toml` and git config
+    /// holding `gitconfig`.
+    fn configured(toml: &str, gitconfig: &str) -> Config {
+        let dir = TempDir::new().unwrap();
+        let toml_path = dir.path().join("config.toml");
+        fs::write(&toml_path, toml).unwrap();
+        let git_path = dir.path().join("gitconfig");
+        fs::write(&git_path, gitconfig).unwrap();
+        let git_config = git2::Config::open(&git_path).unwrap();
+        init_config_from(toml_path, Some(&git_config)).unwrap()
+    }
+
+    fn config_error(gitconfig: &str) -> String {
+        let dir = TempDir::new().unwrap();
+        let git_path = dir.path().join("gitconfig");
+        fs::write(&git_path, gitconfig).unwrap();
+        let git_config = git2::Config::open(&git_path).unwrap();
+        match init_config_from(dir.path().join("config.toml"), Some(&git_config)) {
+            Ok(_) => panic!("{gitconfig} was accepted"),
+            Err(e) => e.to_string(),
+        }
+    }
+
+    #[test]
+    fn git_config_sets_general_settings() {
+        let config = configured(
+            "",
+            "[delta-tui]\n\
+             \tstart-folded = true\n\
+             \tfile-header = stat\n\
+             \tstash-list-limit = 3\n",
+        );
+        assert!(config.general.start_folded);
+        assert_eq!(config.general.file_header, super::FileHeader::Stat);
+        assert_eq!(config.general.stash_list_limit, 3);
+    }
+
+    /// As git reads booleans and integers.
+    #[test]
+    fn git_config_values_are_read_as_git_reads_them() {
+        let config = configured(
+            "",
+            "[delta-tui]\n\
+             \tstart-folded\n\
+             \tvisit-context-lines = no\n\
+             \tmax-input-bytes = 4m\n",
+        );
+        assert!(config.general.start_folded);
+        assert!(!config.general.visit_context_lines);
+        assert_eq!(config.general.max_input_bytes, 4 * 1024 * 1024);
+    }
+
+    /// A list is a key given once per item, as git's own lists are.
+    #[test]
+    fn git_config_lists_are_repeated_keys() {
+        let config = configured(
+            "",
+            "[delta-tui]\n\
+             \tlog-args = --stat\n\
+             \tlog-args = --pretty=format:%h %s\n\
+             \tshow-args = --stat\n",
+        );
+        assert_eq!(config.general.log_args, ["--stat", "--pretty=format:%h %s"]);
+        assert_eq!(config.general.show_args, ["--stat"]);
+    }
+
+    #[test]
+    fn git_config_overrides_the_gitu_config_file() {
+        let config = configured(
+            "[general]\nstart_folded = true\nstash_list_limit = 3\n",
+            "[delta-tui]\n\tstart-folded = false\n",
+        );
+        assert!(!config.general.start_folded);
+        assert_eq!(config.general.stash_list_limit, 3);
+    }
+
+    #[test]
+    fn git_config_subsections_reach_nested_settings() {
+        let config = configured(
+            "",
+            "[delta-tui \"general.diff-renderer\"]\n\
+             \tfeatures = side-by-side\n\
+             \tfeatures = my-*\n",
+        );
+        assert_eq!(
+            config.general.diff_renderer.features,
+            ["side-by-side", "my-*"]
+        );
+    }
+
+    /// A feature key is keyed by the feature's own name, dashes and all, and
+    /// as in the gitu config file they replace the default ones.
+    #[test]
+    fn git_config_sets_feature_keys_by_feature_name() {
+        let config = configured(
+            "",
+            "[delta-tui \"general.diff-renderer.feature-keys\"]\n\
+             \tmy-feature = x\n",
+        );
+        assert_eq!(
+            config
+                .general
+                .diff_renderer
+                .feature_keys
+                .into_iter()
+                .collect::<Vec<_>>(),
+            [("my-feature".to_string(), 'x')]
+        );
+    }
+
+    #[test]
+    fn git_config_sets_bindings() {
+        let config = configured(
+            "",
+            "[delta-tui \"bindings.root\"]\n\
+             \tquit = x\n\
+             \tquit = esc\n",
+        );
+        assert!(config.bindings.binds_at_top_level('x'));
+        assert!(!config.bindings.binds_at_top_level('q'));
+    }
+
+    /// A style is written as delta writes one: attributes, then a foreground
+    /// and a background color. A color it leaves out is unset.
+    #[test]
+    fn git_config_styles_are_delta_styles() {
+        let config = configured(
+            "",
+            "[delta-tui \"style\"]\n\
+             \thunk-header = bold italic \"#ff0000\" 237\n\
+             \tfile-header = ul\n\
+             \tsection-header = normal blue\n",
+        );
+        let style = &config.style;
+        assert_eq!(style.hunk_header.fg, Some(Color::Rgb(255, 0, 0)));
+        assert_eq!(style.hunk_header.bg, Some(Color::Indexed(237)));
+        assert_eq!(
+            style.hunk_header.mods,
+            Some(Modifier::BOLD | Modifier::ITALIC)
+        );
+        assert_eq!(style.file_header.fg, None);
+        assert_eq!(style.file_header.mods, Some(Modifier::UNDERLINED));
+        assert_eq!(style.section_header.fg, None);
+        assert_eq!(style.section_header.bg, Some(Color::Blue));
+    }
+
+    #[test]
+    fn a_git_config_style_keeps_its_symbol() {
+        let config = configured("", "[delta-tui \"style\"]\n\tcursor = red\n");
+        assert_eq!(config.style.cursor.symbol, '▌');
+        assert_eq!(config.style.cursor.fg, Some(Color::Red));
+    }
+
+    #[test]
+    fn a_git_config_style_inside_a_group_of_styles() {
+        let config = configured("", "[delta-tui \"style.menu\"]\n\tkey = green\n");
+        assert_eq!(config.style.menu.key.fg, Some(Color::Green));
+    }
+
+    #[test]
+    fn a_bad_git_config_value_is_an_error_naming_the_key() {
+        assert!(
+            config_error("[delta-tui]\n\tstart-folded = maybe\n")
+                .contains("delta-tui.start-folded")
+        );
+        assert!(
+            config_error("[delta-tui \"style\"]\n\thunk-header = bold sky\n")
+                .contains("delta-tui.style.hunk-header")
+        );
     }
 }
