@@ -311,6 +311,17 @@ fn selected_summary(app: &crate::app::App) -> String {
     }
 }
 
+/// `file_header = "stat"` heads each file of `git log -p` with its stat row, as
+/// it heads each file of `git diff`.
+#[test]
+fn a_log_of_patches_heads_each_file_with_its_stat_row() {
+    let mut ctx = setup_clone!();
+    ctx.config().general.file_header = crate::config::FileHeader::Stat;
+    log_of_patches(&mut ctx);
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains(" a.rs | 2 +-"), "{buffer}");
+}
+
 /// Three commits, the newest changing a file the oldest added, paged through
 /// a renderer that marks commits and annotates diff lines, as delta does.
 fn log_of_patches(ctx: &mut TestContext) -> crate::app::App {
