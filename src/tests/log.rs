@@ -195,6 +195,35 @@ fn log_fold_hides_the_commit_rows() {
     );
 }
 
+/// The summary is a row of the commit under its first, so a search matching it
+/// selects the commit, and enter shows that commit.
+#[test]
+fn log_search_selects_the_commit_whose_row_matches() {
+    let mut ctx = with_log_args(setup(setup_clone!()), MULTI_ROW_LOG_ARGS);
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("ll/second<enter>"));
+    assert_eq!(selected_summary(&app), "add second commit");
+}
+
+/// The selected commit's own match is behind the cursor, so `n` moves on.
+#[test]
+fn log_search_next_steps_a_whole_commit() {
+    let mut ctx = with_log_args(setup(setup_clone!()), MULTI_ROW_LOG_ARGS);
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("ll"));
+    let selected: Vec<String> = ["/commit<enter>", "n", "n"]
+        .into_iter()
+        .map(|input| {
+            ctx.update(&mut app, keys(input));
+            selected_summary(&app)
+        })
+        .collect();
+    assert_eq!(
+        selected,
+        ["add second commit", "add third commit", "add first commit"]
+    );
+}
+
 #[test]
 fn log_show_acts_on_the_selected_commit() {
     snapshot!(setup(setup_clone!()), "llj<enter>");
