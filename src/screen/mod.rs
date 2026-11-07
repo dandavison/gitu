@@ -1423,9 +1423,31 @@ impl Screen {
         };
 
         self.reveal(item_i);
-        self.cursor = item_i;
+        self.cursor = self.selected_by_match(item_i);
         self.scroll_to_cursor();
         true
+    }
+
+    /// The item a match in `item_i` selects. A row with nothing of its own to
+    /// act on, such as a commit's summary under its first row, selects the
+    /// nearest selectable item it is nested under.
+    fn selected_by_match(&self, item_i: usize) -> usize {
+        let item = &self.items[item_i];
+        if !item.unselectable || !matches!(item.data, ItemData::Raw(_)) {
+            return item_i;
+        }
+
+        let mut depth = item.depth;
+        for (i, ancestor) in self.items[..item_i].iter().enumerate().rev() {
+            if ancestor.depth >= depth {
+                continue;
+            }
+            if !ancestor.unselectable {
+                return i;
+            }
+            depth = ancestor.depth;
+        }
+        item_i
     }
 
     fn reveal(&mut self, item_i: usize) {
@@ -1444,11 +1466,11 @@ impl Screen {
         match direction {
             SearchDirection::Forward => self
                 .matching_items(matcher)
-                .find(|&item_i| item_i > self.cursor)
+                .find(|&item_i| self.selected_by_match(item_i) > self.cursor)
                 .or_else(|| self.matching_items(matcher).next()),
             SearchDirection::Backward => self
                 .matching_items(matcher)
-                .take_while(|&item_i| item_i < self.cursor)
+                .take_while(|&item_i| self.selected_by_match(item_i) < self.cursor)
                 .last()
                 .or_else(|| self.matching_items(matcher).last()),
         }
