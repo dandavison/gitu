@@ -50,7 +50,6 @@ nom = "8.0.0"
 notify = "8.0.0"
 serde = { version = "1.0.225", features = ["derive"] }
 toml = "0.8.23"
-toml_edit = "0.22.27"
 regex = "1.12.2"
 strip-ansi-escapes = "0.2.1"
 unicode-segmentation = "1.12.0"

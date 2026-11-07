@@ -1,89 +1,90 @@
-//! Changes gitu makes to the user's config file, leaving everything else in it
-//! as they wrote it.
+//! Changes gitu makes to the user's git config, through `git config` so that
+//! everything else in it stays as they wrote it and a linked file is written
+//! through the link.
 
-use crate::{Res, error::Error};
-use std::process::Command;
-use std::{collections::BTreeMap, fs, io, path::Path};
-use toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value};
+use crate::{Res, config_git, error::Error};
+use std::{collections::BTreeMap, path::Path, process::Command};
 
-fn set_feature_keys_with(_git: &dyn Fn() -> Command, _keys: &BTreeMap<String, char>) -> Res<()> {
+/// Make the feature keys in git config `keys`, all of them, since they replace
+/// those of gitu's config file and the default ones. They are written to the
+/// file that already holds feature keys or else the `delta-tui` section, or to
+/// the global git config if there is none. An entry that is unchanged stays as
+/// written.
+pub(crate) fn set_feature_keys(dir: &Path, keys: &BTreeMap<String, char>) -> Res<()> {
+    set_feature_keys_with(
+        &|| {
+            let mut git = Command::new("git");
+            git.current_dir(dir);
+            git
+        },
+        keys,
+    )
+}
+
+fn set_feature_keys_with(git: &dyn Fn() -> Command, keys: &BTreeMap<String, char>) -> Res<()> {
+    let prefix = format!("{}.", config_git::FEATURE_KEYS_SECTION);
+    let regex = format!("^{}", prefix.replace('.', "\\."));
+    let file = match origin(git, &regex)?.or(origin(git, &format!("^{}\\.", config_git::SECTION))?)
+    {
+        Some(file) => vec!["--file".to_owned(), file],
+        None => vec!["--global".to_owned()],
+    };
+
+    let held = entries(git, &file, &regex)?;
+    for (name, value) in &held {
+        let feature = &name[prefix.len()..];
+        if keys.get(feature).map(char::to_string).as_ref() != Some(value) {
+            run(git()
+                .args(["config"])
+                .args(&file)
+                .args(["--unset-all", name]))?;
+        }
+    }
+    for (feature, key) in keys {
+        let name = format!("{prefix}{feature}");
+        let key = key.to_string();
+        if !held.contains(&(name.clone(), key.clone())) {
+            run(git().args(["config"]).args(&file).args([&name, &key]))?;
+        }
+    }
     Ok(())
 }
 
-/// Make the file's feature keys `keys`, all of them, since the file's replace
-/// the default ones. An entry that is unchanged stays as written.
-pub(crate) fn set_feature_keys(path: &Path, keys: &BTreeMap<String, char>) -> Res<()> {
-    edit(path, |doc| {
-        let feature_keys = feature_keys(doc);
-        let table = feature_keys
-            .as_table_like_mut()
-            .expect("feature_keys is a table");
-        let changed: Vec<String> = table
-            .iter()
-            .filter(|(name, held)| keys.get(*name).map(char::to_string).as_deref() != held.as_str())
-            .map(|(name, _)| name.to_owned())
-            .collect();
-        for name in changed {
-            table.remove(&name);
-        }
-        for (feature, key) in keys {
-            if !table.contains_key(feature) {
-                table.insert(feature, toml_edit::value(String::from(*key)));
-            }
-        }
-
-        // An inline table holds no comments, so normalising its spacing loses
-        // nothing; a section's entries keep theirs.
-        if let Some(inline) = feature_keys.as_inline_table_mut() {
-            inline.fmt();
-        }
-    })
+/// The file of the last entry whose name matches `regex`: the one git reads
+/// last, so the one that has its way.
+fn origin(git: &dyn Fn() -> Command, regex: &str) -> Res<Option<String>> {
+    let output = run(git().args(["config", "--show-origin", "--null", "--get-regexp", regex]))?;
+    // Each entry is its origin, then its name and value.
+    let fields: Vec<&str> = output.split('\0').collect();
+    Ok(fields
+        .chunks(2)
+        .filter_map(|entry| entry[0].strip_prefix("file:"))
+        .next_back()
+        .map(str::to_owned))
 }
 
-/// Rewrite the file at `path` with `change` made to it. Writing goes through a
-/// link rather than replacing it, and a missing file is created.
-fn edit(path: &Path, change: impl FnOnce(&mut DocumentMut)) -> Res<()> {
-    let text = match fs::read_to_string(path) {
-        Ok(text) => text,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(Error::EditConfig(e.to_string())),
-    };
-    let mut doc: DocumentMut = text
-        .parse()
-        .map_err(|e: toml_edit::TomlError| Error::EditConfig(e.to_string()))?;
+/// The names and values of the entries in `file` whose names match `regex`.
+fn entries(git: &dyn Fn() -> Command, file: &[String], regex: &str) -> Res<Vec<(String, String)>> {
+    let output = run(git()
+        .arg("config")
+        .args(file)
+        .args(["--null", "--get-regexp", regex]))?;
+    Ok(output
+        .split('\0')
+        .filter_map(|entry| entry.split_once('\n'))
+        .map(|(name, value)| (name.to_owned(), value.to_owned()))
+        .collect())
+}
 
-    change(&mut doc);
-
-    if let Some(dir) = path.parent() {
-        fs::create_dir_all(dir).map_err(|e| Error::EditConfig(e.to_string()))?;
+/// What `git` writes, where finding nothing (status 1) is no error.
+fn run(git: &mut Command) -> Res<String> {
+    let output = git.output().map_err(|e| Error::EditConfig(e.to_string()))?;
+    if !output.status.success() && output.status.code() != Some(1) {
+        return Err(Error::EditConfig(
+            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        ));
     }
-    fs::write(path, doc.to_string()).map_err(|e| Error::EditConfig(e.to_string()))
-}
-
-/// `general.diff_renderer.feature_keys`, made if missing: as dotted keys under
-/// `[general]`, the way gitu's own default config writes it.
-fn feature_keys(doc: &mut DocumentMut) -> &mut Item {
-    let general = table_in(doc.as_table_mut(), "general", Table::new);
-    let diff_renderer = table_in(general, "diff_renderer", || {
-        let mut dotted = Table::new();
-        dotted.set_dotted(true);
-        dotted
-    });
-    diff_renderer
-        .entry("feature_keys")
-        .or_insert_with(|| Item::Value(Value::InlineTable(InlineTable::new())))
-}
-
-fn table_in<'a>(
-    parent: &'a mut dyn TableLike,
-    key: &str,
-    new: impl FnOnce() -> Table,
-) -> &'a mut dyn TableLike {
-    parent
-        .entry(key)
-        .or_insert_with(|| Item::Table(new()))
-        .as_table_like_mut()
-        .expect("config sections are tables")
+    String::from_utf8(output.stdout).map_err(|e| Error::EditConfig(e.to_string()))
 }
 
 #[cfg(test)]

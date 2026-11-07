@@ -415,7 +415,6 @@ dependencies = [
  "temp-env",
  "tinyvec",
  "toml",
- "toml_edit",
  "unicode-segmentation",
  "unicode-width",
  "url",

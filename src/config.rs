@@ -14,9 +14,6 @@ use serde::Deserialize;
 const DEFAULT_CONFIG: &str = include_str!("default_config.toml");
 
 pub struct Config {
-    /// The file the user's configuration is read from, whether or not it
-    /// exists, and so the one gitu writes to.
-    pub path: PathBuf,
     pub general: GeneralConfig,
     pub style: StyleConfig,
     pub bindings: Bindings,
@@ -377,7 +374,6 @@ pub(crate) fn init_config_from(
     check_feature_keys(&general.diff_renderer.feature_keys, &bindings)?;
 
     Ok(Config {
-        path: config_path,
         general,
         style,
         bindings,
@@ -450,9 +446,6 @@ pub(crate) fn init_test_config() -> Res<Config> {
     };
 
     Ok(Config {
-        // A test that writes config says where; one that doesn't must not
-        // write the user's.
-        path: PathBuf::from("/nonexistent/gitu/config.toml"),
         general,
         style,
         bindings: Bindings::try_from(bindings_config.menus).unwrap(),
