@@ -2,8 +2,13 @@
 //! as they wrote it.
 
 use crate::{Res, error::Error};
+use std::process::Command;
 use std::{collections::BTreeMap, fs, io, path::Path};
 use toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value};
+
+fn set_feature_keys_with(_git: &dyn Fn() -> Command, _keys: &BTreeMap<String, char>) -> Res<()> {
+    Ok(())
+}
 
 /// Make the file's feature keys `keys`, all of them, since the file's replace
 /// the default ones. An entry that is unchanged stays as written.
@@ -84,8 +89,8 @@ fn table_in<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::init_config;
-    use std::fs;
+    use crate::config::init_config_from;
+    use std::{fs, path::PathBuf};
     use temp_dir::TempDir;
 
     fn keys(keys: &[(&str, char)]) -> BTreeMap<String, char> {
@@ -94,110 +99,161 @@ mod tests {
             .collect()
     }
 
-    fn feature_keys(path: &Path) -> Vec<(String, char)> {
-        init_config(Some(path.to_owned()))
-            .unwrap()
-            .general
-            .diff_renderer
-            .feature_keys
-            .into_iter()
-            .collect()
+    /// A repository whose global git config is `global.gitconfig` beside it,
+    /// holding `global`.
+    struct Repo {
+        dir: TempDir,
     }
 
+    impl Repo {
+        fn new(global: &str) -> Self {
+            let dir = TempDir::new().unwrap();
+            fs::create_dir(dir.path().join("repo")).unwrap();
+            fs::write(dir.path().join("global.gitconfig"), global).unwrap();
+            let repo = Self { dir };
+            assert!(repo.git().arg("init").output().unwrap().status.success());
+            repo
+        }
+
+        fn path(&self, name: &str) -> PathBuf {
+            self.dir.path().join(name)
+        }
+
+        fn git(&self) -> Command {
+            let mut git = Command::new("git");
+            git.current_dir(self.path("repo"))
+                .env("GIT_CONFIG_GLOBAL", self.path("global.gitconfig"))
+                .env("GIT_CONFIG_NOSYSTEM", "1");
+            git
+        }
+
+        fn set_feature_keys(&self, keys: &BTreeMap<String, char>) {
+            set_feature_keys_with(&|| self.git(), keys).unwrap();
+        }
+
+        /// The feature keys gitu would read from git config file `name`.
+        fn feature_keys(&self, name: &str) -> Vec<(String, char)> {
+            let git_config = git2::Config::open(&self.path(name)).unwrap();
+            init_config_from(self.path("none.toml"), Some(&git_config))
+                .unwrap()
+                .general
+                .diff_renderer
+                .feature_keys
+                .into_iter()
+                .collect()
+        }
+
+        fn read(&self, name: &str) -> String {
+            fs::read_to_string(self.path(name)).unwrap()
+        }
+    }
+
+    /// With no delta-tui section anywhere, the keys go in the global config,
+    /// as `git config --global` would put them.
     #[test]
-    fn a_config_file_is_created_if_there_is_none() {
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("gitu/config.toml");
+    fn keys_go_in_the_global_git_config_by_default() {
+        let repo = Repo::new("");
 
-        set_feature_keys(&path, &keys(&[("side-by-side", 'x')])).unwrap();
+        repo.set_feature_keys(&keys(&[("side-by-side", 'x')]));
 
-        assert_eq!(feature_keys(&path), [("side-by-side".into(), 'x')]);
+        assert_eq!(
+            repo.feature_keys("global.gitconfig"),
+            [("side-by-side".into(), 'x')]
+        );
+    }
+
+    /// Where the user keeps the TUI's config, often a file of its own included
+    /// from their git config.
+    #[test]
+    fn keys_go_in_the_file_holding_the_delta_tui_section() {
+        let repo = Repo::new("[include]\n\tpath = tui.gitconfig\n");
+        fs::write(
+            repo.path("tui.gitconfig"),
+            "[delta-tui]\n\tstart-folded = true\n",
+        )
+        .unwrap();
+
+        repo.set_feature_keys(&keys(&[("side-by-side", 'x')]));
+
+        assert_eq!(
+            repo.read("global.gitconfig"),
+            "[include]\n\tpath = tui.gitconfig\n"
+        );
+        assert_eq!(
+            repo.feature_keys("tui.gitconfig"),
+            [("side-by-side".into(), 'x')]
+        );
     }
 
     /// The file is the user's: what they wrote, and how, stays.
     #[test]
     fn everything_else_in_the_file_is_kept_as_written() {
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("config.toml");
         let mine = "# My settings\n\
-                    [general]\n\
-                    # Offered by |.\n\
-                    diff_renderer.features = [\"side-by-side\", \"my-*\"]  # mine\n\
-                    visit_context_lines = true\n\
-                    \n\
-                    [bindings]\n\
-                    root.discard = [\"k\"]\n";
-        fs::write(&path, mine).unwrap();
+                    [delta-tui]\n\
+                    \t# Offered by -.\n\
+                    \tvisit-context-lines = true  # mine\n\
+                    [delta-tui \"general.diff-renderer.feature-keys\"]\n\
+                    \tline-numbers = w  # mine\n";
+        let repo = Repo::new(mine);
 
-        set_feature_keys(&path, &keys(&[("side-by-side", 'x')])).unwrap();
+        repo.set_feature_keys(&keys(&[("line-numbers", 'w'), ("side-by-side", 'x')]));
 
-        let written = fs::read_to_string(&path).unwrap();
-        for line in mine.lines() {
-            assert!(written.contains(line), "lost {line:?} from:\n{written}");
-        }
-        assert_eq!(feature_keys(&path), [("side-by-side".into(), 'x')]);
-    }
-
-    #[test]
-    fn comments_among_the_keys_are_kept() {
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("config.toml");
-        let mine = "[general.diff_renderer.feature_keys]\n\
-                    line-numbers = \"w\"  # mine\n";
-        fs::write(&path, mine).unwrap();
-
-        set_feature_keys(
-            &path,
-            &keys(&[("line-numbers", 'w'), ("side-by-side", 'x')]),
-        )
-        .unwrap();
-
-        let written = fs::read_to_string(&path).unwrap();
+        let written = repo.read("global.gitconfig");
         assert!(written.starts_with(mine), "{written}");
+        assert_eq!(
+            repo.feature_keys("global.gitconfig"),
+            [("line-numbers".into(), 'w'), ("side-by-side".into(), 'x')]
+        );
     }
 
     #[test]
     fn a_feature_left_out_loses_its_key() {
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("config.toml");
+        let repo = Repo::new("");
 
-        set_feature_keys(
-            &path,
-            &keys(&[("side-by-side", 'x'), ("line-numbers", 'w')]),
-        )
-        .unwrap();
-        set_feature_keys(&path, &keys(&[("line-numbers", 'w')])).unwrap();
+        repo.set_feature_keys(&keys(&[("side-by-side", 'x'), ("line-numbers", 'w')]));
+        repo.set_feature_keys(&keys(&[("line-numbers", 'w')]));
 
-        assert_eq!(feature_keys(&path), [("line-numbers".into(), 'w')]);
+        assert_eq!(
+            repo.feature_keys("global.gitconfig"),
+            [("line-numbers".into(), 'w')]
+        );
     }
 
     #[test]
     fn a_key_moves_to_the_feature_it_is_set_for() {
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("config.toml");
+        let repo = Repo::new("");
 
-        set_feature_keys(
-            &path,
-            &keys(&[("side-by-side", 'x'), ("line-numbers", 'w')]),
-        )
-        .unwrap();
-        set_feature_keys(&path, &keys(&[("line-numbers", 'x')])).unwrap();
+        repo.set_feature_keys(&keys(&[("side-by-side", 'x'), ("line-numbers", 'w')]));
+        repo.set_feature_keys(&keys(&[("line-numbers", 'x')]));
 
-        assert_eq!(feature_keys(&path), [("line-numbers".into(), 'x')]);
+        assert_eq!(
+            repo.feature_keys("global.gitconfig"),
+            [("line-numbers".into(), 'x')]
+        );
     }
 
     /// A config kept in a dotfiles repo is often a link into it.
     #[test]
     fn a_linked_config_file_is_written_through_the_link() {
-        let dir = TempDir::new().unwrap();
-        let target = dir.path().join("dotfiles-config.toml");
-        let link = dir.path().join("config.toml");
-        fs::write(&target, "[general]\n").unwrap();
-        std::os::unix::fs::symlink(&target, &link).unwrap();
+        let repo = Repo::new("[include]\n\tpath = tui.gitconfig\n");
+        fs::write(
+            repo.path("dotfiles.gitconfig"),
+            "[delta-tui]\n\tstart-folded = true\n",
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(repo.path("dotfiles.gitconfig"), repo.path("tui.gitconfig"))
+            .unwrap();
 
-        set_feature_keys(&link, &keys(&[("side-by-side", 'x')])).unwrap();
+        repo.set_feature_keys(&keys(&[("side-by-side", 'x')]));
 
-        assert!(fs::symlink_metadata(&link).unwrap().is_symlink());
-        assert_eq!(feature_keys(&target), [("side-by-side".into(), 'x')]);
+        assert!(
+            fs::symlink_metadata(repo.path("tui.gitconfig"))
+                .unwrap()
+                .is_symlink()
+        );
+        assert_eq!(
+            repo.feature_keys("dotfiles.gitconfig"),
+            [("side-by-side".into(), 'x')]
+        );
     }
 }

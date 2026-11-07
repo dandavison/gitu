@@ -341,7 +341,10 @@ pub fn init_config(path: Option<PathBuf>) -> Res<Config> {
 
 /// The config in the gitu config file at `config_path`, under what `git_config`
 /// holds in its `delta-tui` section.
-fn init_config_from(config_path: PathBuf, git_config: Option<&git2::Config>) -> Res<Config> {
+pub(crate) fn init_config_from(
+    config_path: PathBuf,
+    git_config: Option<&git2::Config>,
+) -> Res<Config> {
     if config_path.exists() {
         log::info!("Loading config file at {config_path:?}");
     } else {

@@ -174,20 +174,20 @@ fn with_feature_key(ctx: &mut TestContext, feature: &str, key: char) {
     ctx.config().general.diff_renderer.feature_keys = [(feature.into(), key)].into();
 }
 
-/// A config file of the test's own, holding `text`, for setting a key to write
-/// to.
-fn config_file(ctx: &mut TestContext, text: &str) -> (temp_dir::TempDir, PathBuf) {
-    let dir = temp_dir::TempDir::new().unwrap();
-    let path = dir.path().join("config.toml");
-    if !text.is_empty() {
-        fs::write(&path, text).unwrap();
-    }
-    ctx.config().path = path.clone();
-    (dir, path)
+/// The repository's own git config, given a `delta-tui` section so that it is
+/// where a key set from the list is written.
+fn repo_git_config(ctx: &TestContext) -> PathBuf {
+    run(
+        &ctx.dir,
+        &["git", "config", "delta-tui.visit-context-lines", "true"],
+    );
+    ctx.dir.join(".git/config")
 }
 
+/// The feature keys gitu would read from the git config file at `path`.
 fn saved_feature_keys(path: &Path) -> Vec<(String, char)> {
-    crate::config::init_config(Some(path.to_owned()))
+    let git_config = git2::Config::open(path).unwrap();
+    crate::config::init_config_from(PathBuf::from("/nonexistent/config.toml"), Some(&git_config))
         .unwrap()
         .general
         .diff_renderer
@@ -238,14 +238,17 @@ fn the_help_menu_sets_feature_keys_apart_from_submenus() {
 #[test]
 fn a_configured_feature_key_that_is_already_bound_is_a_config_error() {
     let dir = temp_dir::TempDir::new().unwrap();
-    let path = dir.path().join("config.toml");
+    let path = dir.path().join("gitconfig");
     fs::write(
         &path,
-        "[general]\ndiff_renderer.feature_keys = { side-by-side = \"s\" }\n",
+        "[delta-tui \"general.diff-renderer.feature-keys\"]\n\tside-by-side = s\n",
     )
     .unwrap();
+    let git_config = git2::Config::open(&path).unwrap();
 
-    assert!(crate::config::init_config(Some(path)).is_err());
+    assert!(
+        crate::config::init_config_from(dir.path().join("config.toml"), Some(&git_config)).is_err()
+    );
 }
 
 /// The list is moved through, not searched: letters are keys.
@@ -267,11 +270,12 @@ fn the_feature_list_shows_feature_keys() {
 }
 
 /// In the list, a letter becomes the selected feature's key. It works at once,
-/// and is saved to the user's config file beside what was already there.
+/// and is saved to the user's git config beside what was already there.
 #[test]
 fn a_letter_in_the_feature_list_sets_the_selected_features_key() {
     let mut ctx = setup_clone!();
-    let (_dir, path) = config_file(&mut ctx, "# mine\n[general]\nvisit_context_lines = true\n");
+    let path = repo_git_config(&ctx);
+    let mine = fs::read_to_string(&path).unwrap();
     let mut app = ctx.init_app();
 
     ctx.update(&mut app, keys("-x<esc>"));
@@ -283,7 +287,7 @@ fn a_letter_in_the_feature_list_sets_the_selected_features_key() {
     ctx.update(&mut app, keys("x"));
     assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
 
-    assert!(fs::read_to_string(&path).unwrap().starts_with("# mine\n"));
+    assert!(fs::read_to_string(&path).unwrap().starts_with(&mine));
     assert_eq!(
         saved_feature_keys(&path),
         [
@@ -297,7 +301,7 @@ fn a_letter_in_the_feature_list_sets_the_selected_features_key() {
 #[test]
 fn the_same_letter_again_unsets_the_key() {
     let mut ctx = setup_clone!();
-    let (_dir, path) = config_file(&mut ctx, "");
+    let path = repo_git_config(&ctx);
     let mut app = ctx.init_app();
 
     ctx.update(&mut app, keys("-xx<esc>x"));
@@ -314,7 +318,7 @@ fn the_same_letter_again_unsets_the_key() {
 #[test]
 fn another_letter_replaces_the_key() {
     let mut ctx = setup_clone!();
-    let (_dir, path) = config_file(&mut ctx, "");
+    let path = repo_git_config(&ctx);
     let mut app = ctx.init_app();
 
     ctx.update(&mut app, keys("-xw<esc>x"));
@@ -335,7 +339,7 @@ fn another_letter_replaces_the_key() {
 #[test]
 fn a_key_set_for_one_feature_is_taken_from_another() {
     let mut ctx = setup_clone!();
-    let (_dir, path) = config_file(&mut ctx, "");
+    let path = repo_git_config(&ctx);
     let mut app = ctx.init_app();
 
     ctx.update(&mut app, keys("-x<down>x<esc>x"));
@@ -354,8 +358,10 @@ fn a_key_set_for_one_feature_is_taken_from_another() {
 #[test]
 fn the_default_features_have_keys_by_default() {
     let dir = temp_dir::TempDir::new().unwrap();
+    let path = dir.path().join("gitconfig");
+    fs::write(&path, "").unwrap();
     assert_eq!(
-        saved_feature_keys(&dir.path().join("config.toml")),
+        saved_feature_keys(&path),
         [
             ("line-numbers".into(), 'L'),
             ("plus-minus-markers".into(), '+'),
@@ -378,10 +384,10 @@ fn plus_toggles_the_plus_minus_markers_by_default() {
 #[test]
 fn a_users_feature_keys_replace_the_default_ones() {
     let dir = temp_dir::TempDir::new().unwrap();
-    let path = dir.path().join("config.toml");
+    let path = dir.path().join("gitconfig");
     fs::write(
         &path,
-        "[general]\ndiff_renderer.feature_keys = { side-by-side = \"x\" }\n",
+        "[delta-tui \"general.diff-renderer.feature-keys\"]\n\tside-by-side = x\n",
     )
     .unwrap();
 
@@ -391,7 +397,7 @@ fn a_users_feature_keys_replace_the_default_ones() {
 #[test]
 fn a_default_key_unset_in_the_list_stays_unset() {
     let mut ctx = setup_clone!();
-    let (_dir, path) = config_file(&mut ctx, "");
+    let path = repo_git_config(&ctx);
     let mut app = ctx.init_app();
 
     ctx.update(&mut app, keys("-S<esc>"));
@@ -408,12 +414,13 @@ fn a_default_key_unset_in_the_list_stays_unset() {
 #[test]
 fn a_letter_bound_at_the_top_level_is_refused() {
     let mut ctx = setup_clone!();
-    let (_dir, path) = config_file(&mut ctx, "");
+    let path = repo_git_config(&ctx);
+    let mine = fs::read_to_string(&path).unwrap();
     let mut app = ctx.init_app();
 
     ctx.update(&mut app, keys("-s<esc>"));
     assert!(!app.state.feature_keys.values().any(|key| *key == 's'));
-    assert!(!path.exists());
+    assert_eq!(fs::read_to_string(&path).unwrap(), mine);
 }
 
 /// The features the user defined for themselves are theirs to choose from too,
