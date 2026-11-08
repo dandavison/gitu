@@ -331,18 +331,19 @@ fn feature_overlay(features: &[String]) -> Option<String> {
     if features.is_empty() {
         return None;
     }
-    let names: Vec<&str> = features
+    let names: Vec<String> = features
         .iter()
         .map(|feature| deltas_name(feature))
         .collect();
     Some(format!("+{}", names.join(" ")))
 }
 
-/// delta's name for a feature gitu offers.
-fn deltas_name(feature: &str) -> &str {
-    match feature {
-        "plus-minus-markers" => "keep-plus-minus-markers",
-        feature => feature,
+/// delta's name for a feature gitu offers, or for its removal, `-name`.
+pub(crate) fn deltas_name(feature: &str) -> String {
+    match feature.strip_prefix('-') {
+        Some(feature) => format!("-{}", deltas_name(feature)),
+        None if feature == "plus-minus-markers" => "keep-plus-minus-markers".to_owned(),
+        None => feature.to_owned(),
     }
 }
 

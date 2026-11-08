@@ -137,6 +137,11 @@ pub struct DiffRendererConfig {
     /// gitu starts. `None` when gitu is not run by delta.
     #[serde(skip)]
     pub color_mode: Option<ColorMode>,
+    /// The features delta uses with the user's own configuration, by delta's
+    /// name, set by `delta --gitu`, which resolves them before gitu starts. Empty
+    /// when gitu is not run by delta.
+    #[serde(skip)]
+    pub features_in_force: Vec<String>,
 }
 
 /// Whether delta renders for a dark or a light terminal background.

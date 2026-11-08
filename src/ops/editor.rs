@@ -539,11 +539,7 @@ fn feature_items(app: &App, offered: &[String]) -> Vec<PickerItem> {
     offered
         .iter()
         .map(|feature| {
-            let mark = if app.state.features.contains(feature) {
-                '●'
-            } else {
-                ' '
-            };
+            let mark = if is_on(app, feature) { '●' } else { ' ' };
             let key = app.state.feature_keys.get(feature).copied().unwrap_or(' ');
             PickerItem::new(
                 format!("{mark} {key} {feature}"),
@@ -554,8 +550,26 @@ fn feature_items(app: &App, offered: &[String]) -> Vec<PickerItem> {
 }
 
 pub(crate) fn toggle_feature(app: &mut App, feature: &str) -> Res<()> {
-    app.state.features = toggled(&app.state.features, feature);
+    app.state.features = toggled(&app.state.features, feature, in_force(app, feature));
     app.rerender_screens()
+}
+
+/// Whether `feature` is on: turned on in-session, or used with the user's own
+/// configuration and not turned off in-session.
+fn is_on(app: &App, feature: &str) -> bool {
+    let held = |entry: &str| app.state.features.iter().any(|held| held == entry);
+    held(feature) || (in_force(app, feature) && !held(&format!("-{feature}")))
+}
+
+/// Whether delta uses `feature` with the user's own configuration.
+fn in_force(app: &App, feature: &str) -> bool {
+    let deltas_name = crate::diff_renderer::deltas_name(feature);
+    app.state
+        .config
+        .general
+        .diff_renderer
+        .features_in_force
+        .contains(&deltas_name)
 }
 
 /// Make `key` toggle `feature` at the top level, in this session and, by saving
@@ -584,23 +598,26 @@ fn set_feature_key(app: &mut App, feature: &str, key: char) {
     }
 }
 
-/// `features` with `feature` removed if present and appended if not. Order is
-/// otherwise kept, since delta resolves a conflict between two features in
-/// favour of the later one.
-fn toggled(features: &[String], feature: &str) -> Rc<[String]> {
-    if features.iter().any(|held| held == feature) {
+/// `features` with `feature` toggled. Its entry turns it on, or, if the user's
+/// own configuration uses it (`in_force`), turns it off as `-feature`; the entry
+/// is removed if present, returning to the user's configuration, and appended
+/// if not. Order is otherwise kept, since delta resolves a conflict between two
+/// features in favour of the later one.
+fn toggled(features: &[String], feature: &str, in_force: bool) -> Rc<[String]> {
+    let entry = if in_force {
+        format!("-{feature}")
+    } else {
+        feature.to_owned()
+    };
+    if features.contains(&entry) {
         return features
             .iter()
-            .filter(|held| *held != feature)
+            .filter(|held| **held != entry)
             .cloned()
             .collect();
     }
 
-    features
-        .iter()
-        .cloned()
-        .chain([feature.to_owned()])
-        .collect()
+    features.iter().cloned().chain([entry]).collect()
 }
 
 /// Name the commit under the cursor as the one [`App::pick_commit`] was after.
