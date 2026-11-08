@@ -286,3 +286,47 @@ fn theme_mode_without_themes_says_so() {
         ctx.redact_buffer()
     );
 }
+
+/// A digit renders with the theme of that number at once, so that two can be
+/// compared by switching back and forth. 0 is no theme.
+#[test]
+fn a_digit_renders_with_the_theme_of_that_number() {
+    assert_eq!(rendered_after("T2"), ["theme-b"]);
+    assert_eq!(rendered_after("T21"), ["theme-a"]);
+    assert_eq!(rendered_after("T210"), Vec::<String>::new());
+}
+
+/// A digit with no theme of that number does nothing.
+#[test]
+fn a_digit_past_the_last_theme_does_nothing() {
+    assert_eq!(rendered_after("T23"), ["theme-b"]);
+}
+
+/// The digits number the themes the arrows move through: those for delta's
+/// mode.
+#[test]
+fn the_digits_number_the_themes_for_the_mode_delta_is_in() {
+    let light = Some(ColorMode::Light);
+    assert_eq!(after_in(function_name!(), light, "T1").0, ["theme-b"]);
+    assert_eq!(after_in(function_name!(), light, "T12").0, ["theme-b"]);
+}
+
+/// Each theme's number is the digit that selects it.
+#[test]
+fn one_row_shows_the_themes_number() {
+    let ctx = setup_clone!();
+    with_themes(&ctx);
+    snapshot!(ctx, "T2");
+}
+
+/// In the list, digits are typed, since theme names have them.
+#[test]
+fn a_digit_in_the_list_searches() {
+    let mut ctx = setup_clone!();
+    with_themes(&ctx);
+    run(&ctx.dir, &["git", "config", "delta.theme-2.dark", "true"]);
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("T<ctrl+l>2<enter>"));
+    assert_eq!(theme(&app), Some("theme-2"));
+}

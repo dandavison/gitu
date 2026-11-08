@@ -1,0 +1,25 @@
+---
+source: src/tests/theme.rs
+expression: ctx.redact_buffer()
+---
+ On branch main                                                                 |
+ Your branch is up to date with 'origin/main'.                                  |
+                                                                                |
+ Recent commits                                                                 |
+ b66a0bf main origin/main add initial-file                       Author Name __ |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+ 2/2  Theme theme-b                                                             |
+styles_hash: 7d83f60d40bbd3c5
