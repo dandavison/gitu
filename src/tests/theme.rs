@@ -296,6 +296,21 @@ fn a_digit_renders_with_the_theme_of_that_number() {
     assert_eq!(rendered_after("T210"), Vec::<String>::new());
 }
 
+/// A feature key toggles its feature in theme mode, since nothing is typed in
+/// its one row, so that themes can be judged side by side and not.
+#[test]
+fn a_feature_key_toggles_its_feature_in_theme_mode() {
+    assert_eq!(rendered_after("T1S"), ["side-by-side", "theme-a"]);
+    assert_eq!(rendered_after("T1SS"), ["theme-a"]);
+    assert_eq!(rendered_after("T1S2"), ["side-by-side", "theme-b"]);
+}
+
+/// A feature toggled in theme mode stays as it is when theme mode is left.
+#[test]
+fn a_feature_toggled_in_theme_mode_stays_toggled() {
+    assert_eq!(rendered_after("TS<esc>"), ["side-by-side"]);
+}
+
 /// A digit with no theme of that number does nothing.
 #[test]
 fn a_digit_past_the_last_theme_does_nothing() {

@@ -345,7 +345,7 @@ impl App {
                 }
 
                 if self.state.picker.is_some() {
-                    self.handle_picker_input(key);
+                    self.handle_picker_input(key)?;
                 } else if self.state.prompt.state.focused {
                     self.state.prompt.handle_key(key);
                 } else {
@@ -425,12 +425,9 @@ impl App {
             }
             [] => {
                 let feature = match self.state.pending_keys[..] {
-                    [(KeyModifiers::NONE, KeyCode::Char(key))] if menu == Menu::Root => self
-                        .state
-                        .feature_keys
-                        .iter()
-                        .find(|(_, held)| **held == key)
-                        .map(|(feature, _)| feature.clone()),
+                    [(KeyModifiers::NONE, KeyCode::Char(key))] if menu == Menu::Root => {
+                        self.feature_with_key(key)
+                    }
                     _ => None,
                 };
                 self.state.pending_keys.clear();
@@ -989,9 +986,41 @@ impl App {
         }
     }
 
-    fn handle_picker_input(&mut self, key: event::KeyEvent) {
+    /// The feature that `key` toggles in the picker's one row, if any.
+    fn feature_with_key_in_one_row(&self, key: event::KeyEvent) -> Option<String> {
+        let picker = self.state.picker.as_ref()?;
+        let quit = &self.state.config.picker_bindings.quit;
+        match (key.code, key.modifiers) {
+            (event::KeyCode::Char(c), event::KeyModifiers::NONE)
+                if picker.is_one_row()
+                    && !c.is_ascii_digit()
+                    && !quit.iter().any(|b| b == &vec![(key.modifiers, key.code)]) =>
+            {
+                self.feature_with_key(c)
+            }
+            _ => None,
+        }
+    }
+
+    /// The feature that `key` toggles, if any.
+    fn feature_with_key(&self, key: char) -> Option<String> {
+        self.state
+            .feature_keys
+            .iter()
+            .find(|(_, held)| **held == key)
+            .map(|(feature, _)| feature.clone())
+    }
+
+    fn handle_picker_input(&mut self, key: event::KeyEvent) -> Res<()> {
         if key.kind != event::KeyEventKind::Press {
-            return;
+            return Ok(());
+        }
+
+        // Nothing is typed in theme mode's one row, so a feature key toggles its
+        // feature there as at the top level, and themes can be judged with it on
+        // and off. A digit there selects a theme, and `picker.quit` quits.
+        if let Some(feature) = self.feature_with_key_in_one_row(key) {
+            return crate::ops::editor::toggle_feature(self, &feature);
         }
 
         if let Some(ref mut picker) = self.state.picker {
@@ -1032,6 +1061,7 @@ impl App {
                 picker.update_filter();
             }
         }
+        Ok(())
     }
 }
 
