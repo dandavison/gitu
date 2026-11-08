@@ -1,4 +1,5 @@
 use super::*;
+use crate::config::ColorMode;
 use std::path::{Path, PathBuf};
 
 /// Two themes, as delta defines one: a feature that sets `dark` or `light`. A
@@ -64,15 +65,51 @@ fn the_arrows_cycle_through_the_themes() {
 /// In a test, theme mode ends when the keys run out, so what it shows is
 /// observed with all the keys that lead to it given at once.
 fn rendered_after(keys_: &str) -> Vec<String> {
-    let name: String = keys_
+    after_in(function_name!(), None, keys_).0
+}
+
+/// What the screen is rendered with and what is on it after `keys_`, with
+/// delta in `mode`, in a repository named for `test` and the rest.
+fn after_in(test: &str, mode: Option<ColorMode>, keys_: &str) -> (Vec<String>, String) {
+    let name: String = format!("{test}_{mode:?}_{keys_}")
         .chars()
         .map(|c| if c.is_alphanumeric() { c } else { '_' })
         .collect();
-    let mut ctx = TestContext::setup_clone(&format!("rendered_after_{name}"));
+    let mut ctx = TestContext::setup_clone(&format!("theme_after_{name}"));
     with_themes(&ctx);
+    ctx.config().general.diff_renderer.color_mode = mode;
     let mut app = ctx.init_app();
     ctx.update(&mut app, keys(keys_));
-    rendered_with(&app)
+    (rendered_with(&app), ctx.redact_buffer())
+}
+
+/// delta has settled on light or dark before gitu starts, and its themes for
+/// that mode come first.
+#[test]
+fn themes_for_the_mode_delta_is_in_come_first() {
+    let light = Some(ColorMode::Light);
+    assert_eq!(after_in(function_name!(), light, "T<down>").0, ["theme-b"]);
+    assert_eq!(
+        after_in(function_name!(), light, "T<down><down>").0,
+        ["theme-a"]
+    );
+
+    let dark = Some(ColorMode::Dark);
+    assert_eq!(after_in(function_name!(), dark, "T<down>").0, ["theme-a"]);
+    assert_eq!(
+        after_in(function_name!(), dark, "T<down><down>").0,
+        ["theme-b"]
+    );
+}
+
+/// A theme for the other mode says which mode it is for.
+#[test]
+fn themes_for_the_other_mode_say_so() {
+    let light = Some(ColorMode::Light);
+    let (_, screen) = after_in(function_name!(), light, "T<down>");
+    assert!(screen.contains("Theme theme-b  "), "{screen}");
+    let (_, screen) = after_in(function_name!(), light, "T<down><down>");
+    assert!(screen.contains("Theme theme-a (dark)"), "{screen}");
 }
 
 /// Enter keeps the theme, and saves it to the git config that holds the

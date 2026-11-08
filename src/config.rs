@@ -133,6 +133,17 @@ pub struct DiffRendererConfig {
     /// sets `dark` or `light`, as delta defines a theme.
     #[serde(default)]
     pub theme: Option<String>,
+    /// The mode delta renders in, set by `delta --gitu`, which settles it before
+    /// gitu starts. `None` when gitu is not run by delta.
+    #[serde(skip)]
+    pub color_mode: Option<ColorMode>,
+}
+
+/// Whether delta renders for a dark or a light terminal background.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColorMode {
+    Dark,
+    Light,
 }
 
 #[derive(Default, Debug, Deserialize)]
