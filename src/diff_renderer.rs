@@ -753,6 +753,20 @@ mod tests {
         );
     }
 
+    /// A feature turned off reaches delta as `-name`, which removes it.
+    #[test]
+    fn a_feature_turned_off_reaches_delta_as_its_removal() {
+        assert_eq!(
+            run(
+                &echo_features(),
+                None,
+                &params_with(&["-side-by-side", "-plus-minus-markers"]),
+                None
+            ),
+            Some("+-side-by-side -keep-plus-minus-markers".to_string())
+        );
+    }
+
     /// delta's `keep-plus-minus-markers` is `plus-minus-markers` in gitu.
     #[test]
     fn the_plus_minus_markers_reach_delta_by_deltas_name() {

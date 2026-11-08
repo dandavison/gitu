@@ -210,6 +210,48 @@ fn a_feature_key_toggles_its_feature() {
     assert!(app.state.features.is_empty());
 }
 
+/// A feature the user's own config turns on is on from the start, and its key
+/// turns it off, by removing it, and on again.
+#[test]
+fn a_feature_key_turns_off_a_feature_the_users_config_turns_on() {
+    let mut ctx = setup_clone!();
+    with_feature_key(&mut ctx, "side-by-side", 'x');
+    ctx.config().general.diff_renderer.features_in_force = vec!["side-by-side".into()];
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("x"));
+    assert_eq!(&*app.state.features, ["-side-by-side".to_string()]);
+
+    ctx.update(&mut app, keys("x"));
+    assert!(app.state.features.is_empty());
+}
+
+/// delta calls the +/- markers `keep-plus-minus-markers`.
+#[test]
+fn plus_turns_off_the_plus_minus_markers_the_users_config_turns_on() {
+    let mut ctx = setup_clone!();
+    ctx.config().general.diff_renderer.features_in_force = vec!["keep-plus-minus-markers".into()];
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("+"));
+    assert_eq!(&*app.state.features, ["-plus-minus-markers".to_string()]);
+}
+
+/// The feature list marks as on a feature the user's own config turns on, until
+/// it is turned off.
+#[test]
+fn the_feature_list_marks_the_features_the_users_config_turns_on() {
+    let mut ctx = setup_clone!();
+    ctx.config().general.diff_renderer.features_in_force = vec!["line-numbers".into()];
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("-"));
+    assert!(ctx.redact_buffer().contains("● L line-numbers"));
+
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("L-"));
+    assert!(ctx.redact_buffer().contains("  L line-numbers"));
+}
+
 /// The help menu lists feature keys with the other top-level keys.
 #[test]
 fn the_help_menu_lists_feature_keys() {
