@@ -1052,7 +1052,11 @@ impl App {
                     picker.select_number(digit as usize);
                 }
             } else if picker.assigns_keys() {
-                if let Some(c) = typed {
+                // A letter sets a key here, but not the quit letter, which is
+                // bound at the top level and so could not be set anyway.
+                if bindings.quit.iter().any(|b| b == &key_combo) {
+                    picker.cancel();
+                } else if let Some(c) = typed {
                     picker.set_key(c);
                 }
             } else {

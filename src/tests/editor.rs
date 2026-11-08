@@ -465,6 +465,21 @@ fn a_letter_bound_at_the_top_level_is_refused() {
     assert_eq!(fs::read_to_string(&path).unwrap(), mine);
 }
 
+/// q leaves the feature list, as it leaves theme mode, rather than being a
+/// letter to set as a key.
+#[test]
+fn q_leaves_the_feature_list() {
+    let mut ctx = setup_clone!();
+    let path = repo_git_config(&ctx);
+    let mine = fs::read_to_string(&path).unwrap();
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("-q"));
+    assert!(app.state.picker.is_none(), "the feature list is gone");
+    assert!(!ctx.redact_buffer().contains("bound already"));
+    assert_eq!(fs::read_to_string(&path).unwrap(), mine);
+}
+
 /// The features the user defined for themselves are theirs to choose from too,
 /// by a pattern rather than one by one.
 #[test]

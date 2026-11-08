@@ -236,7 +236,8 @@ picker.cancel = ["esc", "ctrl+c"]
 # In theme mode, switch between the one row showing the theme on screen and the
 # list of every theme, where typing searches them.
 picker.toggle_list = ["ctrl+l"]
-# Cancel in theme mode's one row, where letters are not typed.
+# Cancel in theme mode's one row, where letters are not typed, and in the
+# `renderer_features` list, where a letter sets a key.
 picker.quit = ["q"]
 
 root.help_menu = ["h", "?"]
