@@ -355,6 +355,39 @@ impl PickerState {
         }
     }
 
+    /// In one row, the items it stops on, numbered from 0, as (number, position
+    /// in the filtered list).
+    fn one_row_stops(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
+        self.filtered_indices
+            .iter()
+            .enumerate()
+            .filter(|(_, i)| self.items[**i].in_one_row)
+            .map(|(position, _)| position)
+            .enumerate()
+    }
+
+    /// The number of the selected item among those one row stops on, and the
+    /// highest number: what a digit selects. `None` for an item it passes over.
+    pub(crate) fn one_row_number(&self) -> (Option<usize>, usize) {
+        let mut number = None;
+        let mut last = 0;
+        for (n, position) in self.one_row_stops() {
+            if position == self.cursor {
+                number = Some(n);
+            }
+            last = n;
+        }
+        (number, last)
+    }
+
+    /// Move the cursor to the item one row numbers `number`, if there is one.
+    pub(crate) fn select_number(&mut self, number: usize) {
+        let position = self.one_row_stops().find(|(n, _)| *n == number);
+        if let Some((_, position)) = position {
+            self.cursor = position;
+        }
+    }
+
     /// Get current cursor position
     pub fn cursor(&self) -> usize {
         self.cursor

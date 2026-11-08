@@ -21,5 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
- 2/3  Theme theme-a                                                             |
+ 1/2  Theme theme-a                                                             |
 styles_hash: 12c724a0dec150c0

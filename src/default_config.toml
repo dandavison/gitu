@@ -224,7 +224,9 @@ root.blame = ["B"]
 # Turn a renderer feature (side-by-side, line numbers, ...) on or off in place.
 root.renderer_features = ["-"]
 # Move through delta's themes for the mode it renders in, light or dark,
-# rendering the screen with each. The list (`picker.toggle_list`) has them all.
+# rendering the screen with each. A digit switches to the theme of that number,
+# 0 being none, so that two can be compared; a theme after the ninth has no
+# digit. The list (`picker.toggle_list`) has them all.
 root.renderer_themes = ["T"]
 
 picker.next = ["down", "ctrl+n", "tab"]

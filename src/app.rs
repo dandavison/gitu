@@ -1016,9 +1016,11 @@ impl App {
             } else if bindings.toggle_list.iter().any(|b| b == &key_combo) {
                 picker.toggle_one_row();
             } else if picker.is_one_row() {
-                // Letters are not typed here, so one can quit.
+                // Nothing is typed here, so a letter can quit and a digit select.
                 if bindings.quit.iter().any(|b| b == &key_combo) {
                     picker.cancel();
+                } else if let Some(digit) = typed.and_then(|c| c.to_digit(10)) {
+                    picker.select_number(digit as usize);
                 }
             } else if picker.assigns_keys() {
                 if let Some(c) = typed {

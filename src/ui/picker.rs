@@ -97,19 +97,18 @@ pub(crate) fn layout_picker<'a>(
     }
 }
 
-/// The selected item alone, where it is in the list, and any search typed in
-/// the list: no more than that, so that the screen above stays in view.
+/// The selected item alone, its number, and any search typed in the list: no
+/// more than that, so that the screen above stays in view. The number is the
+/// digit that selects the item, so the first is 0; an item one row passes
+/// over has none.
 fn layout_one_row<'a>(layout: &mut UiTree<'a>, state: &'a PickerState, config: &Config) {
     let prompt_style: Style = (&config.style.picker.prompt).into();
     let info_style: Style = (&config.style.picker.info).into();
     let selection_style: Style = (&config.style.picker.selection_line).into();
     layout.row(opts(), |layout| {
-        let total = state.filtered_items().count();
-        let position = if total == 0 { 0 } else { state.cursor() + 1 };
-        layout_span(
-            layout,
-            (format!(" {position}/{total}  ").into(), info_style),
-        );
+        let (number, last) = state.one_row_number();
+        let number = number.map_or("-".to_owned(), |n| n.to_string());
+        layout_span(layout, (format!(" {number}/{last}  ").into(), info_style));
         layout_span(
             layout,
             (format!("{} ", state.prompt_text).into(), prompt_style),
