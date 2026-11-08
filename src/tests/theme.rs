@@ -83,33 +83,46 @@ fn after_in(test: &str, mode: Option<ColorMode>, keys_: &str) -> (Vec<String>, S
     (rendered_with(&app), ctx.redact_buffer())
 }
 
-/// delta has settled on light or dark before gitu starts, and its themes for
-/// that mode come first.
+/// delta has settled on light or dark before gitu starts, and the arrows move
+/// through its themes for that mode only.
 #[test]
-fn themes_for_the_mode_delta_is_in_come_first() {
+fn the_arrows_cycle_through_the_themes_for_the_mode_delta_is_in() {
     let light = Some(ColorMode::Light);
     assert_eq!(after_in(function_name!(), light, "T<down>").0, ["theme-b"]);
     assert_eq!(
         after_in(function_name!(), light, "T<down><down>").0,
-        ["theme-a"]
+        Vec::<String>::new()
     );
 
     let dark = Some(ColorMode::Dark);
     assert_eq!(after_in(function_name!(), dark, "T<down>").0, ["theme-a"]);
     assert_eq!(
         after_in(function_name!(), dark, "T<down><down>").0,
-        ["theme-b"]
+        Vec::<String>::new()
     );
 }
 
-/// A theme for the other mode says which mode it is for.
+/// The list has every theme, those for the other mode last, saying which mode
+/// they are for.
 #[test]
-fn themes_for_the_other_mode_say_so() {
+fn the_list_has_the_themes_for_the_other_mode_too() {
     let light = Some(ColorMode::Light);
-    let (_, screen) = after_in(function_name!(), light, "T<down>");
-    assert!(screen.contains("Theme theme-b  "), "{screen}");
-    let (_, screen) = after_in(function_name!(), light, "T<down><down>");
+    let (rendered, screen) = after_in(function_name!(), light, "T<ctrl+l><down><down>");
+    assert_eq!(rendered, ["theme-a"]);
+    assert!(screen.contains("theme-a (dark)"), "{screen}");
+}
+
+/// One of them chosen from the list stays in view on going back to one row,
+/// from where the arrows move through the themes for delta's mode again.
+#[test]
+fn a_theme_for_the_other_mode_stays_on_going_back_to_one_row() {
+    let light = Some(ColorMode::Light);
+    let (rendered, screen) = after_in(function_name!(), light, "T<ctrl+l><down><down><ctrl+l>");
+    assert_eq!(rendered, ["theme-a"]);
     assert!(screen.contains("Theme theme-a (dark)"), "{screen}");
+
+    let (rendered, _) = after_in(function_name!(), light, "T<ctrl+l><down><down><ctrl+l><up>");
+    assert_eq!(rendered, ["theme-b"]);
 }
 
 /// Enter keeps the theme, and saves it to the git config that holds the
