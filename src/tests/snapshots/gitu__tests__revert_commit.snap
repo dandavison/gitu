@@ -2,24 +2,24 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
-▌commit 63244710fffb34e3080637d7715accea84eb665d                                |
-▌Author: Author Name <author@email.com>                                         |
-▌Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
-▌                                                                               |
-▌    Revert "add initial-file"                                                  |
-▌                                                                               |
-▌    This reverts commit b66a0bf82020d6a386e94d0fceedec1f817d20c7.              |
-▌                                                                               |
- commit b66a0bf82020d6a386e94d0fceedec1f817d20c7                                |
+ commit 63244710fffb34e3080637d7715accea84eb665d                                |
  Author: Author Name <author@email.com>                                         |
  Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
                                                                                 |
-     add initial-file                                                           |
+     Revert "add initial-file"                                                  |
                                                                                 |
-     Commit body goes here                                                      |
+     This reverts commit b66a0bf82020d6a386e94d0fceedec1f817d20c7.              |
+                                                                                |
+▌commit b66a0bf82020d6a386e94d0fceedec1f817d20c7                                |
+▌Author: Author Name <author@email.com>                                         |
+▌Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+▌                                                                               |
+▌    add initial-file                                                           |
+▌                                                                               |
+▌    Commit body goes here                                                      |
                                                                                 |
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git revert --edit --no-edit main                                              |
-styles_hash: c93bd080932c58d6
+styles_hash: ea663d973a1ac795

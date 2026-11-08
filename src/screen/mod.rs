@@ -664,17 +664,54 @@ impl Screen {
         Ok(())
     }
 
+    /// Rebuild, keeping the cursor on the item it was on (such as a commit that
+    /// has moved up the log) if the rebuild still has it, and otherwise at its
+    /// place in the list.
     pub(crate) fn refresh(&mut self) -> Res<()> {
         // The rebuilt items are a different diff; the lines that were selected
         // are no longer the same lines.
         self.anchor = None;
+        let was_on = (!self.items.is_empty()).then(|| self.lineage(self.cursor));
         let Items { now, later } = (self.refresh_items)(self.params())?;
         self.take_items(now);
         self.later = later;
 
         self.invalidate();
+        if let Some(item_i) = was_on.and_then(|was_on| self.find_same_item(&was_on)) {
+            self.cursor = item_i;
+        }
         self.update_cursor();
         Ok(())
+    }
+
+    /// The ids of `item_i` and of the items it is nested under, innermost
+    /// first. An id alone does not identify an item: a hunk's id is the same
+    /// whether it is staged or unstaged, and the lines of a hunk share its id.
+    fn lineage(&self, item_i: usize) -> Vec<ItemId> {
+        let mut depth = self.items[item_i].depth;
+        let mut ids = vec![self.items[item_i].id];
+        for item in self.items[..item_i].iter().rev() {
+            if depth == 0 {
+                break;
+            }
+            if item.depth < depth {
+                depth = item.depth;
+                ids.push(item.id);
+            }
+        }
+        ids
+    }
+
+    /// The selectable item with the lineage given, nearest where the cursor
+    /// was. Of the lines of an unchanged hunk, that is the line it was on.
+    fn find_same_item(&self, lineage: &[ItemId]) -> Option<usize> {
+        let cursor = self.cursor;
+        self.visible_items()
+            .filter(|&item_i| {
+                let item = &self.items[item_i];
+                !item.unselectable && item.id == lineage[0] && self.lineage(item_i) == lineage
+            })
+            .min_by_key(|&item_i| item_i.abs_diff(cursor))
     }
 
     pub(crate) fn resize(&mut self, w: u16, h: u16) -> Res<()> {

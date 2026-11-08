@@ -6,11 +6,11 @@ expression: out
  Your branch is ahead of 'origin/main' by 2 commit(s).                          |
                                                                                 |
  Unstaged changes (2)                                                           |
-▌file1.txt…                                                                     |
+ file1.txt…                                                                     |
  file2.txt…                                                                     |
                                                                                 |
  Stashes                                                                        |
- stash@0 On main: apply-stash                                                   |
+▌stash@0 On main: apply-stash                                                   |
                                                                                 |
  Recent commits                                                                 |
  a370438 main add file2.txt                                      Author Name __ |
@@ -22,7 +22,7 @@ expression: out
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git stash apply -q stash@{0}                                                  |
-styles_hash: 5363c32481b71060
+styles_hash: 3a143b571da104be
 
 [files before]
 --- file1.txt ---
