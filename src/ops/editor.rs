@@ -2,6 +2,8 @@ use super::{Action, OpTrait};
 use crate::{
     Res,
     app::{App, PromptParams, State},
+    config::ColorMode,
+    diff_renderer::Theme,
     error::Error,
     item_data::ItemData,
     menu::PendingMenu,
@@ -467,18 +469,30 @@ impl OpTrait for RendererThemes {
                 return Ok(());
             }
 
+            // Those for the mode delta renders in first, the others saying which
+            // mode they are for. A theme that does not say is for either.
+            let mode = app.state.config.general.diff_renderer.color_mode;
+            let other =
+                |theme: &Theme| mode.is_some() && theme.mode.is_some_and(|m| Some(m) != mode);
+            let (others, matching): (Vec<Theme>, Vec<Theme>) =
+                themes.into_iter().partition(|theme| other(theme));
+            let themes: Vec<Theme> = matching.into_iter().chain(others).collect();
+
             let entered = app.state.theme.clone();
             let cursor = entered
                 .as_ref()
-                .and_then(|theme| themes.iter().position(|held| held == theme))
+                .and_then(|theme| themes.iter().position(|held| &held.name == theme))
                 .map_or(0, |i| i + 1);
             // The first item is no theme: the user's own configuration as it is.
             let items = std::iter::once(PickerItem::new(NO_THEME, PickerData::Item(String::new())))
-                .chain(
-                    themes
-                        .into_iter()
-                        .map(|theme| PickerItem::new(theme.clone(), PickerData::Item(theme))),
-                )
+                .chain(themes.iter().map(|theme| {
+                    let display = match theme.mode {
+                        Some(ColorMode::Dark) if other(theme) => format!("{} (dark)", theme.name),
+                        Some(ColorMode::Light) if other(theme) => format!("{} (light)", theme.name),
+                        _ => theme.name.clone(),
+                    };
+                    PickerItem::new(display, PickerData::Item(theme.name.clone()))
+                }))
                 .collect();
             let picker = PickerState::new("Theme", items, false)
                 .one_row()

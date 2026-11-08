@@ -11,6 +11,7 @@
 //! attach each record to the line that follows it.
 
 use crate::Res;
+use crate::config::ColorMode;
 use crate::error::Error;
 use crate::git::diff::Diff;
 use crate::style::{Color, Modifier, Style};
@@ -354,7 +355,10 @@ pub(crate) fn offered_features(
     git_config: &git2::Config,
 ) -> Res<Vec<String>> {
     let defined = defined_features(git_config)?;
-    let themes = themes(git_config)?;
+    let themes: Vec<String> = themes(git_config)?
+        .into_iter()
+        .map(|theme| theme.name)
+        .collect();
     let mut offered = Vec::new();
     for entry in configured {
         let names = match glob(entry) {
@@ -385,10 +389,34 @@ fn defined_features(git_config: &git2::Config) -> Res<Vec<String>> {
 /// The themes defined in git config: as delta defines a theme, a feature that
 /// sets `dark` or `light`. Sorted as `delta --show-themes` sorts them, ignoring
 /// case.
-pub(crate) fn themes(git_config: &git2::Config) -> Res<Vec<String>> {
-    let mut themes = features_with_key(git_config, |key| matches!(key, "dark" | "light"))?;
-    themes.sort_by_key(|name| name.to_lowercase());
+pub(crate) fn themes(git_config: &git2::Config) -> Res<Vec<Theme>> {
+    let names = features_with_key(git_config, |key| matches!(key, "dark" | "light"))?;
+    let mut themes: Vec<Theme> = names
+        .into_iter()
+        .map(|name| {
+            let set = |key: &str| {
+                git_config
+                    .get_bool(&format!("delta.{name}.{key}"))
+                    .unwrap_or(false)
+            };
+            let mode = match (set("dark"), set("light")) {
+                (true, false) => Some(ColorMode::Dark),
+                (false, true) => Some(ColorMode::Light),
+                _ => None,
+            };
+            Theme { name, mode }
+        })
+        .collect();
+    themes.sort_by_key(|theme| theme.name.to_lowercase());
     Ok(themes)
+}
+
+/// A theme, and the mode it is for if it says: `dark = false` or both set
+/// says nothing.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Theme {
+    pub(crate) name: String,
+    pub(crate) mode: Option<ColorMode>,
 }
 
 /// The features defined in git config with a key that `key` accepts, each once.
