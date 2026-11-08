@@ -125,6 +125,10 @@ pub struct DiffRendererConfig {
     /// typed to filter it, by feature.
     #[serde(default)]
     pub feature_keys: BTreeMap<String, char>,
+    /// The theme overlaid on the user's own delta configuration: a feature that
+    /// sets `dark` or `light`, as delta defines a theme.
+    #[serde(default)]
+    pub theme: Option<String>,
 }
 
 #[derive(Default, Debug, Deserialize)]

@@ -70,6 +70,8 @@ pub(crate) struct State {
     /// Renderer features chosen in-session, overlaying the user's own
     /// configuration. Never written to disk: quitting returns them to it.
     pub features: Rc<[String]>,
+    /// The theme overlaid after `features`, as configured and as chosen since.
+    pub theme: Option<String>,
     /// How much of a file to ask git for around each change (`-U8`, `-W`),
     /// chosen in-session. `None` is git's own default.
     pub context: Option<Rc<str>>,
@@ -169,6 +171,7 @@ impl App {
                 picker: None,
                 picked_commit: None,
                 features: Rc::from([]),
+                theme: None,
                 context: None,
                 clipboard,
                 file_watcher: None,
