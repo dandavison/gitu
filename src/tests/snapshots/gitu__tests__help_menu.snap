@@ -7,19 +7,19 @@ expression: ctx.redact_buffer()
  Y                Show Refs          b   Branch             tab Fold            |
  g+s              Status             c   Commit                                 |
  -                Features           f   Fetch                                  |
- shift+tab        Fold all           h/? Help                                   |
- U                Diff context       l   Log                                    |
- :                Edit git command   m   Merge                                  |
- &                Files              M   Remote                                 |
- k/up             Up                 F   Pull                                   |
- j/down           Down               P   Push                                   |
- ctrl+k/ctrl+up   Up line            r   Rebase                                 |
- ctrl+j/ctrl+down Down line          X   Reset                                  |
- shift+up         Select up          V   Revert                                 |
- shift+down       Select down        A   Cherry-pick                            |
- alt+k/alt+up     Prev section       z   Stash                                  |
- alt+j/alt+down   Next section                                                  |
- alt+h/alt+left   Parent section     Features                                   |
- g+g              Top                L line-numbers                             |
- G                Bottom             + plus-minus-markers                       |
-styles_hash: 337605521f868dff
+ T                Themes             h/? Help                                   |
+ shift+tab        Fold all           l   Log                                    |
+ U                Diff context       m   Merge                                  |
+ :                Edit git command   M   Remote                                 |
+ &                Files              F   Pull                                   |
+ k/up             Up                 P   Push                                   |
+ j/down           Down               r   Rebase                                 |
+ ctrl+k/ctrl+up   Up line            X   Reset                                  |
+ ctrl+j/ctrl+down Down line          V   Revert                                 |
+ shift+up         Select up          A   Cherry-pick                            |
+ shift+down       Select down        z   Stash                                  |
+ alt+k/alt+up     Prev section                                                  |
+ alt+j/alt+down   Next section       Features                                   |
+ alt+h/alt+left   Parent section     L line-numbers                             |
+ g+g              Top                + plus-minus-markers                       |
+styles_hash: 80cc5548cf53e139

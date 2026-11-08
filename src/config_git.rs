@@ -30,6 +30,9 @@ pub(crate) const FEATURE_KEYS: &str = "general.diff_renderer.feature_keys";
 /// Where feature keys are in git config.
 pub(crate) const FEATURE_KEYS_SECTION: &str = "delta-tui.general.diff-renderer.feature-keys";
 
+/// Where the theme is in git config.
+pub(crate) const THEME: &str = "delta-tui.general.diff-renderer.theme";
+
 /// The `delta-tui` section of `git_config`, as gitu config. `defaults` gives
 /// each key its type.
 pub(crate) fn read(git_config: &git2::Config, defaults: &Figment) -> Res<Dict> {

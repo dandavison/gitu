@@ -452,6 +452,68 @@ impl OpTrait for RendererFeatures {
     }
 }
 
+/// Move through the themes defined in git config, rendering the screen in view
+/// with each, shown in one row so that the screen stays in view. Enter keeps
+/// the theme and saves it; cancelling restores the one there was.
+pub(crate) struct RendererThemes;
+impl OpTrait for RendererThemes {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app: &mut App, term: &mut Term| {
+            let themes = crate::diff_renderer::themes(
+                &app.state.repo.config().map_err(Error::ReadGitConfig)?,
+            )?;
+            if themes.is_empty() {
+                app.display_error("No themes are defined in git config");
+                return Ok(());
+            }
+
+            let entered = app.state.theme.clone();
+            let cursor = entered
+                .as_ref()
+                .and_then(|theme| themes.iter().position(|held| held == theme))
+                .map_or(0, |i| i + 1);
+            // The first item is no theme: the user's own configuration as it is.
+            let items = std::iter::once(PickerItem::new(NO_THEME, PickerData::Item(String::new())))
+                .chain(
+                    themes
+                        .into_iter()
+                        .map(|theme| PickerItem::new(theme.clone(), PickerData::Item(theme))),
+                )
+                .collect();
+            let picker = PickerState::new("Theme", items, false)
+                .one_row()
+                .with_cursor(cursor);
+
+            let picked = app.pick_previewing(term, picker, &mut |app, data| {
+                app.state.theme = theme_of(data);
+                app.rerender_screen()
+            })?;
+
+            match picked {
+                Some(data) => {
+                    app.state.theme = theme_of(&data);
+                    let dir = app.state.repo.workdir().unwrap_or(app.state.repo.path());
+                    if let Err(e) = crate::config_edit::set_theme(dir, app.state.theme.as_deref()) {
+                        app.display_error(e.to_string());
+                    }
+                }
+                None => app.state.theme = entered,
+            }
+            app.rerender_screens()
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Themes".into()
+    }
+}
+
+const NO_THEME: &str = "(no theme)";
+
+fn theme_of(data: &PickerData) -> Option<String> {
+    Some(data.display().to_owned()).filter(|theme| !theme.is_empty())
+}
+
 /// Each feature, marked if it is on, beside its key if it has one.
 fn feature_items(app: &App, offered: &[String]) -> Vec<PickerItem> {
     offered

@@ -66,6 +66,12 @@ diff_renderer.features = ["side-by-side", "line-numbers", "plus-minus-markers"]
 # key, the same letter again unsets it, and Gitu writes them all here.
 diff_renderer.feature_keys = { side-by-side = "S", line-numbers = "L", plus-minus-markers = "+" }
 
+# The theme overlaid on your delta configuration, after the features above, as
+# `renderer_themes` sets it. A theme is a feature defined in git config that
+# sets `dark` or `light`, as delta defines one. `renderer_themes` writes your
+# choice to git config's delta-tui section, not here.
+# diff_renderer.theme = "my-theme"
+
 # Arguments given to the `git log` Gitu runs for the log view (`l l`, `l o`),
 # e.g. a pretty format of your own:
 #   log_args = ["--stat", "--pretty=commit-format"]
@@ -217,11 +223,18 @@ root.copy_hash = ["y"]
 root.blame = ["B"]
 # Turn a renderer feature (side-by-side, line numbers, ...) on or off in place.
 root.renderer_features = ["-"]
+# Move through delta's themes, rendering the screen with each.
+root.renderer_themes = ["T"]
 
 picker.next = ["down", "ctrl+n", "tab"]
 picker.previous = ["up", "ctrl+p", "shift+tab"]
 picker.done = ["enter"]
 picker.cancel = ["esc", "ctrl+c"]
+# In theme mode, switch between the one row showing the theme on screen and the
+# list of every theme, where typing searches them.
+picker.toggle_list = ["ctrl+l"]
+# Cancel in theme mode's one row, where letters are not typed.
+picker.quit = ["q"]
 
 root.help_menu = ["h", "?"]
 help_menu.quit = ["q", "h", "?", "esc"]

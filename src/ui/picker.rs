@@ -17,6 +17,11 @@ pub(crate) fn layout_picker<'a>(
     config: &Config,
     width: usize,
 ) {
+    if state.is_one_row() {
+        layout_one_row(layout, state, config);
+        return;
+    }
+
     // Separator line
     let separator_style = Style::from(&config.style.separator);
     repeat_chars(layout, width, DASHES, separator_style);
@@ -90,6 +95,35 @@ pub(crate) fn layout_picker<'a>(
             layout_span(layout, (" ".into(), Style::new()));
         });
     }
+}
+
+/// The selected item alone, where it is in the list, and any search typed in
+/// the list: no more than that, so that the screen above stays in view.
+fn layout_one_row<'a>(layout: &mut UiTree<'a>, state: &'a PickerState, config: &Config) {
+    let prompt_style: Style = (&config.style.picker.prompt).into();
+    let info_style: Style = (&config.style.picker.info).into();
+    let selection_style: Style = (&config.style.picker.selection_line).into();
+    layout.row(opts(), |layout| {
+        let total = state.filtered_items().count();
+        let position = if total == 0 { 0 } else { state.cursor() + 1 };
+        layout_span(
+            layout,
+            (format!(" {position}/{total}  ").into(), info_style),
+        );
+        layout_span(
+            layout,
+            (format!("{} ", state.prompt_text).into(), prompt_style),
+        );
+        if let Some(item) = state.selected() {
+            layout_span(layout, (item.display.as_ref().into(), selection_style));
+        }
+        if !state.pattern().is_empty() {
+            layout_span(
+                layout,
+                (format!("   › {}", state.pattern()).into(), info_style),
+            );
+        }
+    });
 }
 
 /// Calculate the visible range start for scrolling based on cursor position

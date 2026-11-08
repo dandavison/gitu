@@ -98,7 +98,7 @@ impl App {
     ) -> Res<Self> {
         let params = RenderParams {
             size,
-            features: Rc::from([]),
+            features: overlay(&[], config.general.diff_renderer.theme.as_deref()),
             context: None,
             streaming: enable_async_cmds,
         };
@@ -154,6 +154,7 @@ impl App {
             state: State {
                 repo,
                 feature_keys: config.general.diff_renderer.feature_keys.clone(),
+                theme: config.general.diff_renderer.theme.clone(),
                 config,
                 pending_keys: vec![],
                 enable_async_cmds,
@@ -171,7 +172,6 @@ impl App {
                 picker: None,
                 picked_commit: None,
                 features: Rc::from([]),
-                theme: None,
                 context: None,
                 clipboard,
                 file_watcher: None,
@@ -281,8 +281,24 @@ impl App {
         self.rebuild_screens(Screen::refresh_keeping_position)
     }
 
+    /// [`App::rerender_screens`] for the screen in view only, as a preview: the
+    /// screens under it keep what they were rendered with.
+    pub(crate) fn rerender_screen(&mut self) -> Res<()> {
+        let features = self.overlay();
+        let screen = self.state.screens.last_mut().unwrap();
+        screen.features = features;
+        screen.refresh_keeping_position()?;
+        self.stage_redraw();
+        Ok(())
+    }
+
+    /// The features to render with: those chosen in-session, then the theme.
+    fn overlay(&self) -> Rc<[String]> {
+        overlay(&self.state.features, self.state.theme.as_deref())
+    }
+
     fn rebuild_screens(&mut self, rebuild: impl Fn(&mut Screen) -> Res<()>) -> Res<()> {
-        let features = Rc::clone(&self.state.features);
+        let features = self.overlay();
         for screen in &mut self.state.screens {
             screen.features = Rc::clone(&features);
             screen.context = self.state.context.clone();
@@ -509,7 +525,7 @@ impl App {
     pub(crate) fn render_params(&self, size: (u16, u16)) -> RenderParams {
         RenderParams {
             size,
-            features: Rc::clone(&self.state.features),
+            features: self.overlay(),
             context: self.state.context.clone(),
             streaming: self.state.enable_async_cmds,
         }
@@ -849,11 +865,29 @@ impl App {
         picker_state: PickerState,
     ) -> Res<Option<Picked>> {
         self.state.picker = Some(picker_state);
-        let result = self.handle_picker(term);
+        let result = self.handle_picker(term, &mut |_, _| Ok(()));
 
         self.state.picker = None;
 
         result
+    }
+
+    /// [`App::pick`], calling `preview` with each item the cursor stops on.
+    pub(crate) fn pick_previewing(
+        &mut self,
+        term: &mut Term,
+        picker_state: PickerState,
+        preview: &mut dyn FnMut(&mut App, &PickerData) -> Res<()>,
+    ) -> Res<Option<PickerData>> {
+        self.state.picker = Some(picker_state);
+        let result = self.handle_picker(term, preview);
+
+        self.state.picker = None;
+
+        Ok(result?.map(|picked| match picked {
+            Picked::Item(data) => data,
+            Picked::KeySet(..) => unreachable!("only a picker assigning keys sets them"),
+        }))
     }
 
     /// Choose a commit by moving around a log view: the screen is pushed with
@@ -909,8 +943,20 @@ impl App {
         }
     }
 
-    fn handle_picker(&mut self, term: &mut Term) -> Res<Option<Picked>> {
+    fn handle_picker(
+        &mut self,
+        term: &mut Term,
+        preview: &mut dyn FnMut(&mut App, &PickerData) -> Res<()>,
+    ) -> Res<Option<Picked>> {
         self.redraw_now(term)?;
+        let selected = |app: &App| {
+            app.state
+                .picker
+                .as_ref()
+                .and_then(|picker| picker.selected())
+                .map(|item| item.data.clone())
+        };
+        let mut previewed = selected(self);
 
         loop {
             let event = term.read_event()?;
@@ -927,6 +973,16 @@ impl App {
                     PickerStatus::Cancelled => return Ok(None),
                     PickerStatus::Active => (),
                 }
+            }
+
+            // Only once the keys that came together are handled, so that an
+            // arrow held down does not preview every item it passes.
+            let now = selected(self);
+            if now != previewed && !matches!(term.poll_event(Duration::ZERO), Ok(true)) {
+                if let Some(data) = &now {
+                    preview(self, data)?;
+                }
+                previewed = now;
             }
 
             self.redraw_now(term)?;
@@ -957,6 +1013,13 @@ impl App {
                 picker.done();
             } else if bindings.cancel.iter().any(|b| b == &key_combo) {
                 picker.cancel();
+            } else if bindings.toggle_list.iter().any(|b| b == &key_combo) {
+                picker.toggle_one_row();
+            } else if picker.is_one_row() {
+                // Letters are not typed here, so one can quit.
+                if bindings.quit.iter().any(|b| b == &key_combo) {
+                    picker.cancel();
+                }
             } else if picker.assigns_keys() {
                 if let Some(c) = typed {
                     picker.set_key(c);
@@ -968,6 +1031,17 @@ impl App {
             }
         }
     }
+}
+
+/// `features`, then `theme`: last, so that it has its way over a feature that
+/// sets the same keys, as delta resolves a conflict between features in favour
+/// of the later one.
+fn overlay(features: &[String], theme: Option<&str>) -> Rc<[String]> {
+    features
+        .iter()
+        .cloned()
+        .chain(theme.map(str::to_owned))
+        .collect()
 }
 
 fn get_prompt_result(params: &PromptParams, app: &mut App) -> Res<String> {

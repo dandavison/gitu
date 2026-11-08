@@ -91,6 +91,10 @@ pub struct PickerState {
     custom_input_item: Option<PickerItem>,
     /// Whether a letter gives the selected item a key, rather than filtering.
     assigns_keys: bool,
+    /// For a picker that can be shown as one row, whether it is: the selected
+    /// item alone, with letters not typed. `None` for a picker that is always a
+    /// list.
+    one_row: Option<bool>,
 }
 
 pub(crate) struct PickerParams<'a> {
@@ -119,6 +123,7 @@ impl PickerState {
             allow_custom_input,
             custom_input_item: None,
             assigns_keys: false,
+            one_row: None,
         };
         state.update_filter();
         state
@@ -129,6 +134,26 @@ impl PickerState {
     pub(crate) fn assigning_keys(mut self) -> Self {
         self.assigns_keys = true;
         self
+    }
+
+    /// Show the picker as one row, the selected item alone, until it is
+    /// switched to a list by [`Self::toggle_one_row`].
+    pub(crate) fn one_row(mut self) -> Self {
+        self.one_row = Some(true);
+        self
+    }
+
+    pub(crate) fn is_one_row(&self) -> bool {
+        self.one_row == Some(true)
+    }
+
+    /// Switch a picker made with [`Self::one_row`] between one row and a list.
+    /// The search typed in the list stays, so one row moves through what it
+    /// matched.
+    pub(crate) fn toggle_one_row(&mut self) {
+        if let Some(one_row) = &mut self.one_row {
+            *one_row = !*one_row;
+        }
     }
 
     pub(crate) fn with_cursor(mut self, cursor: usize) -> Self {

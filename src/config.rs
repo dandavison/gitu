@@ -30,6 +30,10 @@ pub(crate) struct PickerBindingsConfig {
     pub done: Vec<String>,
     #[serde(default)]
     pub cancel: Vec<String>,
+    #[serde(default)]
+    pub toggle_list: Vec<String>,
+    #[serde(default)]
+    pub quit: Vec<String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -286,6 +290,8 @@ pub struct PickerBindings {
     pub previous: Vec<Vec<(KeyModifiers, KeyCode)>>,
     pub done: Vec<Vec<(KeyModifiers, KeyCode)>>,
     pub cancel: Vec<Vec<(KeyModifiers, KeyCode)>>,
+    pub toggle_list: Vec<Vec<(KeyModifiers, KeyCode)>>,
+    pub quit: Vec<Vec<(KeyModifiers, KeyCode)>>,
 }
 
 impl TryFrom<PickerBindingsConfig> for PickerBindings {
@@ -298,6 +304,9 @@ impl TryFrom<PickerBindingsConfig> for PickerBindings {
         let previous = parse_picker_keys(&config.previous, "picker.previous", &mut bad_bindings);
         let done = parse_picker_keys(&config.done, "picker.done", &mut bad_bindings);
         let cancel = parse_picker_keys(&config.cancel, "picker.cancel", &mut bad_bindings);
+        let toggle_list =
+            parse_picker_keys(&config.toggle_list, "picker.toggle_list", &mut bad_bindings);
+        let quit = parse_picker_keys(&config.quit, "picker.quit", &mut bad_bindings);
 
         if !bad_bindings.is_empty() {
             return Err(Error::Bindings {
@@ -310,6 +319,8 @@ impl TryFrom<PickerBindingsConfig> for PickerBindings {
             previous,
             done,
             cancel,
+            toggle_list,
+            quit,
         })
     }
 }

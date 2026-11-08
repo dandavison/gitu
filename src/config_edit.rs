@@ -11,24 +11,51 @@ use std::{collections::BTreeMap, path::Path, process::Command};
 /// the global git config if there is none. An entry that is unchanged stays as
 /// written.
 pub(crate) fn set_feature_keys(dir: &Path, keys: &BTreeMap<String, char>) -> Res<()> {
-    set_feature_keys_with(
-        &|| {
-            let mut git = Command::new("git");
-            git.current_dir(dir);
-            git
+    set_feature_keys_with(&git_in(dir), keys)
+}
+
+/// Make the theme in git config `theme`, or unset it, in the file that already
+/// holds it or else the `delta-tui` section, or in the global git config if
+/// there is none. Unsetting it unsets it in that file only: a theme also set in
+/// a file git reads earlier then has its way.
+pub(crate) fn set_theme(dir: &Path, theme: Option<&str>) -> Res<()> {
+    set_theme_with(&git_in(dir), theme)
+}
+
+fn git_in(dir: &Path) -> impl Fn() -> Command {
+    move || {
+        let mut git = Command::new("git");
+        git.current_dir(dir);
+        git
+    }
+}
+
+fn set_theme_with(git: &dyn Fn() -> Command, theme: Option<&str>) -> Res<()> {
+    let name = config_git::THEME;
+    let file = file_for(git, &format!("^{}$", name.replace('.', "\\.")))?;
+    match theme {
+        Some(theme) => run(git().arg("config").args(&file).args([name, theme]))?,
+        None => run(git().arg("config").args(&file).args(["--unset-all", name]))?,
+    };
+    Ok(())
+}
+
+/// The `git config` arguments that pick the file to write a key matching
+/// `regex` to: the one that already holds such a key, or else the `delta-tui`
+/// section, or the global git config if there is none.
+fn file_for(git: &dyn Fn() -> Command, regex: &str) -> Res<Vec<String>> {
+    Ok(
+        match origin(git, regex)?.or(origin(git, &format!("^{}\\.", config_git::SECTION))?) {
+            Some(file) => vec!["--file".to_owned(), file],
+            None => vec!["--global".to_owned()],
         },
-        keys,
     )
 }
 
 fn set_feature_keys_with(git: &dyn Fn() -> Command, keys: &BTreeMap<String, char>) -> Res<()> {
     let prefix = format!("{}.", config_git::FEATURE_KEYS_SECTION);
     let regex = format!("^{}", prefix.replace('.', "\\."));
-    let file = match origin(git, &regex)?.or(origin(git, &format!("^{}\\.", config_git::SECTION))?)
-    {
-        Some(file) => vec!["--file".to_owned(), file],
-        None => vec!["--global".to_owned()],
-    };
+    let file = file_for(git, &regex)?;
 
     let held = entries(git, &file, &regex)?;
     for (name, value) in &held {

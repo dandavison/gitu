@@ -347,12 +347,14 @@ fn deltas_name(feature: &str) -> &str {
 
 /// The renderer features to offer: those gitu is configured with, in order. An
 /// entry with `*` or `?` in it is a pattern, and stands for the features defined
-/// in git config as `[delta "name"]` that it matches.
+/// in git config as `[delta "name"]` that it matches. Themes are left out:
+/// they are chosen one at a time, by `renderer_themes`.
 pub(crate) fn offered_features(
     configured: &[String],
     git_config: &git2::Config,
 ) -> Res<Vec<String>> {
     let defined = defined_features(git_config)?;
+    let themes = themes(git_config)?;
     let mut offered = Vec::new();
     for entry in configured {
         let names = match glob(entry) {
@@ -364,7 +366,7 @@ pub(crate) fn offered_features(
             None => vec![entry.clone()],
         };
         for name in names {
-            if !offered.contains(&name) {
+            if !offered.contains(&name) && !themes.contains(&name) {
                 offered.push(name);
             }
         }
@@ -375,18 +377,36 @@ pub(crate) fn offered_features(
 
 /// Every feature defined in git config as `[delta "name"]`, sorted.
 fn defined_features(git_config: &git2::Config) -> Res<Vec<String>> {
-    let mut defined = Vec::new();
+    let mut defined = features_with_key(git_config, |_| true)?;
+    defined.sort();
+    Ok(defined)
+}
+
+/// The themes defined in git config: as delta defines a theme, a feature that
+/// sets `dark` or `light`. Sorted as `delta --show-themes` sorts them, ignoring
+/// case.
+pub(crate) fn themes(git_config: &git2::Config) -> Res<Vec<String>> {
+    let mut themes = features_with_key(git_config, |key| matches!(key, "dark" | "light"))?;
+    themes.sort_by_key(|name| name.to_lowercase());
+    Ok(themes)
+}
+
+/// The features defined in git config with a key that `key` accepts, each once.
+fn features_with_key(git_config: &git2::Config, key: impl Fn(&str) -> bool) -> Res<Vec<String>> {
+    let mut features = Vec::new();
     let mut entries = git_config.entries(None).map_err(Error::ReadGitConfig)?;
     while let Some(entry) = entries.next() {
         let entry = entry.map_err(Error::ReadGitConfig)?;
-        if let Some(name) = entry.name().and_then(feature_name) {
-            defined.push(name);
+        if let Some((name, _)) = entry
+            .name()
+            .and_then(feature_and_key)
+            .filter(|(_, held)| key(held))
+            && !features.contains(&name)
+        {
+            features.push(name);
         }
     }
-
-    defined.sort();
-    defined.dedup();
-    Ok(defined)
+    Ok(features)
 }
 
 /// `entry` as a regex, if it is a pattern: `*` matches any run of characters
@@ -408,12 +428,13 @@ fn glob(entry: &str) -> Option<Regex> {
     Some(Regex::new(&pattern).expect("an escaped glob is a valid regex"))
 }
 
-/// The feature a `delta.<name>.<key>` config entry belongs to. A subsection name
-/// may itself contain dots, so it is everything between the section and the key.
-fn feature_name(entry: &str) -> Option<String> {
+/// The feature a `delta.<name>.<key>` config entry belongs to, and the key. A
+/// subsection name may itself contain dots, so it is everything between the
+/// section and the key.
+fn feature_and_key(entry: &str) -> Option<(String, &str)> {
     let subsection_and_key = entry.strip_prefix("delta.")?;
-    let (name, _key) = subsection_and_key.rsplit_once('.')?;
-    Some(name.to_owned())
+    let (name, key) = subsection_and_key.rsplit_once('.')?;
+    Some((name.to_owned(), key))
 }
 
 /// `text` with its escape sequences removed, as the plain text a parser needs.
