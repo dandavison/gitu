@@ -470,7 +470,8 @@ impl OpTrait for RendererThemes {
             }
 
             // Those for the mode delta renders in first, the others saying which
-            // mode they are for. A theme that does not say is for either.
+            // mode they are for, in the list only. A theme that does not say is
+            // for either.
             let mode = app.state.config.general.diff_renderer.color_mode;
             let other =
                 |theme: &Theme| mode.is_some() && theme.mode.is_some_and(|m| Some(m) != mode);
@@ -491,7 +492,12 @@ impl OpTrait for RendererThemes {
                         Some(ColorMode::Light) if other(theme) => format!("{} (light)", theme.name),
                         _ => theme.name.clone(),
                     };
-                    PickerItem::new(display, PickerData::Item(theme.name.clone()))
+                    let item = PickerItem::new(display, PickerData::Item(theme.name.clone()));
+                    if other(theme) {
+                        item.only_in_list()
+                    } else {
+                        item
+                    }
                 }))
                 .collect();
             let picker = PickerState::new("Theme", items, false)

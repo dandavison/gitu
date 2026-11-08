@@ -223,7 +223,8 @@ root.copy_hash = ["y"]
 root.blame = ["B"]
 # Turn a renderer feature (side-by-side, line numbers, ...) on or off in place.
 root.renderer_features = ["-"]
-# Move through delta's themes, rendering the screen with each.
+# Move through delta's themes for the mode it renders in, light or dark,
+# rendering the screen with each. The list (`picker.toggle_list`) has them all.
 root.renderer_themes = ["T"]
 
 picker.next = ["down", "ctrl+n", "tab"]

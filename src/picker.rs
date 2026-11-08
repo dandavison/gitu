@@ -38,6 +38,9 @@ pub struct PickerItem {
     pub display: Cow<'static, str>,
     /// Associated data
     pub data: PickerData,
+    /// Whether moving through a picker shown as one row stops here. The list
+    /// always does.
+    pub in_one_row: bool,
 }
 
 impl PickerItem {
@@ -45,7 +48,14 @@ impl PickerItem {
         Self {
             display: display.into(),
             data,
+            in_one_row: true,
         }
+    }
+
+    /// An item that moving through a picker shown as one row passes over.
+    pub(crate) fn only_in_list(mut self) -> Self {
+        self.in_one_row = false;
+        self
     }
 }
 
@@ -317,31 +327,31 @@ impl PickerState {
 
     /// Move cursor to next item
     pub fn next(&mut self) {
-        let total_count = self.filtered_indices.len()
-            + if self.custom_input_item.is_some() {
-                1
-            } else {
-                0
-            };
-        if total_count > 0 {
-            self.cursor = (self.cursor + 1) % total_count;
-        }
+        self.step(|cursor, total| (cursor + 1) % total);
     }
 
     /// Move cursor to previous item
     pub fn previous(&mut self) {
-        let total_count = self.filtered_indices.len()
-            + if self.custom_input_item.is_some() {
-                1
-            } else {
-                0
-            };
-        if total_count > 0 {
-            self.cursor = if self.cursor == 0 {
-                total_count - 1
-            } else {
-                self.cursor - 1
-            };
+        self.step(|cursor, total| (cursor + total - 1) % total);
+    }
+
+    /// Move the cursor by `step` until it is on an item it stops on: any item in
+    /// the list, and in one row only those [`PickerItem::in_one_row`]. If there
+    /// is none, it stays where it is.
+    fn step(&mut self, step: impl Fn(usize, usize) -> usize) {
+        let total = self.filtered_indices.len() + usize::from(self.custom_input_item.is_some());
+        let mut cursor = self.cursor;
+        for _ in 0..total {
+            cursor = step(cursor, total);
+            let stops = !self.is_one_row()
+                || self
+                    .filtered_indices
+                    .get(cursor)
+                    .is_none_or(|&i| self.items[i].in_one_row);
+            if stops {
+                self.cursor = cursor;
+                return;
+            }
         }
     }
 
