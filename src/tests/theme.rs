@@ -345,3 +345,37 @@ fn a_digit_in_the_list_searches() {
     ctx.update(&mut app, keys("T<ctrl+l>2<enter>"));
     assert_eq!(theme(&app), Some("theme-2"));
 }
+
+/// A builtin delta feature that changes how a diff looks, such as
+/// diff-so-fancy, is offered after the themes in git config when the config
+/// lists it, for either mode, since it sets neither dark nor light.
+#[test]
+fn builtin_themes_are_offered_after_the_themes_in_git_config() {
+    let after = |mode, keys_: &str| {
+        let name: String = format!("builtin_themes_{mode:?}_{keys_}")
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '_' })
+            .collect();
+        let mut ctx = TestContext::setup_clone(&name);
+        with_themes(&ctx);
+        let renderer = &mut ctx.config().general.diff_renderer;
+        renderer.color_mode = mode;
+        renderer.builtin_themes = vec!["diff-so-fancy".into()];
+        let mut app = ctx.init_app();
+        ctx.update(&mut app, keys(keys_));
+        rendered_with(&app)
+    };
+    assert_eq!(after(None, "T<down><down><down>"), ["diff-so-fancy"]);
+    assert_eq!(
+        after(None, "T<down><down><down><down>"),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        after(Some(ColorMode::Light), "T<down><down>"),
+        ["diff-so-fancy"]
+    );
+    assert_eq!(
+        after(Some(ColorMode::Dark), "T<down><down>"),
+        ["diff-so-fancy"]
+    );
+}
