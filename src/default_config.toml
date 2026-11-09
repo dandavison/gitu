@@ -188,10 +188,12 @@ root.edit_git_command = [":"]
 # tests.
 root.hide_file = ["d"]
 root.file_patterns = ["&"]
-root.move_up = ["k", "up"]
-root.move_down = ["j", "down"]
-root.move_up_line = ["ctrl+k", "ctrl+up"]
-root.move_down_line = ["ctrl+j", "ctrl+down"]
+# As in less, j, k and the arrow keys move a line at a time, through a diff's
+# lines too. With ctrl they skip over a diff's lines.
+root.move_up_line = ["k", "up"]
+root.move_down_line = ["j", "down"]
+root.move_up = ["ctrl+k", "ctrl+up"]
+root.move_down = ["ctrl+j", "ctrl+down"]
 # Reach the selection over a run of diff lines, to stage / unstage / discard /
 # reverse them together. It stays within one hunk, which is as far as a single
 # patch reaches. Any other movement drops the selection.

@@ -512,7 +512,7 @@ fn ext_diff() {
     run(&ctx.dir, &["git", "add", "staged.txt"]);
     run(&ctx.dir, &["git", "config", "diff.external", "/dev/null"]);
     ctx.update(&mut app, keys(REFRESH));
-    ctx.update(&mut app, keys("jj<tab>jjj<tab>gg"));
+    ctx.update(&mut app, keys("jj<tab><ctrl+j><ctrl+j><ctrl+j><tab>gg"));
 
     insta::assert_snapshot!(ctx.redact_buffer());
 }

@@ -17,7 +17,7 @@ fn a_working_tree_patch_admits_stage_and_not_unstage() {
 
     // git colours what it writes to its pager; the command survives that.
     let mut app = ctx.init_app_as_pager_of(&["git", "-c", "color.diff=always", "diff"]);
-    ctx.update(&mut app, keys("j"));
+    ctx.update(&mut app, keys("<ctrl+j>"));
 
     assert!(offers(&app, Op::Stage));
     assert!(!offers(&app, Op::Unstage));
@@ -31,7 +31,7 @@ fn an_index_patch_admits_unstage_and_not_stage() {
     run(&ctx.dir, &["git", "add", "firstfile"]);
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff", "--cached"]);
-    ctx.update(&mut app, keys("j"));
+    ctx.update(&mut app, keys("<ctrl+j>"));
 
     assert!(offers(&app, Op::Unstage));
     assert!(!offers(&app, Op::Stage));
@@ -43,7 +43,7 @@ fn a_commit_patch_admits_neither() {
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
 
     let mut app = ctx.init_app_as_pager_of(&["git", "show", "HEAD"]);
-    ctx.update(&mut app, keys("j"));
+    ctx.update(&mut app, keys("<ctrl+j>"));
 
     assert!(!offers(&app, Op::Stage));
     assert!(!offers(&app, Op::Unstage));
@@ -56,7 +56,7 @@ fn staging_a_hunk_of_a_piped_working_tree_patch_stages_it() {
     fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
-    ctx.update(&mut app, keys("js"));
+    ctx.update(&mut app, keys("<ctrl+j>s"));
 
     assert!(run(&ctx.dir, &["git", "diff", "--cached"]).contains("+changed"));
 }
@@ -71,7 +71,7 @@ fn a_staged_hunk_leaves_the_view_it_was_staged_from() {
     fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
-    ctx.update(&mut app, keys("js"));
+    ctx.update(&mut app, keys("<ctrl+j>s"));
 
     assert!(
         !ctx.redact_buffer().contains("changed"),
@@ -236,11 +236,11 @@ fn editing_the_command_asks_the_new_question() {
     fs::write(ctx.dir.join("firstfile"), "changed\nagain\n").unwrap();
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
-    ctx.update(&mut app, keys("j"));
+    ctx.update(&mut app, keys("<ctrl+j>"));
     assert!(offers(&app, Op::Stage));
     assert!(ctx.redact_buffer().contains("+again"));
 
-    ctx.update(&mut app, keys(": --cached<enter>j"));
+    ctx.update(&mut app, keys(": --cached<enter><ctrl+j>"));
 
     assert!(offers(&app, Op::Unstage));
     let buffer = ctx.redact_buffer();
@@ -816,7 +816,7 @@ fn context_lines_are_skipped_when_configured() {
     ctx.config().general.visit_context_lines = false;
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
-    ctx.update(&mut app, keys("<ctrl+j>"));
+    ctx.update(&mut app, keys("j"));
 
     assert_eq!(selected_hunk_line(&app), Some(1));
 }
@@ -832,7 +832,7 @@ fn context_lines_are_visited_by_default() {
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
 
     for line_i in 0..4 {
-        ctx.update(&mut app, keys("<ctrl+j>"));
+        ctx.update(&mut app, keys("j"));
         assert_eq!(selected_hunk_line(&app), Some(line_i));
     }
 }
@@ -849,7 +849,7 @@ fn rendered_context_lines_are_visited_when_configured() {
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
 
     for line_i in 0..4 {
-        ctx.update(&mut app, keys("<ctrl+j>"));
+        ctx.update(&mut app, keys("j"));
         assert_eq!(selected_hunk_line(&app), Some(line_i));
     }
 }
@@ -1100,7 +1100,7 @@ fn a_command_that_says_more_than_the_limit_is_cut_back_too() {
     ctx.config().general.max_input_bytes = limit as u64;
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
-    ctx.update(&mut app, keys("j"));
+    ctx.update(&mut app, keys("<ctrl+j>"));
 
     let buffer = ctx.redact_buffer();
     assert!(
@@ -1174,7 +1174,7 @@ fn the_help_menu_heads_its_columns_by_what_is_in_them() {
     ctx.update(&mut app, keys("?"));
     assert_eq!(menu_headings(&ctx), ["Commands", "Submenus", "Hunk"]);
 
-    ctx.update(&mut app, keys("<esc><ctrl+j>?"));
+    ctx.update(&mut app, keys("<esc>j?"));
     assert_eq!(menu_headings(&ctx), ["Commands", "Submenus", "Line"]);
 }
 

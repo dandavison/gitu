@@ -200,7 +200,7 @@ pub(crate) fn stash_apply_file_as_patch() {
 pub(crate) fn stash_apply_line_as_patch() {
     let ctx = setup_stash_for_patch_apply(setup_clone!());
     let snapshot_name = function_name!().rsplit("::").next().unwrap();
-    snapshot_with_files(snapshot_name, ctx, "jj<enter><ctrl+j><ctrl+j><ctrl+j>a");
+    snapshot_with_files(snapshot_name, ctx, "jj<enter>jjja");
 }
 
 #[test]

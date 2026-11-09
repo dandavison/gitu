@@ -14,7 +14,7 @@ fn unstage_removed_line() {
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
     run(&ctx.dir, &["git", "add", "."]);
-    snapshot!(ctx, "jj<tab><ctrl+j><ctrl+j>u");
+    snapshot!(ctx, "jj<tab>jju");
 }
 
 #[test]
@@ -23,7 +23,7 @@ fn unstage_added_line() {
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
     run(&ctx.dir, &["git", "add", "."]);
-    snapshot!(ctx, "jj<tab><ctrl+j><ctrl+j><ctrl+j><ctrl+j>u");
+    snapshot!(ctx, "jj<tab>jjjju");
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn unstage_selected_lines() {
     run(&ctx.dir, &["git", "add", "."]);
 
     let mut app = ctx.init_app();
-    ctx.update(&mut app, keys("jj<tab><ctrl+j><ctrl+j><shift+down>u"));
+    ctx.update(&mut app, keys("jj<tab>jj<shift+down>u"));
 
     // Both removals are put back, leaving only the two additions staged.
     assert_eq!(

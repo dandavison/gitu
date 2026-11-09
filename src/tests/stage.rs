@@ -54,7 +54,7 @@ fn stage_removed_line() {
     let ctx = setup_clone!();
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
-    snapshot!(ctx, "jj<tab><ctrl+j><ctrl+j>s");
+    snapshot!(ctx, "jj<tab>jjs");
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn stage_added_line() {
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
 
-    snapshot!(ctx, "jj<tab><ctrl+j><ctrl+j><ctrl+j><ctrl+j>s");
+    snapshot!(ctx, "jj<tab>jjjjs");
 }
 
 #[test]
@@ -91,10 +91,7 @@ fn stage_selected_lines() {
     fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
 
     let mut app = ctx.init_app();
-    ctx.update(
-        &mut app,
-        keys("jj<tab><ctrl+j><ctrl+j><ctrl+j><ctrl+j><shift+down>s"),
-    );
+    ctx.update(&mut app, keys("jj<tab>jjjj<shift+down>s"));
 
     assert_eq!(
         run(&ctx.dir, &["git", "show", ":firstfile"]),
@@ -108,7 +105,7 @@ fn selected_lines_are_marked() {
     let ctx = setup_clone!();
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
-    snapshot!(ctx, "jj<tab><ctrl+j><ctrl+j><ctrl+j><ctrl+j><shift+down>");
+    snapshot!(ctx, "jj<tab>jjjj<shift+down>");
 }
 
 /// Every line of the selection is marked, not just the cursor's: the selection
@@ -120,10 +117,7 @@ fn the_whole_selection_is_marked() {
     fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
 
     let mut app = ctx.init_app();
-    ctx.update(
-        &mut app,
-        keys("jj<tab><ctrl+j><ctrl+j><ctrl+j><ctrl+j><shift+down>"),
-    );
+    ctx.update(&mut app, keys("jj<tab>jjjj<shift+down>"));
 
     let buffer = ctx.redact_buffer();
     for line in ["+weehooo", "+blrergh"] {
@@ -144,10 +138,7 @@ fn moving_on_drops_the_selection() {
     fs::write(ctx.dir.join("firstfile"), "weehooo\nblrergh\n").unwrap();
 
     let mut app = ctx.init_app();
-    ctx.update(
-        &mut app,
-        keys("jj<tab><ctrl+j><ctrl+j><ctrl+j><shift+down><ctrl+j>s"),
-    );
+    ctx.update(&mut app, keys("jj<tab>jjj<shift+down>js"));
 
     assert_eq!(
         run(&ctx.dir, &["git", "show", ":firstfile"]),
@@ -164,10 +155,7 @@ fn stage_a_changed_line() {
     fs::write(ctx.dir.join("firstfile"), changed_lines()).unwrap();
 
     let mut app = ctx.init_app();
-    ctx.update(
-        &mut app,
-        keys("jj<tab><ctrl+j><ctrl+j><ctrl+j><shift+down>s"),
-    );
+    ctx.update(&mut app, keys("jj<tab>jjj<shift+down>s"));
 
     assert_eq!(
         run(&ctx.dir, &["git", "show", ":firstfile"]),
@@ -186,7 +174,7 @@ fn selection_stops_at_the_end_of_the_hunk() {
     let mut app = ctx.init_app();
     ctx.update(
         &mut app,
-        keys("jj<tab><ctrl+j><ctrl+j><shift+down><shift+down><shift+down><shift+down>s"),
+        keys("jj<tab>jj<shift+down><shift+down><shift+down><shift+down>s"),
     );
 
     assert_eq!(

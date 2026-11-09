@@ -458,7 +458,7 @@ fn a_hunk_in_a_log_of_patches_reverses_its_commits_change() {
     let mut ctx = setup_clone!();
     let mut app = log_of_patches(&mut ctx);
 
-    ctx.update(&mut app, keys("/alpha changed<enter>kv"));
+    ctx.update(&mut app, keys("/alpha changed<enter><ctrl+k>v"));
 
     assert_eq!(fs::read_to_string(ctx.dir.join("a.rs")).unwrap(), "alpha\n");
 }

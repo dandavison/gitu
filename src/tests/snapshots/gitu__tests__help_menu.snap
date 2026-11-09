@@ -12,10 +12,10 @@ expression: ctx.redact_buffer()
  U                Diff context       m   Merge                                  |
  :                Edit git command   M   Remote                                 |
  &                Files              F   Pull                                   |
- k/up             Up                 P   Push                                   |
- j/down           Down               r   Rebase                                 |
- ctrl+k/ctrl+up   Up line            X   Reset                                  |
- ctrl+j/ctrl+down Down line          V   Revert                                 |
+ k/up             Up line            P   Push                                   |
+ j/down           Down line          r   Rebase                                 |
+ ctrl+k/ctrl+up   Up                 X   Reset                                  |
+ ctrl+j/ctrl+down Down               V   Revert                                 |
  shift+up         Select up          A   Cherry-pick                            |
  shift+down       Select down        z   Stash                                  |
  alt+k/alt+up     Prev section                                                  |
