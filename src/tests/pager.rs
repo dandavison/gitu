@@ -2138,3 +2138,49 @@ fn a_command_run_in_a_subdirectory_is_run_there_again() {
     assert!(buffer.contains("sub changed"), "{buffer}");
     assert!(!buffer.contains("top changed"), "{buffer}");
 }
+
+/// As in less, j, k and the arrow keys move through a diff a line at a time.
+#[test]
+fn j_k_and_the_arrow_keys_move_a_line_at_a_time() {
+    for (down, up) in [("j", "k"), ("<down>", "<up>")] {
+        let mut ctx = setup_clone!();
+        commit(&ctx.dir, "firstfile", "a\nb\nc\n");
+        fs::write(ctx.dir.join("firstfile"), "A\nB\nc\n").unwrap();
+        let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+
+        ctx.update(&mut app, keys(down));
+        let first = selected_hunk_line(&app);
+        assert!(first.is_some(), "{}", ctx.redact_buffer());
+        ctx.update(&mut app, keys(down));
+        assert_eq!(selected_hunk_line(&app), first.map(|line_i| line_i + 1));
+        ctx.update(&mut app, keys(up));
+        assert_eq!(selected_hunk_line(&app), first);
+    }
+}
+
+/// With ctrl, j and k move past a hunk's lines, to the next hunk.
+#[test]
+fn ctrl_j_moves_to_the_next_hunk() {
+    let mut ctx = setup_clone!();
+    let lines = |second: &str, last: &str| {
+        let mut lines: Vec<String> = (1..=30).map(|i| format!("line {i}")).collect();
+        lines[1] = second.to_owned();
+        lines[28] = last.to_owned();
+        lines.join("\n") + "\n"
+    };
+    commit(&ctx.dir, "firstfile", &lines("line 2", "line 29"));
+    fs::write(ctx.dir.join("firstfile"), lines("changed 2", "changed 29")).unwrap();
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+
+    ctx.update(&mut app, keys("<ctrl+j>"));
+
+    assert!(
+        matches!(
+            app.screen().get_selected_item().data,
+            crate::item_data::ItemData::Hunk { hunk_i: 1, .. }
+        ),
+        "{:?}\n{}",
+        app.screen().get_selected_item().data,
+        ctx.redact_buffer()
+    );
+}
