@@ -14,3 +14,9 @@ bump-version:
 	perl -pi -e 'if (!$$d && s/^version = "[^"]+"/version = "'$$next'"/) { $$d = 1 }' Cargo.toml && \
 	cargo build --release && \
 	git commit -m "v$$next" Cargo.toml Cargo.lock
+
+DELTA ?= /Users/dan/worktrees/delta/gitu/delta
+
+# Benches commits not yet in benches/startup/results, then opens the chart.
+bench-startup-chart:
+	open $$(benches/startup/bench-history --delta $(DELTA) | tail -n1)
