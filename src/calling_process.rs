@@ -44,6 +44,33 @@ const ALIAS_DEPTH: usize = 16;
 /// through a shell, and that shell through another.
 const ANCESTORS: usize = 3;
 
+/// The diffstat a command asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Stat {
+    No,
+    /// git's own and no patch, as `git log --stat` asks for: shown as git
+    /// prints it. With no patch there is no context to ask for.
+    Git,
+    /// A diffstat and the patch, as `git log -p --stat` asks for: gitu counts
+    /// it from the patch, and heads each file with its stat row.
+    WithPatch,
+    /// `git diff --stat`: gitu asks for the patch, counts the stat from it,
+    /// and starts each file folded to its stat row.
+    Folded,
+}
+
+impl Stat {
+    /// Whether gitu counts it from the patch.
+    pub(crate) fn is_counted(self) -> bool {
+        matches!(self, Self::WithPatch | Self::Folded)
+    }
+}
+
+/// Whether `arg` is git's `--stat` option.
+fn is_stat_option(arg: &str) -> bool {
+    arg == "--stat" || arg.starts_with("--stat=")
+}
+
 /// A git invocation gitu can put again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct GitCommand {
@@ -102,24 +129,29 @@ impl GitCommand {
         }
     }
 
-    /// Whether the command asks for a diffstat and no patch, as `git diff
-    /// --stat` does. git takes `-U` as asking for the patch too; here it is the
-    /// context of the patches the stat's files unfold to, which is how gitu
-    /// writes the context it is asked for into the command.
-    pub(crate) fn is_stat(&self) -> bool {
+    /// The diffstat the command asks for. git takes `-U` as asking for the
+    /// patch too; here it is the context of the patches a stat's files unfold
+    /// to, which is how gitu writes the context it is asked for into the
+    /// command.
+    pub(crate) fn stat(&self) -> Stat {
         let args: Vec<&str> = self.arguments().take_while(|arg| *arg != "--").collect();
-        self.subcommand() == "diff"
-            && args
-                .iter()
-                .any(|arg| *arg == "--stat" || arg.starts_with("--stat="))
-            && !args
-                .iter()
-                .any(|arg| matches!(*arg, "-p" | "-u" | "--patch" | "--patch-with-stat"))
+        let stat = args
+            .iter()
+            .any(|arg| is_stat_option(arg) || *arg == "--patch-with-stat");
+        let patch = args
+            .iter()
+            .any(|arg| matches!(*arg, "-p" | "-u" | "--patch" | "--patch-with-stat"));
+        match (stat, patch) {
+            (false, _) => Stat::No,
+            (true, true) => Stat::WithPatch,
+            (true, false) if self.subcommand() == "diff" => Stat::Folded,
+            (true, false) => Stat::Git,
+        }
     }
 
-    /// The same command asking for the patch in place of a diffstat, which
-    /// gitu counts from the patch itself rather than have git work it out
-    /// before writing anything else.
+    /// The same command asking for the patch alone in place of any diffstat,
+    /// which gitu counts from the patch itself rather than have git work it
+    /// out before writing anything else.
     pub(crate) fn as_patch(&self) -> Self {
         let end = self
             .argv
@@ -130,7 +162,7 @@ impl GitCommand {
             .argv
             .iter()
             .enumerate()
-            .filter(|&(i, arg)| i >= end || !(arg == "--stat" || arg.starts_with("--stat=")))
+            .filter(|&(i, arg)| i >= end || !(is_stat_option(arg) || arg == "--patch-with-stat"))
             .map(|(_, arg)| arg.clone());
         let mut argv: Vec<String> = argv.collect();
         argv.insert(self.subcommand + 1, "--patch".to_owned());

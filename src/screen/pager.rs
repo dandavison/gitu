@@ -11,7 +11,7 @@ use super::{Items, Screen, streamed_items};
 use crate::style::{Modifier, Style};
 use crate::{
     Res,
-    calling_process::GitCommand,
+    calling_process::{GitCommand, Stat},
     config::{Config, FileHeader},
     error::Error,
     git::diff::{Diff, DiffType},
@@ -228,13 +228,16 @@ impl Source {
         let (input, shape) = match self {
             Source::Live { git } => {
                 let git = git.borrow();
-                let stat = git.is_stat();
-                // A diffstat is shown as the files of the patch, folded to
-                // their stat rows, so the patch is what is asked for.
-                let mut command = if stat {
-                    git.as_patch().command(params.context.as_deref())
-                } else {
-                    git.command(params.context.as_deref())
+                let stat = git.stat();
+                // A diffstat gitu counts is shown as the files of the patch
+                // headed by their stat rows, so the patch alone is what is
+                // asked for.
+                let mut command = match stat {
+                    Stat::No => git.command(params.context.as_deref()),
+                    Stat::Git => git.command(None),
+                    Stat::WithPatch | Stat::Folded => {
+                        git.as_patch().command(params.context.as_deref())
+                    }
                 };
                 let workdir = repo.workdir().ok_or(Error::NoRepoWorkdir)?;
                 command.current_dir(workdir.join(git.prefix()));
@@ -250,7 +253,7 @@ impl Source {
                 let shape = Shape::Diff {
                     diff_type: DiffType::TreeToTree,
                     named_commit: false,
-                    stat: false,
+                    stat: Stat::No,
                     truncated: *truncated,
                 };
                 (Input::Text(text.clone()), shape)
@@ -287,9 +290,8 @@ enum Shape {
         /// Whether its first line names the commit it is of, as `git show`'s
         /// does.
         named_commit: bool,
-        /// Whether it opens with a diffstat, each file folding to its row of
-        /// it.
-        stat: bool,
+        /// The diffstat the command asks for.
+        stat: Stat,
         /// Whether the input it came from was already cut short.
         truncated: bool,
     },
@@ -322,11 +324,13 @@ fn built(
             truncated,
         } => {
             let mut items = Vec::new();
+            let headed_by_stat =
+                stat.is_counted() || config.general.file_header == FileHeader::Stat;
             // Files folded to stat rows are shown before the renderer reaches
             // them; other files are not, and only what the renderer has taken
             // need be parsed.
-            let stat_folded = *stat
-                || (config.general.start_folded && config.general.file_header == FileHeader::Stat);
+            let stat_folded =
+                *stat == Stat::Folded || (config.general.start_folded && headed_by_stat);
             let input = if snapshot.done || stat_folded {
                 &snapshot.text
             } else {
@@ -341,10 +345,12 @@ fn built(
             // What came back has no diff in it: a log, a blame, a grep, a man
             // page. gitu has no structure of its own to impose, so the renderer
             // draws it.
-            // Folding is for finding a file in a patch that is not all in view.
-            // One still arriving is taken not to fit.
+            // `git diff --stat` is the patch with its files folded. Otherwise
+            // folding is for finding a file in a patch that is not all in view,
+            // and one still arriving is taken not to fit.
             let fits = snapshot.done && drawn.lines().count() <= params.size.1 as usize;
-            let fold = config.general.start_folded && file_diffs.len() > 1 && !fits;
+            let fold = *stat == Stat::Folded
+                || config.general.start_folded && file_diffs.len() > 1 && !fits;
             let patches = items::patches_of(&text, &file_diffs);
             if file_diffs.is_empty() {
                 items.extend(rows(repo, drawn));
@@ -364,7 +370,8 @@ fn built(
                                 rendered,
                                 snapshot.done,
                                 diff_type,
-                                *stat || fold,
+                                stat.is_counted(),
+                                fold,
                             )
                         })
                         .unwrap_or_else(|| rows(repo, drawn)),
@@ -376,25 +383,23 @@ fn built(
                     commit: named_commit.then(|| commit_named_by(&text)).flatten(),
                     text,
                 });
-                let folded_to_stat_rows =
-                    (*stat || fold) && (*stat || config.general.file_header == FileHeader::Stat);
+                let folded_to_stat_rows = fold && headed_by_stat;
                 let drawn = items::drawn_diff_items(
                     config,
                     &diff,
                     snapshot.rendered.as_deref(),
                     !snapshot.done && !folded_to_stat_rows,
                     0,
-                    *stat || fold,
+                    fold,
                     None,
                 );
                 if let Some(preamble) = preamble(&snapshot.text, &diff.text) {
                     items.extend(items::plain_rows(&render(config, params, &preamble)));
                 }
-                // A diffstat is the diff with its files folded to their stat
-                // rows.
-                items.extend(match (*stat, config.general.file_header) {
-                    (false, FileHeader::Delta) => drawn,
-                    _ => items::headed_by_counted_stat(drawn, params.width(), true),
+                items.extend(if headed_by_stat {
+                    items::headed_by_counted_stat(drawn, params.width(), true)
+                } else {
+                    drawn
                 });
             }
             (items, *truncated)

@@ -322,6 +322,42 @@ fn a_log_of_patches_heads_each_file_with_its_stat_row() {
     assert!(buffer.contains(" a.rs | 2 +-"), "{buffer}");
 }
 
+/// `git log --stat` has no patch, so no context to ask for: asking for some
+/// leaves git's stat as it was, one row per file.
+#[test]
+fn a_log_stat_with_the_context_asked_for_has_one_stat_row_per_file() {
+    let mut ctx = setup_clone!();
+    ctx.config().general.file_header = crate::config::FileHeader::Stat;
+    commit(&ctx.dir, "a.rs", "alpha\n");
+    commit(&ctx.dir, "b.rs", "beta\n");
+    commit(&ctx.dir, "a.rs", "alpha changed\n");
+    let mut app = ctx.init_app_as_pager_of(&["git", "log", "--stat", "-3"]);
+
+    ctx.update(&mut app, keys("U8<enter>"));
+
+    let buffer = ctx.redact_buffer();
+    let newest = buffer.split("Author:").nth(1).unwrap();
+    assert_eq!(newest.matches(" a.rs | ").count(), 1, "{buffer}");
+    assert!(!newest.contains("---"), "{buffer}");
+}
+
+/// A log of patches with their stats has one stat row per file, heading it.
+#[test]
+fn a_log_of_patches_with_their_stats_has_one_stat_row_per_file() {
+    let mut ctx = setup_clone!();
+    ctx.config().general.file_header = crate::config::FileHeader::Stat;
+    commit(&ctx.dir, "a.rs", "alpha\n");
+    commit(&ctx.dir, "b.rs", "beta\n");
+    commit(&ctx.dir, "a.rs", "alpha changed\n");
+    ctx.init_app_as_pager_of(&["git", "log", "-p", "--stat", "-3"]);
+
+    let buffer = ctx.redact_buffer();
+    let newest = buffer.split("Author:").nth(1).unwrap();
+    assert_eq!(newest.matches(" a.rs | ").count(), 1, "{buffer}");
+    assert!(!newest.contains("---"), "{buffer}");
+    assert!(newest.contains("alpha changed"), "{buffer}");
+}
+
 /// Three commits, the newest changing a file the oldest added, paged through
 /// a renderer that marks commits and annotates diff lines, as delta does.
 fn log_of_patches(ctx: &mut TestContext) -> crate::app::App {

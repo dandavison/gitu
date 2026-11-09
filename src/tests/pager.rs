@@ -1231,6 +1231,35 @@ fn the_renderers_file_header_folds_and_stages_its_file() {
     assert!(run(&ctx.dir, &["git", "diff", "--cached"]).contains("+changed"));
 }
 
+/// A diffstat asked for with the patch is the patch with each file headed by
+/// its stat row, unfolded: one stat row per file, whatever heads files
+/// otherwise.
+#[test]
+fn a_patch_asked_for_with_its_stat_has_one_stat_row_per_file() {
+    for file_header in [
+        crate::config::FileHeader::Delta,
+        crate::config::FileHeader::Stat,
+    ] {
+        for argv in [
+            ["git", "diff", "-p", "--stat"],
+            ["git", "diff", "--patch-with-stat", "-U3"],
+        ] {
+            let mut ctx = setup_clone!();
+            ctx.config().general.file_header = file_header;
+            commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+            fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
+            ctx.config().general.diff_renderer.command = file_header_renderer();
+
+            ctx.init_app_as_pager_of(&argv);
+
+            let buffer = ctx.redact_buffer();
+            assert_eq!(buffer.matches("firstfile | 2 +-").count(), 1, "{buffer}");
+            assert!(!buffer.contains("~ firstfile ~"), "{buffer}");
+            assert!(buffer.contains("changed"), "{buffer}");
+        }
+    }
+}
+
 /// A file unfolded from a diffstat is headed by its stat row in place of the
 /// renderer's file header.
 #[test]

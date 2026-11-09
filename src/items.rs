@@ -180,7 +180,10 @@ pub(crate) fn headed_by_counted_stat(
     }
     if summarised {
         let summary = stat_summary(stats.iter().map(|(_, stat)| stat));
+        // At the files' depth, so that it folds away with what they are under.
+        let depth = items[stats[0].0].depth;
         items.push(Item {
+            depth,
             unselectable: true,
             rendered: Some(Rc::new(vec![(summary, Style::new())])),
             ..Default::default()
@@ -834,8 +837,10 @@ pub(crate) fn rendered_log_items(repo: &Repository, rendered: &str) -> Option<Ve
 /// and annotates diff lines: each commit's rows, then its diff nested under
 /// it. `patches` are the commits' patches (see [`patches_of`]); each is a diff
 /// of its own, so that a path the log changes in several commits is placed in
-/// the right one. `None` if the renderer does not say which rows are which, or
-/// says of fewer commits' diffs than there are patches.
+/// the right one. A `stat` log (`git log --stat`) heads each commit's files
+/// with their stat rows and follows them with the diffstat's summary, as git
+/// prints a diffstat per commit. `None` if the renderer does not say which rows
+/// are which, or says of fewer commits' diffs than there are patches.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn log_of_patches_items(
     config: &Config,
@@ -845,6 +850,7 @@ pub(crate) fn log_of_patches_items(
     rendered: &str,
     drawn_whole: bool,
     diff_type: &DiffType,
+    stat: bool,
     default_collapsed: bool,
 ) -> Option<Vec<Item>> {
     use crate::diff_renderer::LineKind;
@@ -902,18 +908,19 @@ pub(crate) fn log_of_patches_items(
             commit: commit.oid.clone(),
             text: patch,
         });
-        let diff_items = headed_as_configured(
-            config,
-            params,
-            rendered_diff_items(
-                &diff,
-                diff_rows,
-                2,
-                default_collapsed,
-                commit.oid,
-                config.general.visit_context_lines,
-            ),
+        let diff_items = rendered_diff_items(
+            &diff,
+            diff_rows,
+            2,
+            default_collapsed,
+            commit.oid,
+            config.general.visit_context_lines,
         );
+        let diff_items = if stat {
+            headed_by_counted_stat(diff_items, params.width(), true)
+        } else {
+            headed_as_configured(config, params, diff_items)
+        };
         items.extend(if drawn_whole {
             diff_items
         } else {
