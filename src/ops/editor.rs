@@ -463,6 +463,7 @@ impl OpTrait for RendererThemes {
         Some(Rc::new(|app: &mut App, term: &mut Term| {
             let themes = crate::diff_renderer::themes(
                 &app.state.repo.config().map_err(Error::ReadGitConfig)?,
+                &app.state.config.general.diff_renderer.builtin_themes,
             )?;
             if themes.is_empty() {
                 app.display_error("No themes are defined in git config");

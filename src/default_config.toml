@@ -71,6 +71,9 @@ diff_renderer.feature_keys = { side-by-side = "S", line-numbers = "L", plus-minu
 # sets `dark` or `light`, as delta defines one. `renderer_themes` writes your
 # choice to git config's delta-tui section, not here.
 # diff_renderer.theme = "my-theme"
+# delta's builtin features to offer as themes too, after those in git config,
+# e.g. ["diff-so-fancy"].
+diff_renderer.builtin_themes = []
 
 # Arguments given to the `git log` Gitu runs for the log view (`l l`, `l o`),
 # e.g. a pretty format of your own:

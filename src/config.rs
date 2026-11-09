@@ -133,6 +133,10 @@ pub struct DiffRendererConfig {
     /// sets `dark` or `light`, as delta defines a theme.
     #[serde(default)]
     pub theme: Option<String>,
+    /// delta's builtin features to offer as themes after those in git config,
+    /// for either mode, such as `diff-so-fancy`.
+    #[serde(default)]
+    pub builtin_themes: Vec<String>,
     /// The mode delta renders in, set by `delta --gitu`, which settles it before
     /// gitu starts. `None` when gitu is not run by delta.
     #[serde(skip)]
@@ -601,6 +605,19 @@ mod tests {
         assert_eq!(
             config.general.diff_renderer.features,
             ["side-by-side", "my-*"]
+        );
+    }
+
+    /// Builtin themes are a list, one key per item, as other lists are.
+    #[test]
+    fn git_config_lists_builtin_themes() {
+        let config = configured(
+            "",
+            "[delta-tui \"general.diff-renderer\"]\n\tbuiltin-themes = diff-so-fancy\n",
+        );
+        assert_eq!(
+            config.general.diff_renderer.builtin_themes,
+            ["diff-so-fancy"]
         );
     }
 

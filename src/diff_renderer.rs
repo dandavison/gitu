@@ -356,7 +356,7 @@ pub(crate) fn offered_features(
     git_config: &git2::Config,
 ) -> Res<Vec<String>> {
     let defined = defined_features(git_config)?;
-    let themes: Vec<String> = themes(git_config)?
+    let themes: Vec<String> = themes(git_config, &[])?
         .into_iter()
         .map(|theme| theme.name)
         .collect();
@@ -389,8 +389,8 @@ fn defined_features(git_config: &git2::Config) -> Res<Vec<String>> {
 
 /// The themes defined in git config: as delta defines a theme, a feature that
 /// sets `dark` or `light`. Sorted as `delta --show-themes` sorts them, ignoring
-/// case.
-pub(crate) fn themes(git_config: &git2::Config) -> Res<Vec<Theme>> {
+/// case, and followed by `builtin`, delta's own features, which set neither.
+pub(crate) fn themes(git_config: &git2::Config, builtin: &[String]) -> Res<Vec<Theme>> {
     let names = features_with_key(git_config, |key| matches!(key, "dark" | "light"))?;
     let mut themes: Vec<Theme> = names
         .into_iter()
@@ -409,6 +409,14 @@ pub(crate) fn themes(git_config: &git2::Config) -> Res<Vec<Theme>> {
         })
         .collect();
     themes.sort_by_key(|theme| theme.name.to_lowercase());
+    for name in builtin {
+        if !themes.iter().any(|theme| &theme.name == name) {
+            themes.push(Theme {
+                name: name.clone(),
+                mode: None,
+            });
+        }
+    }
     Ok(themes)
 }
 
