@@ -167,3 +167,22 @@ fn rendered_blame(
         .map(|item| item.rendered)
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// delta cannot tell the language of git blame's output when gitu, not
+    /// `git blame <file>`, runs it, so it is told by the file's extension.
+    #[test]
+    fn delta_is_told_the_language_of_the_file_blamed() {
+        assert_eq!(
+            delta_config_parameters("src/handlers/blame.rs", None),
+            "'delta.wrap-max-lines=0' 'delta.default-language=rs'"
+        );
+        assert_eq!(
+            delta_config_parameters("Makefile", Some("'a.b=c'")),
+            "'a.b=c' 'delta.wrap-max-lines=0'"
+        );
+    }
+}
