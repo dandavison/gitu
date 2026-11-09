@@ -139,9 +139,25 @@ pub(crate) fn create(
     Ok(screen)
 }
 
+/// `GIT_CONFIG_PARAMETERS` for delta drawing the blame of `file_path`, after
+/// those `given`: no wrapping, so that each line of the file is one row, and the
+/// language of the file, which delta would otherwise take from the git blame
+/// command that called it.
+fn delta_config_parameters(file_path: &str, given: Option<&str>) -> String {
+    let language = std::path::Path::new(file_path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| format!(" 'delta.default-language={extension}'"))
+        .unwrap_or_default();
+    let ours = format!("'delta.wrap-max-lines=0'{language}");
+    match given {
+        Some(given) => format!("{given} {ours}"),
+        None => ours,
+    }
+}
+
 /// The rows the renderer draws for git blame's output, one per line of the file,
-/// or `None` if it draws none. delta is told not to wrap, so that a long line
-/// stays one row.
+/// or `None` if it draws none.
 fn rendered_blame(
     config: &Config,
     params: &RenderParams,
@@ -150,11 +166,8 @@ fn rendered_blame(
     commit: Option<&str>,
 ) -> Option<Vec<Rc<crate::items::RenderedRow>>> {
     let text = git::blame_text(repo, file_path, commit)?;
-    let no_wrap = "'delta.wrap-max-lines=0'";
-    let parameters = match std::env::var("GIT_CONFIG_PARAMETERS") {
-        Ok(given) => format!("{given} {no_wrap}"),
-        Err(_) => no_wrap.to_owned(),
-    };
+    let given = std::env::var("GIT_CONFIG_PARAMETERS").ok();
+    let parameters = delta_config_parameters(file_path, given.as_deref());
     let output = crate::diff_renderer::run_with_env(
         &config.general.diff_renderer.command,
         Some(&text),
