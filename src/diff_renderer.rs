@@ -288,8 +288,20 @@ pub(crate) fn run(
     params: &crate::items::RenderParams,
     dir: Option<&Path>,
 ) -> Option<String> {
+    run_with_env(command, input, params, dir, &[])
+}
+
+/// [`run`], with `env` set for the renderer besides.
+pub(crate) fn run_with_env(
+    command: &[String],
+    input: Option<&str>,
+    params: &crate::items::RenderParams,
+    dir: Option<&Path>,
+    env: &[(&str, String)],
+) -> Option<String> {
     let program = command.first()?;
     let mut command = renderer_command(command, params, dir)?;
+    command.envs(env.iter().map(|(name, value)| (name, value)));
     command
         .stdin(if input.is_some() {
             Stdio::piped()

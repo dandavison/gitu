@@ -23,9 +23,11 @@ pub(crate) fn create(
     let mut screen = Screen::new(
         Arc::clone(&config),
         params,
-        Box::new(move |_params: RenderParams| {
+        Box::new(move |params: RenderParams| {
             let commit_display = commit.as_deref().unwrap_or("HEAD").to_string();
             let blame_lines = git::blame(repo.as_ref(), &file_path, commit.as_deref())?;
+            let rendered = rendered_blame(&config, &params, &repo, &file_path, commit.as_deref())
+                .filter(|rows| rows.len() == blame_lines.len());
 
             let header = Item {
                 id: hash(("blame_header", file_path.as_str(), commit_display.as_str())),
@@ -34,6 +36,46 @@ pub(crate) fn create(
                 data: ItemData::Header(SectionHeader::Blame(file_path.clone(), commit_display)),
                 ..Default::default()
             };
+
+            // As the renderer draws git blame, its rows in place of gitu's own,
+            // with no header row per commit, since its rows show the commit. The
+            // first line of each commit's run stands in for the header, as the
+            // stop for moving between commits.
+            if let Some(rendered) = rendered {
+                let mut previous = None::<String>;
+                let lines = blame_lines.into_iter().zip(rendered).map(|(line, row)| {
+                    let starts_run = previous.as_deref() != Some(line.commit_hash.as_str());
+                    previous = Some(line.commit_hash.clone());
+                    let data = if starts_run {
+                        ItemData::BlameHeader {
+                            commit_hash: line.commit_hash.clone(),
+                            short_hash: line.short_hash.clone(),
+                            _author: line.author.clone(),
+                            _author_time: line.author_time,
+                            summary: line.summary.clone(),
+                            file_path: file_path.clone(),
+                            line_num: line.orig_line_num,
+                            blamed_line_num: line.line_num,
+                        }
+                    } else {
+                        ItemData::BlameCodeLine {
+                            line_num: line.line_num,
+                            orig_line_num: line.orig_line_num,
+                            content: line.content,
+                            commit_hash: line.commit_hash.clone(),
+                            file_path: file_path.clone(),
+                        }
+                    };
+                    Item {
+                        id: hash(("blame_code", line.commit_hash.as_str(), line.line_num)),
+                        depth: 0,
+                        rendered: Some(row),
+                        data,
+                        ..Default::default()
+                    }
+                });
+                return Ok(std::iter::once(header).chain(lines).collect());
+            }
 
             let entries = blame_lines
                 .into_iter()
@@ -95,4 +137,33 @@ pub(crate) fn create(
     }
 
     Ok(screen)
+}
+
+/// The rows the renderer draws for git blame's output, one per line of the file,
+/// or `None` if it draws none. delta is told not to wrap, so that a long line
+/// stays one row.
+fn rendered_blame(
+    config: &Config,
+    params: &RenderParams,
+    repo: &Repository,
+    file_path: &str,
+    commit: Option<&str>,
+) -> Option<Vec<Rc<crate::items::RenderedRow>>> {
+    let text = git::blame_text(repo, file_path, commit)?;
+    let no_wrap = "'delta.wrap-max-lines=0'";
+    let parameters = match std::env::var("GIT_CONFIG_PARAMETERS") {
+        Ok(given) => format!("{given} {no_wrap}"),
+        Err(_) => no_wrap.to_owned(),
+    };
+    let output = crate::diff_renderer::run_with_env(
+        &config.general.diff_renderer.command,
+        Some(&text),
+        params,
+        repo.workdir(),
+        &[("GIT_CONFIG_PARAMETERS", parameters)],
+    )?;
+    crate::items::plain_rows(&output)
+        .into_iter()
+        .map(|item| item.rendered)
+        .collect()
 }

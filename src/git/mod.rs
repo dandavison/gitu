@@ -458,6 +458,27 @@ pub(crate) fn blame(
     Ok(parse_blame_porcelain(&text))
 }
 
+/// git blame's own output for `file_path`, one line per line of the file, as
+/// delta draws it; `None` if git fails.
+pub(crate) fn blame_text(
+    repo: &Repository,
+    file_path: &str,
+    commit: Option<&str>,
+) -> Option<String> {
+    let dir = repo.workdir().expect("Bare repos unhandled");
+    let output = Command::new("git")
+        .current_dir(dir)
+        .arg("blame")
+        .args(commit)
+        .args(["--", file_path])
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
 fn parse_blame_porcelain(text: &str) -> Vec<BlameLine> {
     let mut lines = text.lines();
     let mut result = Vec::new();

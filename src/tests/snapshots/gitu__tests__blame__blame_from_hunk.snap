@@ -3,12 +3,9 @@ source: src/tests/blame.rs
 expression: ctx.redact_buffer()
 ---
  Blame file @ dc61526641c542a66eef0574499da9b6f12a5764                          |
- 1fcc61bc add file                                                              |
-    1 unchanged-top                                                             |
- dc615266 modify file                                                           |
-▌   2 SELECT-THIS-LINE                                                          |
- 1fcc61bc add file                                                              |
-    3 unchanged-bottom                                                          |
+ 1fcc61bc (Author Name 2024-02-16 11:11:00 +0100 1) unchanged-top               |
+▌dc615266 (Author Name 2024-02-16 11:11:00 +0100 2) SELECT-THIS-LINE            |
+ 1fcc61bc (Author Name 2024-02-16 11:11:00 +0100 3) unchanged-bottom            |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +19,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 53be5deb89d3dcaa
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: 20c9d0a70c9ff1fe

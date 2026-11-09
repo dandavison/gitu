@@ -3,10 +3,9 @@ source: src/tests/blame.rs
 expression: ctx.redact_buffer()
 ---
  Blame file @ fa5e4bd731a775eec7d161bd5e133baca888379d                          |
- fa5e4bd7 add file                                                              |
-▌   1 top                                                                       |
-    2 SELECT-THIS-LINE                                                          |
-    3 bottom                                                                    |
+▌fa5e4bd7 (Author Name 2024-02-16 11:11:00 +0100 1) top                         |
+ fa5e4bd7 (Author Name 2024-02-16 11:11:00 +0100 2) SELECT-THIS-LINE            |
+ fa5e4bd7 (Author Name 2024-02-16 11:11:00 +0100 3) bottom                      |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: b410ca00e9a3a8f3
+                                                                                |
+styles_hash: f24d0414c75f817e
