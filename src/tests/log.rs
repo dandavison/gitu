@@ -304,6 +304,31 @@ fn paging_lands_on_a_commit_of_the_new_page() {
     assert_eq!(top, selected_summary(&app), "paging back missed the commit");
 }
 
+/// Turning a renderer feature on and off in a commit opened from the log
+/// rebuilds the log under it too; leaving the commit returns to the commit it
+/// was opened from.
+#[test]
+fn leaving_a_commit_after_toggling_a_feature_returns_to_it_in_the_log() {
+    let mut ctx = setup_clone!();
+    for i in 1..=40 {
+        commit(&ctx.dir, &format!("file-{i:02}"), "");
+    }
+    // The log is rebuilt a screenful at a time, and the commit opened is past
+    // the first screenfuls.
+    ctx.config().general.diff_renderer.command = super::pager::pausing_renderer();
+    let mut app = ctx.init_app_streaming_with_args(Default::default());
+    ctx.update(&mut app, keys("ll"));
+    while app.screen().is_drawing() {
+        app.screen_mut().finish().unwrap();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    ctx.update(&mut app, keys("G<ctrl+k><ctrl+k>"));
+    let opened = selected_summary(&app);
+
+    ctx.update(&mut app, keys("<enter>SSSq"));
+    assert_eq!(selected_summary(&app), opened, "{}", ctx.redact_buffer());
+}
+
 fn selected_summary(app: &crate::app::App) -> String {
     match &app.state.screens.last().unwrap().get_selected_item().data {
         ItemData::Commit { summary, .. } => summary.clone(),
