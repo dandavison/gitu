@@ -27,6 +27,8 @@ pub(crate) struct Prompt {
     /// What the last kill took, for `ctrl+y` to put back.
     killed: String,
     history_dir: Option<PathBuf>,
+    /// Whether history is read but not added to.
+    history_read_only: bool,
     active_history: Option<ActiveHistory>,
 }
 
@@ -43,13 +45,15 @@ impl Prompt {
             state: TextInput::default(),
             killed: String::new(),
             history_dir: None,
+            history_read_only: false,
             active_history: None,
         }
     }
 
-    pub(crate) fn with_history(history_dir: PathBuf) -> Self {
+    pub(crate) fn with_history(history_dir: PathBuf, read_only: bool) -> Self {
         Self {
             history_dir: Some(history_dir),
+            history_read_only: read_only,
             ..Self::new()
         }
     }
@@ -86,7 +90,7 @@ impl Prompt {
         let Some(dir) = &self.history_dir else {
             return Ok(());
         };
-        if value.is_empty() {
+        if self.history_read_only || value.is_empty() {
             return Ok(());
         }
 

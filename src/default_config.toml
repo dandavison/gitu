@@ -97,6 +97,13 @@ show_args = []
 # a long diff has arrived.
 file_header = "delta"
 
+# Run no command that changes the repository (stage, discard, apply, commit,
+# rebase, fetch, ...), and hide them, and save nothing chosen in-session (a
+# theme, feature keys, prompt history). "auto" is read-only in a repository jj
+# also manages, one with a `.jj` directory, where a git command can contradict
+# jj's own state; otherwise true or false.
+read_only = "auto"
+
 # Whether a patch of more than one file that does not fit on one screen starts
 # with its files folded, in every view of one: `git diff`, `git show`, `git log
 # -p`, and a commit opened from the log. A patch still arriving when the first

@@ -101,6 +101,57 @@ pub struct GeneralConfig {
     /// commit opened from the log.
     #[serde(default)]
     pub start_folded: bool,
+    /// Whether gitu leaves the repository and git config as it finds them.
+    #[serde(default)]
+    pub read_only: ReadOnly,
+}
+
+/// Whether gitu runs commands that change the repository (stage, commit,
+/// rebase, fetch, ...) and saves what is chosen in-session (a theme, feature
+/// keys, prompt history).
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+pub enum ReadOnly {
+    /// Read-only in a repository jj also manages (one with a `.jj` directory),
+    /// where a git command can contradict jj's own state.
+    #[default]
+    Auto,
+    On,
+    Off,
+}
+
+impl ReadOnly {
+    pub fn is_on(self, repo: &git2::Repository) -> bool {
+        match self {
+            ReadOnly::Auto => repo.workdir().is_some_and(|dir| dir.join(".jj").is_dir()),
+            ReadOnly::On => true,
+            ReadOnly::Off => false,
+        }
+    }
+}
+
+/// A boolean, or `auto`. Git config gives a boolean as a string, written as
+/// git accepts one.
+impl<'de> Deserialize<'de> for ReadOnly {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Bool(bool),
+            Str(String),
+        }
+        match Raw::deserialize(deserializer)? {
+            Raw::Bool(true) => Ok(ReadOnly::On),
+            Raw::Bool(false) => Ok(ReadOnly::Off),
+            Raw::Str(value) => match value.to_lowercase().as_str() {
+                "auto" => Ok(ReadOnly::Auto),
+                "true" | "yes" | "on" | "1" | "" => Ok(ReadOnly::On),
+                "false" | "no" | "off" | "0" => Ok(ReadOnly::Off),
+                _ => Err(serde::de::Error::custom(format!(
+                    "read_only: '{value}' is neither a boolean nor auto"
+                ))),
+            },
+        }
+    }
 }
 
 /// What heads each file of a patch, folded or not.

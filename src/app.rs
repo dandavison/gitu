@@ -78,6 +78,9 @@ pub(crate) struct State {
     /// The keys that toggle renderer features, as configured and as set since.
     pub feature_keys: BTreeMap<String, char>,
     pub clipboard: Option<Clipboard>,
+    /// Whether ops that write are hidden and refused, and nothing chosen
+    /// in-session is saved ([`crate::config::ReadOnly`]).
+    pub read_only: bool,
     needs_redraw: bool,
     file_watcher: Option<FileWatcher>,
     inhibit_close_menu: bool,
@@ -148,7 +151,8 @@ impl App {
         let clipboard = Clipboard::new()
             .inspect_err(|e| log::warn!("Couldn't initialize clipboard: {e}"))
             .ok();
-        let prompt = prompt::Prompt::with_history(repo.path().join("gitu"));
+        let read_only = config.general.read_only.is_on(&repo);
+        let prompt = prompt::Prompt::with_history(repo.path().join("gitu"), read_only);
 
         let mut app = Self {
             state: State {
@@ -174,6 +178,7 @@ impl App {
                 features: Rc::from([]),
                 context: None,
                 clipboard,
+                read_only,
                 file_watcher: None,
                 needs_redraw: true,
                 inhibit_close_menu: false,
@@ -487,6 +492,9 @@ impl App {
     }
 
     pub(crate) fn handle_op(&mut self, op: Op, term: &mut Term) -> Res<()> {
+        if self.state.read_only && op.writes() {
+            return Ok(());
+        }
         let item_data = self.screen().selected_target();
         let implementation = op.clone().implementation();
 

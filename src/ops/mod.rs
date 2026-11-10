@@ -173,6 +173,70 @@ pub(crate) enum Op {
 }
 
 impl Op {
+    /// Whether the op changes the repository: its refs, index, worktree,
+    /// remotes or stash. A menu whose ops all do counts as one.
+    pub(crate) fn writes(&self) -> bool {
+        match self {
+            Op::OpenMenu(menu) => !matches!(
+                menu,
+                Menu::Root | Menu::Help | Menu::Log | Menu::CommitPicker | Menu::RebaseTodo
+            ),
+            Op::AddRemote
+            | Op::Checkout
+            | Op::CheckoutNewBranch
+            | Op::Spinoff
+            | Op::Delete
+            | Op::Commit
+            | Op::CommitAmend
+            | Op::CommitExtend
+            | Op::CommitFixup
+            | Op::CommitInstantFixup
+            | Op::FetchAll
+            | Op::FetchPushRemote
+            | Op::FetchUpstream
+            | Op::FetchElsewhere
+            | Op::PullFromPushRemote
+            | Op::PullFromUpstream
+            | Op::PullFromElsewhere
+            | Op::PushToPushRemote
+            | Op::PushToUpstream
+            | Op::PushToElsewhere
+            | Op::RebaseAbort
+            | Op::RebaseContinue
+            | Op::RebaseElsewhere
+            | Op::RebaseAutosquash
+            | Op::RebaseInteractive
+            | Op::RemoveRemote
+            | Op::Rename
+            | Op::RenameRemote
+            | Op::Stash
+            | Op::StashApply
+            | Op::StashIndex
+            | Op::StashWorktree
+            | Op::StashKeepIndex
+            | Op::StashPop
+            | Op::StashDrop
+            | Op::ResetSoft
+            | Op::ResetMixed
+            | Op::ResetHard
+            | Op::RevertAbort
+            | Op::RevertContinue
+            | Op::RevertCommit
+            | Op::CherryPickAbort
+            | Op::CherryPickContinue
+            | Op::CherryPick
+            | Op::Merge
+            | Op::MergeAbort
+            | Op::MergeContinue
+            | Op::Stage
+            | Op::Unstage
+            | Op::Discard
+            | Op::Apply
+            | Op::Reverse => true,
+            _ => false,
+        }
+    }
+
     pub fn implementation(self) -> Box<dyn OpTrait> {
         match self {
             Op::Quit => Box::new(editor::Quit),

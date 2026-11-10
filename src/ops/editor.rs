@@ -517,7 +517,10 @@ impl OpTrait for RendererThemes {
                 Some(data) => {
                     app.state.theme = theme_of(&data);
                     let dir = app.state.repo.workdir().unwrap_or(app.state.repo.path());
-                    if let Err(e) = crate::config_edit::set_theme(dir, app.state.theme.as_deref()) {
+                    if !app.state.read_only
+                        && let Err(e) =
+                            crate::config_edit::set_theme(dir, app.state.theme.as_deref())
+                    {
                         app.display_error(e.to_string());
                     }
                 }
@@ -596,6 +599,9 @@ fn set_feature_key(app: &mut App, feature: &str, key: char) {
         app.state.feature_keys.insert(feature.to_owned(), key);
     }
 
+    if app.state.read_only {
+        return;
+    }
     let dir = app.state.repo.workdir().unwrap_or(app.state.repo.path());
     if let Err(e) = crate::config_edit::set_feature_keys(dir, &app.state.feature_keys) {
         app.display_error(e.to_string());

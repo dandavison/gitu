@@ -5,7 +5,11 @@ use crate::menu::arg::Arg;
 use crate::style::Style;
 use crate::ui::layout::opts;
 use crate::ui::{self, UiTree, layout_line, layout_span, repeat_chars};
-use crate::{app::State, config::Config, ops::Op};
+use crate::{
+    app::State,
+    config::{Config, ReadOnly},
+    ops::Op,
+};
 use itertools::Itertools;
 use unicode_width::UnicodeWidthStr;
 
@@ -36,6 +40,7 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
     let (target_binds, non_target_binds): (Vec<_>, Vec<_>) = config
         .bindings
         .list(&pending.menu)
+        .filter(|keybind| !(state.read_only && keybind.op.writes()))
         .partition(|keybind| keybind.op.clone().implementation().is_target_op());
     let target_binds: Vec<_> = target_binds
         .into_iter()
@@ -75,6 +80,16 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
     };
 
     let separator_style = Style::from(&style.separator);
+
+    // Says why the ops that write are missing from the menus that list them.
+    let read_only_notice = (state.read_only && matches!(pending.menu, Menu::Root | Menu::Help))
+        .then(|| {
+            let first = match config.general.read_only {
+                ReadOnly::Auto => "Read-only (.jj found):",
+                ReadOnly::On | ReadOnly::Off => "Read-only:",
+            };
+            format!("{first} commands that change the repository are hidden")
+        });
 
     layout.col(opts(), |layout| {
         ui::repeat_chars(layout, width, ui::DASHES, separator_style);
@@ -145,7 +160,8 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
 
             // Column 3: Target commands and arguments
             layout.col(opts(), |layout| {
-                if !target_binds.is_empty() {
+                let target_binds_empty = target_binds.is_empty();
+                if !target_binds_empty {
                     layout_line(
                         layout,
                         item.data.kind().into(),
@@ -167,6 +183,13 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
                             })
                             .collect(),
                     );
+                }
+
+                if let Some(notice) = read_only_notice {
+                    if !target_binds_empty {
+                        layout_line(layout, " ".into(), Style::new());
+                    }
+                    layout_line(layout, notice.into(), Style::from(&style.error_msg));
                 }
 
                 if !arg_binds.is_empty() {
