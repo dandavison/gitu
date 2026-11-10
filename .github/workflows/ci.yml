@@ -33,7 +33,8 @@ jobs:
 
     - run: git --version
     - run: make test-depend
-    - run: make test
+    # Under a virtual X display, so that there is a clipboard to copy to.
+    - run: xvfb-run make test
 
   test:
     strategy:
