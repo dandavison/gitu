@@ -128,8 +128,9 @@ fn cursor_row(ctx: &TestContext) -> String {
         .to_string()
 }
 
-/// Commits drawn on more rows than the screen keeps below the cursor.
-const TALL_LOG_ARGS: &[&str] = &["--format=%n%n\u{25b8} %h%n%n    %s"];
+/// Commits drawn on more rows than the screen keeps below the cursor, each
+/// ending in a row that says it is the last.
+const TALL_LOG_ARGS: &[&str] = &["--format=%n%n\u{25b8} %h%n%n    %s%n%n    last row of %s"];
 
 /// A commit dragged down stops short of the bottom of the screen while there
 /// are commits below it, so that the one it would pass next is in view whole.
@@ -152,7 +153,7 @@ fn rebase_todo_move_down_keeps_the_next_entry_in_view() {
             .collect();
         assert!(
             below.iter().any(|row| row.contains("▸"))
-                && below.iter().any(|row| row.contains("    add file-")),
+                && below.iter().any(|row| row.contains("last row of")),
             "{buffer}"
         );
     }
@@ -180,7 +181,7 @@ fn rebase_todo_mark_keeps_the_next_entry_in_view() {
                 .collect();
             assert!(
                 below.iter().any(|row| row.contains("▸"))
-                    && below.iter().any(|row| row.contains("    add file-")),
+                    && below.iter().any(|row| row.contains("last row of")),
                 "{buffer}"
             );
         }
@@ -207,7 +208,7 @@ fn rebase_todo_move_up_keeps_the_previous_entry_in_view() {
             .collect();
         assert!(
             above.iter().any(|row| row.contains("▸"))
-                && above.iter().any(|row| row.contains("    add file-")),
+                && above.iter().any(|row| row.contains("last row of")),
             "{buffer}"
         );
     }
