@@ -401,14 +401,20 @@ impl Screen {
     /// The last item of the selection: the cursor, or the end of the subtree
     /// it heads.
     fn last_selected(&self) -> usize {
-        let depth = self.items[self.cursor].depth;
+        self.subtree_end(self.cursor)
+    }
 
-        let last = self.items[self.cursor + 1..]
+    /// The last item shown of the subtree `head` heads: `head` itself if it
+    /// heads none.
+    fn subtree_end(&self, head: usize) -> usize {
+        let depth = self.items[head].depth;
+
+        let last = self.items[head + 1..]
             .iter()
             .position(|item| item.depth <= depth)
-            .map_or(self.items.len() - 1, |offset| self.cursor + offset);
+            .map_or(self.items.len() - 1, |offset| head + offset);
 
-        // A collapsed section within the selection stands in for its contents.
+        // A collapsed section within the subtree stands in for its contents.
         self.hidden_by(last, depth).unwrap_or(last)
     }
 
@@ -1420,8 +1426,8 @@ impl Screen {
 
     /// As [`Self::select_matching`], but the rows stay where they are on screen:
     /// the view scrolls only as far as it takes to bring the cursor, and the
-    /// selectable items either side of it, into it whole, where the screen has
-    /// room. An item being moved through a list then shows what it would pass
+    /// selectable items either side of it, into it whole, as moving to each
+    /// would, where the screen has room. An item being moved through a list then shows what it would pass
     /// next.
     pub(crate) fn select_matching_with_neighbours_in_view<F: Fn(&ItemData) -> bool>(
         &mut self,
@@ -1434,7 +1440,7 @@ impl Screen {
         self.cursor = item_i;
         let next = self.find_next(NavMode::Normal);
         let previous = self.find_previous(NavMode::Normal);
-        self.scroll_to_end_of(next);
+        self.scroll_to_end_of(self.subtree_end(next));
         self.scroll_to_start_of(previous);
         // The cursor comes first where there is no room for all three.
         self.scroll_fit_end();
