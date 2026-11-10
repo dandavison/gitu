@@ -134,6 +134,7 @@ impl OpTrait for ToggleArg {
                         hide_menu: false,
                         prefill: false,
                         history: None,
+                        bare: false,
                     },
                 )?;
 
@@ -197,6 +198,7 @@ impl OpTrait for DiffContext {
                     hide_menu: false,
                     prefill: true,
                     history: None,
+                    bare: false,
                 },
             )?;
 

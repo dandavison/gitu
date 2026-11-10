@@ -194,7 +194,12 @@ fn layout_prompt<'a>(layout: &mut UiTree<'a>, state: &'a State, width: usize) {
     repeat_chars(layout, width, DASHES, separator_style);
     layout.row(opts(), |layout| {
         // A prompt that says nothing is drawn as nothing but the line typed on.
-        if !prompt_data.prompt_text.is_empty() {
+        if prompt_data.bare {
+            layout_span(
+                layout,
+                (prompt_data.prompt_text.as_ref().into(), prompt_style),
+            );
+        } else if !prompt_data.prompt_text.is_empty() {
             layout_span(
                 layout,
                 (

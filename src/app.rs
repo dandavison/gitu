@@ -734,6 +734,7 @@ impl App {
         // to — it is on the line, so naming it again says nothing either.
         let prompt_text = match (params.prompt, &default) {
             ("", _) => Cow::Borrowed(""),
+            (prompt, _) if params.bare => Cow::Borrowed(prompt),
             (prompt, Some(default)) if !params.prefill => {
                 format!("{prompt} (default {default}):").into()
             }
@@ -744,7 +745,10 @@ impl App {
             self.hide_menu();
         }
 
-        self.state.prompt.set(prompt::PromptData { prompt_text });
+        self.state.prompt.set(prompt::PromptData {
+            prompt_text,
+            bare: params.bare,
+        });
 
         if params.prefill
             && let Some(default) = default
@@ -787,6 +791,7 @@ impl App {
         self.hide_menu();
         self.state.prompt.set(prompt::PromptData {
             prompt_text: prompt.into(),
+            bare: false,
         });
 
         let result = self.handle_confirm(term);
@@ -1194,6 +1199,9 @@ pub(crate) struct PromptParams {
     /// keeping it as what an empty answer means.
     pub prefill: bool,
     pub history: Option<prompt::HistoryKind>,
+    /// Draw `prompt` alone in front of the line typed on, as less and vim draw
+    /// `/` for a search, rather than as a question.
+    pub bare: bool,
 }
 
 impl Default for PromptParams {
@@ -1204,6 +1212,7 @@ impl Default for PromptParams {
             hide_menu: true,
             prefill: false,
             history: None,
+            bare: false,
         }
     }
 }

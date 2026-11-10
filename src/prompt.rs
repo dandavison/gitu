@@ -10,6 +10,9 @@ use std::path::{Path, PathBuf};
 
 pub(crate) struct PromptData {
     pub(crate) prompt_text: Cow<'static, str>,
+    /// Drawn alone in front of the line typed on, as less and vim draw `/` for
+    /// a search, rather than as a question.
+    pub(crate) bare: bool,
 }
 
 #[derive(Clone, Copy)]

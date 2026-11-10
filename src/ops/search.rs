@@ -58,15 +58,17 @@ impl OpTrait for SearchPrevious {
 }
 
 fn prompt_search(app: &mut App, term: &mut Term, direction: SearchDirection) -> Res<()> {
+    // As in less and vim.
     let prompt = match direction {
-        SearchDirection::Forward => "Search",
-        SearchDirection::Backward => "Search backward",
+        SearchDirection::Forward => "/",
+        SearchDirection::Backward => "?",
     };
 
     let query = match app.prompt(
         term,
         &PromptParams {
             prompt,
+            bare: true,
             ..Default::default()
         },
     ) {
