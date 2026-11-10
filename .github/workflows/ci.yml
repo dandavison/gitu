@@ -59,12 +59,5 @@ jobs:
             target
         key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-    # The tests stand in for delta with POSIX tools (awk, sh, sed), which Git for
-    # Windows ships but does not put on PATH.
-    - if: runner.os == 'Windows'
-      shell: bash
-      run: echo 'C:\Program Files\Git\usr\bin' >> "$GITHUB_PATH"
     - run: git --version
-    - if: runner.os == 'Windows'
-      run: where.exe awk sh sed
     - run: cargo test
