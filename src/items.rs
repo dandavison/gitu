@@ -1451,7 +1451,7 @@ mod tests {
     fn a_render_carrying_no_content_records_has_no_lines() {
         let diff = diff_from(DIFF);
         let mut config = crate::config::init_test_config().unwrap();
-        config.general.diff_renderer.command = ["sh", "-c", r"printf '\033]1717;1\033\\\n'"]
+        config.general.diff_renderer.command = ["sh", "-c", r"printf '\033]1717;1\033\134\n'"]
             .map(String::from)
             .to_vec();
 

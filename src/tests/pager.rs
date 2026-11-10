@@ -864,12 +864,14 @@ fn rendered_context_lines_are_visited_when_configured() {
 /// Only a hunk's lines are content: a commit message's are indented as context
 /// lines are.
 pub(super) fn annotating_renderer() -> Vec<String> {
+    // The program has no `\\`: on Windows, awk (MSYS2's) reads `\\` in its
+    // command-line argument as a single backslash, so a backslash is `bs`.
     [
         "awk",
         r#"
-        BEGIN{osc="\033]1717;1";st="\033\\";handshake=osc st}
+        BEGIN{bs=sprintf("%c",92);osc="\033]1717;1";st="\033" bs;handshake=osc st}
         {raw=$0;gsub(/\033\[[0-9;]*m/,"");printf "%s",handshake;handshake=""}
-        !/^[-+ \\]/{hunk=0}
+        !/^[-+ ]/&&substr($0,1,1)!=bs{hunk=0}
         header&&/^(@@|diff |(commit|▸) [0-9a-f]+)/{file_header()}
         /^(commit|▸) [0-9a-f]+/{printf "%s;C;;;%s%s%s\n",osc,$2,st,raw;next}
         /^diff --git /{file=$0;sub(/^diff --git a\/.* b\//,"",file);label=file;suffix="";header=1;next}
