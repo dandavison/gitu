@@ -231,6 +231,10 @@ fn log_show_acts_on_the_selected_commit() {
 
 #[test]
 fn log_copy_hash_of_the_selected_commit() {
+    // Headless Linux, as in CI, has no clipboard to copy to.
+    if arboard::Clipboard::new().is_err() {
+        return;
+    }
     snapshot!(setup(setup_clone!()), "lljy");
 }
 

@@ -261,6 +261,7 @@ mod tests {
     }
 
     /// A config kept in a dotfiles repo is often a link into it.
+    #[cfg(unix)]
     #[test]
     fn a_linked_config_file_is_written_through_the_link() {
         let repo = Repo::new("[include]\n\tpath = tui.gitconfig\n");
