@@ -28,6 +28,7 @@ mod pager;
 mod pull;
 mod push;
 mod quit;
+mod read_only;
 mod rebase;
 mod remote;
 mod reset;
