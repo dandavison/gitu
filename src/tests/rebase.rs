@@ -100,9 +100,12 @@ fn rebase_todo_mark_stays_on_the_last_entry() {
     );
 }
 
+/// Marking rebuilds the list without moving it on screen. The commits are one
+/// row each, so the one after the next is already in view and nothing need
+/// scroll to show it.
 #[test]
 fn rebase_todo_mark_leaves_the_view_where_it_is() {
-    let mut ctx = setup_clone!();
+    let mut ctx = with_log_args(setup_clone!(), &["--format=▸ %h %s"]);
     for i in 0..30 {
         commit(&ctx.dir, &format!("file-{i}"), "");
     }

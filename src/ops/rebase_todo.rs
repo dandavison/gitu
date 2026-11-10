@@ -48,9 +48,11 @@ impl OpTrait for SetAction {
             todo.borrow_mut().set_action(index, action);
             app.screen_mut().refresh()?;
             // Marking works down the list, so the cursor moves on to the next
-            // entry, staying put on the last one.
-            if !select_entry(app, index + 1) {
-                select_entry(app, index);
+            // entry, staying put on the last one. The entry after it stays in
+            // view, to show whether there is another to mark.
+            let screen = app.screen_mut();
+            if !screen.select_matching_with_neighbours_in_view(is_entry(index + 1)) {
+                screen.select_matching_with_neighbours_in_view(is_entry(index));
             }
             Ok(())
         }))
@@ -97,12 +99,6 @@ impl OpTrait for Start {
     fn display(&self, _state: &State) -> String {
         "Start rebase".into()
     }
-}
-
-/// Put the cursor on an entry after the list has been rebuilt, leaving the rows
-/// where they are on screen.
-fn select_entry(app: &mut App, index: usize) -> bool {
-    app.screen_mut().select_matching_in_view(is_entry(index))
 }
 
 fn is_entry(index: usize) -> impl Fn(&ItemData) -> bool {
