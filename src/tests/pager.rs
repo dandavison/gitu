@@ -511,12 +511,12 @@ fn command_history_is_scoped_to_the_worktree() {
     ctx.update(&mut app, keys(": HEAD<enter>"));
     drop(app);
 
-    let other = ctx.dir.parent().unwrap().join("other-worktree");
-    let other_arg = other.to_str().unwrap();
+    // Relative, since git cannot create the directories of a Windows `\\?\` path.
     run(
         &ctx.dir,
-        &["git", "worktree", "add", "-b", "other", other_arg],
+        &["git", "worktree", "add", "-b", "other", "../other-worktree"],
     );
+    let other = ctx.dir.parent().unwrap().join("other-worktree");
     let mut app = ctx.init_app_as_pager_of_at(other, &["git", "diff"]);
     ctx.update(&mut app, keys(":<up>"));
 

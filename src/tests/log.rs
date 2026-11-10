@@ -253,7 +253,9 @@ fn log_divider_is_not_the_cursor_line() {
     let mut ctx = with_log_args(setup(setup_clone!()), &["--format=\u{25b8} %h %s"]);
     ctx.config().general.diff_renderer.command = [
         "awk",
-        r#"/^▸ /{printf "\033]1717;1;C;;;%s\033\\\n─────\n", $2} {print}"#,
+        // The string terminator's backslash is %c of 92: on Windows, awk reads
+        // `\\` in its argument as a single backslash.
+        r#"/^▸ /{printf "\033]1717;1;C;;;%s\033%c\n─────\n", $2, 92} {print}"#,
     ]
     .map(String::from)
     .to_vec();
