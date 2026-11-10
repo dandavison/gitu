@@ -31,7 +31,7 @@ jobs:
             target
         key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-    - run: git --version && git config --show-origin --list
+    - run: git --version
     - run: make test-depend
     - run: make test
 
@@ -58,5 +58,5 @@ jobs:
             target
         key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-    - run: git --version && git config --show-origin --list
+    - run: git --version
     - run: cargo test

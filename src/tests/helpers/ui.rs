@@ -293,6 +293,13 @@ impl TestContext {
         // The fixtures' commit dates are fixed, so their age grows as time
         // passes. Only its width, which the layout depends on, is kept.
         redact_all(&mut debug_output, r"(\d+[mhdwMy]) \|");
+        // Before 2.56, git blame reserved a column for the boundary mark `^` even
+        // when no line shows one, so its hashes are a character longer. Rows are
+        // kept as git 2.56 writes them, whichever git drew them.
+        debug_output = Regex::new(r"(?m)^(.*?\b[0-9a-f]{7})[0-9a-f]( \(Author Name .*?)\|$")
+            .unwrap()
+            .replace_all(&debug_output, "$1$2 |")
+            .into_owned();
 
         debug_output
     }
