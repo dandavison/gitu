@@ -19,7 +19,10 @@ impl OpTrait for MoveEntry {
         Some(Rc::new(move |app: &mut App, _term: &mut Term| {
             let moved_to = todo.borrow_mut().move_entry(index, offset);
             app.screen_mut().refresh()?;
-            select_entry(app, moved_to);
+            // With the entries either side in view, it shows whether to move
+            // it further.
+            app.screen_mut()
+                .select_matching_with_neighbours_in_view(is_entry(moved_to));
             Ok(())
         }))
     }
@@ -99,7 +102,9 @@ impl OpTrait for Start {
 /// Put the cursor on an entry after the list has been rebuilt, leaving the rows
 /// where they are on screen.
 fn select_entry(app: &mut App, index: usize) -> bool {
-    app.screen_mut().select_matching_in_view(
-        |data| matches!(data, ItemData::RebaseTodo { index: at, .. } if *at == index),
-    )
+    app.screen_mut().select_matching_in_view(is_entry(index))
+}
+
+fn is_entry(index: usize) -> impl Fn(&ItemData) -> bool {
+    move |data| matches!(data, ItemData::RebaseTodo { index: at, .. } if *at == index)
 }

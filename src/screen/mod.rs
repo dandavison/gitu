@@ -351,12 +351,18 @@ impl Screen {
             return;
         }
 
-        let at_cursor = Scroll {
-            item_anchor: self.cursor,
+        self.scroll_to_start_of(self.cursor);
+    }
+
+    /// Scrolls up until item `first` starts on screen, keeping as many lines
+    /// above it as it is deep.
+    fn scroll_to_start_of(&mut self, first: usize) {
+        let at_first = Scroll {
+            item_anchor: first,
             offset: 0,
         };
 
-        let top = self.retreated(at_cursor, self.items[self.cursor].depth);
+        let top = self.retreated(at_first, self.items[first].depth);
         self.scroll = self.scroll.min(top);
     }
 
@@ -1423,6 +1429,28 @@ impl Screen {
         };
 
         self.cursor = item_i;
+        self.scroll_fit_end();
+        self.scroll_fit_start();
+        true
+    }
+
+    /// As [`Self::select_matching_in_view`], with the selectable items either
+    /// side of it in view whole too, where the screen has room for them. An
+    /// item being moved through a list then shows what it would pass next.
+    pub(crate) fn select_matching_with_neighbours_in_view<F: Fn(&ItemData) -> bool>(
+        &mut self,
+        predicate: F,
+    ) -> bool {
+        let Some(item_i) = self.find_matching(predicate) else {
+            return false;
+        };
+
+        self.cursor = item_i;
+        let next = self.find_next(NavMode::Normal);
+        let previous = self.find_previous(NavMode::Normal);
+        self.scroll_to_end_of(next);
+        self.scroll_to_start_of(previous);
+        // The cursor comes first where there is no room for all three.
         self.scroll_fit_end();
         self.scroll_fit_start();
         true
