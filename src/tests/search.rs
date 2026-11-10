@@ -7,6 +7,15 @@ fn setup(ctx: TestContext) -> TestContext {
     ctx
 }
 
+/// As in less and vim, the search prompt is `/` and the line typed on.
+#[test]
+fn the_search_prompt_is_a_slash() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("/"));
+    assert_eq!(ctx.prompt_line(), "/|");
+}
+
 #[test]
 fn search_prompt() {
     snapshot!(setup(setup_clone!()), "/");
