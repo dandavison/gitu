@@ -125,6 +125,62 @@ fn cursor_row(ctx: &TestContext) -> String {
         .to_string()
 }
 
+/// Commits drawn on more rows than the screen keeps below the cursor.
+const TALL_LOG_ARGS: &[&str] = &["--format=%n%n\u{25b8} %h%n%n    %s"];
+
+/// A commit dragged down stops short of the bottom of the screen while there
+/// are commits below it, so that the one it would pass next is in view whole.
+#[test]
+fn rebase_todo_move_down_keeps_the_next_entry_in_view() {
+    let mut ctx = with_log_args(setup_clone!(), TALL_LOG_ARGS);
+    for i in 0..30 {
+        commit(&ctx.dir, &format!("file-{i}"), "");
+    }
+    let todo = write_todo(&ctx, "HEAD~30..HEAD");
+    let mut app = ctx.init_app_with_args(ctx.dir.clone(), sequence_editor_args(&todo));
+
+    for _ in 0..20 {
+        ctx.update(&mut app, keys("<alt+j>"));
+        let buffer = ctx.redact_buffer();
+        let below: Vec<&str> = buffer
+            .lines()
+            .skip_while(|row| !row.starts_with('▌'))
+            .skip_while(|row| row.starts_with('▌'))
+            .collect();
+        assert!(
+            below.iter().any(|row| row.contains("▸"))
+                && below.iter().any(|row| row.contains("    add file-")),
+            "{buffer}"
+        );
+    }
+}
+
+/// ... and dragged up, it stops short of the top while there are commits above.
+#[test]
+fn rebase_todo_move_up_keeps_the_previous_entry_in_view() {
+    let mut ctx = with_log_args(setup_clone!(), TALL_LOG_ARGS);
+    for i in 0..30 {
+        commit(&ctx.dir, &format!("file-{i}"), "");
+    }
+    let todo = write_todo(&ctx, "HEAD~30..HEAD");
+    let mut app = ctx.init_app_with_args(ctx.dir.clone(), sequence_editor_args(&todo));
+    ctx.update(&mut app, keys("G"));
+
+    for _ in 0..20 {
+        ctx.update(&mut app, keys("<alt+k>"));
+        let buffer = ctx.redact_buffer();
+        let above: Vec<&str> = buffer
+            .lines()
+            .take_while(|row| !row.starts_with('▌'))
+            .collect();
+        assert!(
+            above.iter().any(|row| row.contains("▸"))
+                && above.iter().any(|row| row.contains("    add file-")),
+            "{buffer}"
+        );
+    }
+}
+
 fn top_row(ctx: &TestContext) -> String {
     ctx.redact_buffer().lines().next().unwrap().to_string()
 }
