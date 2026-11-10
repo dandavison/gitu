@@ -40,6 +40,17 @@ pub(crate) enum NavMode {
     IncludeSubLines,
 }
 
+/// See [`Screen::returning_to`].
+struct ReturningTo {
+    /// The item's lineage (see [`Screen::lineage`]).
+    lineage: Vec<ItemId>,
+    /// The row of the screen it was on.
+    row: Option<usize>,
+    /// Where the rebuild left the cursor meanwhile. A cursor moved from there
+    /// is the user's, and is not taken back.
+    cursor: usize,
+}
+
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 struct Scroll {
     item_anchor: usize,
@@ -240,6 +251,9 @@ pub(crate) struct Screen {
     refresh_items: RefreshStreamed,
     /// How to have all of the items, while some are still being drawn.
     later: Option<Later>,
+    /// The item the cursor was on before a rebuild that has not drawn it yet,
+    /// to be selected once it is drawn.
+    returning_to: Option<ReturningTo>,
     items: Vec<Item>,
     /// Memoized `item_height`, indexed like `items`. Dropped by `invalidate`.
     item_heights: RefCell<Vec<Option<u16>>>,
@@ -293,6 +307,7 @@ impl Screen {
             git_command: None,
             refresh_items,
             later: None,
+            returning_to: None,
             items: vec![],
             item_heights: RefCell::new(vec![]),
             collapsed,
@@ -683,17 +698,67 @@ impl Screen {
         // The rebuilt items are a different diff; the lines that were selected
         // are no longer the same lines.
         self.anchor = None;
-        let was_on = (!self.items.is_empty()).then(|| self.lineage(self.cursor));
+        // A rebuild before the last one drew the item is still returning to it.
+        let was_on = self
+            .returning_to
+            .take()
+            .map(|to| (to.lineage, to.row))
+            .or_else(|| {
+                (!self.items.is_empty()).then(|| (self.lineage(self.cursor), self.cursor_row()))
+            });
         let Items { now, later } = (self.refresh_items)(self.params())?;
         self.take_items(now);
         self.later = later;
 
         self.invalidate();
-        if let Some(item_i) = was_on.and_then(|was_on| self.find_same_item(&was_on)) {
+        let found = was_on
+            .as_ref()
+            .and_then(|(lineage, _)| self.find_same_item(lineage));
+        if let Some(item_i) = found {
             self.cursor = item_i;
         }
         self.update_cursor();
+        if found.is_none()
+            && self.is_drawing()
+            && let Some((lineage, row)) = was_on
+        {
+            self.returning_to = Some(ReturningTo {
+                lineage,
+                row,
+                cursor: self.cursor,
+            });
+        }
         Ok(())
+    }
+
+    /// For a screen in view again: if a rebuild is returning to an item it has
+    /// not drawn yet, wait for it to be drawn and select it, so that the
+    /// screen comes back where it was left.
+    pub(crate) fn come_back(&mut self) -> Res<()> {
+        while self.returning_to.is_some() && self.is_drawing() {
+            if !self.finish()? {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+        Ok(())
+    }
+
+    /// Selects the item a rebuild is returning to, if it has been drawn now and
+    /// the cursor has not been moved since, on the row of the screen it was on.
+    fn return_to_item(&mut self) {
+        let Some(to) = self.returning_to.take() else {
+            return;
+        };
+        if self.cursor != to.cursor {
+            return;
+        }
+        match self.find_same_item(&to.lineage) {
+            Some(item_i) => {
+                self.select_on_row(Some(item_i), to.row);
+            }
+            None if self.is_drawing() => self.returning_to = Some(to),
+            None => {}
+        }
     }
 
     /// The ids of `item_i` and of the items it is nested under, innermost
@@ -766,6 +831,7 @@ impl Screen {
         if let Some(position) = was_on {
             self.select_at_row(position, was_at);
         }
+        self.return_to_item();
         Ok(true)
     }
 

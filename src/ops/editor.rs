@@ -33,6 +33,7 @@ impl OpTrait for Quit {
                     app.state.quit = true;
                 } else {
                     app.state.screens.pop();
+                    app.screen_mut().come_back()?;
                 }
             }
 
