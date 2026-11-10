@@ -155,6 +155,35 @@ fn rebase_todo_move_down_keeps_the_next_entry_in_view() {
     }
 }
 
+/// Marking moves on to the next commit, keeping the one after it in view
+/// whole, so that it shows whether the last one to mark has been reached.
+#[test]
+fn rebase_todo_mark_keeps_the_next_entry_in_view() {
+    for mark in ["s", "f"] {
+        let mut ctx = with_log_args(setup_clone!(), TALL_LOG_ARGS);
+        for i in 0..30 {
+            commit(&ctx.dir, &format!("file-{i}"), "");
+        }
+        let todo = write_todo(&ctx, "HEAD~30..HEAD");
+        let mut app = ctx.init_app_with_args(ctx.dir.clone(), sequence_editor_args(&todo));
+
+        for _ in 0..20 {
+            ctx.update(&mut app, keys(mark));
+            let buffer = ctx.redact_buffer();
+            let below: Vec<&str> = buffer
+                .lines()
+                .skip_while(|row| !row.starts_with('▌'))
+                .skip_while(|row| row.starts_with('▌'))
+                .collect();
+            assert!(
+                below.iter().any(|row| row.contains("▸"))
+                    && below.iter().any(|row| row.contains("    add file-")),
+                "{buffer}"
+            );
+        }
+    }
+}
+
 /// ... and dragged up, it stops short of the top while there are commits above.
 #[test]
 fn rebase_todo_move_up_keeps_the_previous_entry_in_view() {
