@@ -59,5 +59,11 @@ jobs:
             target
         key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+    # Git's usr\bin first, so that `sh` is the shell itself rather than Git's
+    # bin\sh.exe, a launcher that runs it as another process: the tests that
+    # stop a command they started need to stop the shell.
+    - if: runner.os == 'Windows'
+      shell: bash
+      run: echo 'C:\Program Files\Git\usr\bin' >> "$GITHUB_PATH"
     - run: git --version
     - run: cargo test
