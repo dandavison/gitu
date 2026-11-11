@@ -226,6 +226,63 @@ fn a_feature_key_turns_off_a_feature_the_users_config_turns_on() {
     assert!(app.state.features.is_empty());
 }
 
+/// Every feature key toggles its feature the same way, whatever the name: a builtin switch
+/// feature, a builtin style feature, the user's own feature, or a builtin name the user also has
+/// a section for (delta treats that section as part of the builtin). The first press enables the
+/// feature (`+name`), or disables it (`+-name`) if the user's config enables it; the second press
+/// returns to the user's config. The test reads what delta is given in `DELTA_FEATURES` each time
+/// it runs.
+#[test]
+fn every_feature_key_toggles_its_feature_the_same_way() {
+    let mut failures = vec![];
+    for name in ["side-by-side", "raw", "mine"] {
+        for enabled_by_config in [false, true] {
+            let mut ctx = TestContext::setup_clone(&format!(
+                "every_feature_key_toggles_{name}_{enabled_by_config}"
+            ));
+            let log = ctx.dir.join(".git").join("delta-features");
+            ctx.config().general.diff_renderer.command = super::pager::annotating_renderer()
+                .into_iter()
+                .map(|arg| {
+                    arg.replacen(
+                        "BEGIN{",
+                        &format!(
+                            r#"BEGIN{{print ENVIRON["DELTA_FEATURES"] >> "{}";"#,
+                            log.display()
+                        ),
+                        1,
+                    )
+                })
+                .collect();
+            ctx.config().general.diff_renderer.features = vec![name.into()];
+            if enabled_by_config {
+                ctx.config().general.diff_renderer.features_in_force = vec![name.into()];
+            }
+            with_feature_key(&mut ctx, name, 'x');
+            commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+            fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
+
+            let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+            ctx.update(&mut app, keys("x"));
+            ctx.update(&mut app, keys("x"));
+
+            let toggled = if enabled_by_config {
+                format!("+-{name}")
+            } else {
+                format!("+{name}")
+            };
+            let expected = format!("\n{toggled}\n\n");
+            let actual = fs::read_to_string(&log).unwrap_or_default();
+            if actual != expected {
+                failures.push(format!(
+                    "{name}, enabled by config: {enabled_by_config}: delta was given {actual:?}, not {expected:?}"
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+}
+
 /// delta calls the +/- markers `keep-plus-minus-markers`.
 #[test]
 fn plus_turns_off_the_plus_minus_markers_the_users_config_turns_on() {
