@@ -11,7 +11,7 @@ use std::process::Stdio;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use arboard::Clipboard;
 use crossterm::event;
@@ -82,6 +82,9 @@ pub(crate) struct State {
     /// in-session is saved ([`crate::config::ReadOnly`]).
     pub read_only: bool,
     needs_redraw: bool,
+    /// When to render every screen again at the terminal's new width: once no resize has come
+    /// for [`RESIZE_RENDER_DELAY`], so that dragging a window's edge runs the renderer once.
+    rerender_after_resize: Option<Instant>,
     file_watcher: Option<FileWatcher>,
     inhibit_close_menu: bool,
 }
@@ -181,6 +184,7 @@ impl App {
                 read_only,
                 file_watcher: None,
                 needs_redraw: true,
+                rerender_after_resize: None,
                 inhibit_close_menu: false,
             },
         };
@@ -240,6 +244,14 @@ impl App {
     pub fn update(&mut self, term: &mut Term, event: Option<Event>) -> Res<()> {
         if let Some(e) = event {
             self.handle_event(term, e)?;
+        }
+
+        if let Some(at) = self.state.rerender_after_resize
+            && Instant::now() >= at
+            && !term.has_pending_event()?
+        {
+            self.state.rerender_after_resize = None;
+            self.rerender_screens()?;
         }
 
         if let Some(file_watcher) = &mut self.state.file_watcher
@@ -317,8 +329,19 @@ impl App {
     pub fn handle_event(&mut self, term: &mut Term, event: Event) -> Res<()> {
         match event {
             Event::Resize(w, h) => {
+                // The renderer lays rows out at the width, so a new width renders them again; until
+                // then the rows it drew are fitted to the new size.
+                let width_changed = self.state.screens.iter().any(|screen| screen.size.0 != w);
                 for screen in self.state.screens.iter_mut() {
                     screen.resize(w, h)?;
+                }
+                if width_changed {
+                    let delay = if self.state.enable_async_cmds {
+                        RESIZE_RENDER_DELAY
+                    } else {
+                        Duration::ZERO
+                    };
+                    self.state.rerender_after_resize = Some(Instant::now() + delay);
                 }
 
                 self.stage_redraw();
@@ -1148,6 +1171,10 @@ fn rebase_todo_screen(
 
 /// How far back [`App::pick_commit`] lists commits.
 const COMMIT_PICK_LIMIT: usize = 256;
+
+/// How long after the last resize the screens are rendered again at the new width. Tests, which
+/// have no async commands, render as soon as no event is waiting.
+const RESIZE_RENDER_DELAY: Duration = Duration::from_millis(150);
 
 pub(crate) fn root_menu(config: &Config) -> Option<Menu> {
     if config.general.always_show_help.enabled {

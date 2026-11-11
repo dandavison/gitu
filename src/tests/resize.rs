@@ -76,3 +76,15 @@ fn many_resizes_in_a_row_render_once_at_the_last_width() {
     let screen = ctx.redact_buffer();
     assert!(screen.contains("firstfile @118"), "{screen}");
 }
+
+/// delta lays rows out by the width only, so a change of the height alone does not run it again.
+#[test]
+fn a_resize_of_the_height_alone_does_not_render_again() {
+    let ctx = setup_clone!();
+    let log = ctx.dir.join(".git").join("render-widths");
+    let mut ctx = with_a_change(ctx, Some(&log));
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+
+    ctx.resize(&mut app, &[(80, 30)]);
+    assert_eq!(fs::read_to_string(&log).unwrap(), "78\n");
+}

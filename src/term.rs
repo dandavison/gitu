@@ -325,6 +325,16 @@ impl TermBackend {
         }
     }
 
+    /// Whether an event is waiting to be read, without waiting for one.
+    pub fn has_pending_event(&self) -> Res<bool> {
+        match self {
+            TermBackend::Crossterm(_) => {
+                crossterm::event::poll(Duration::ZERO).map_err(Error::Term)
+            }
+            TermBackend::Test { events, .. } => Ok(!events.is_empty()),
+        }
+    }
+
     pub fn hung_up(&self) -> bool {
         match self {
             #[cfg(unix)]
