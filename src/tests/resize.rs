@@ -88,3 +88,15 @@ fn a_resize_of_the_height_alone_does_not_render_again() {
     ctx.resize(&mut app, &[(80, 30)]);
     assert_eq!(fs::read_to_string(&log).unwrap(), "78\n");
 }
+
+/// A window dragged fast reports sizes it has already passed: the terminal is 120 columns wide by
+/// the time gitu reads its one resize, for 100. delta renders at the width the terminal has.
+#[test]
+fn a_resize_renders_at_the_terminals_width_when_its_events_lag_behind() {
+    let mut ctx = with_a_change(setup_clone!(), None);
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+
+    ctx.resize_with_events(&mut app, (120, 20), &[(100, 20)]);
+    let screen = ctx.redact_buffer();
+    assert!(screen.contains("firstfile @118"), "{screen}");
+}

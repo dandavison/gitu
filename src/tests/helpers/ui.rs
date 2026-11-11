@@ -221,13 +221,18 @@ impl TestContext {
     /// Resize the terminal to each of `sizes` in turn, as dragging a window's edge does, and
     /// tell the app of each.
     pub fn resize(&mut self, app: &mut App, sizes: &[(u16, u16)]) {
-        let (width, height) = *sizes.last().unwrap();
+        self.resize_with_events(app, *sizes.last().unwrap(), sizes);
+    }
+
+    /// Make the terminal `size`, and tell the app of `reported` sizes, which may lag behind it,
+    /// as when a window is dragged faster than its resizes are read.
+    pub fn resize_with_events(&mut self, app: &mut App, size: (u16, u16), reported: &[(u16, u16)]) {
         let TermBackend::Test { buffer, .. } = &mut self.term else {
             unreachable!();
         };
-        *buffer = TestBuffer::new(width, height);
-        self.size = (width, height);
-        let events = sizes.iter().map(|&(w, h)| Event::Resize(w, h)).collect();
+        *buffer = TestBuffer::new(size.0, size.1);
+        self.size = size;
+        let events = reported.iter().map(|&(w, h)| Event::Resize(w, h)).collect();
         self.update(app, events);
     }
 
