@@ -216,8 +216,8 @@ fn a_feature_key_toggles_its_feature() {
     assert!(app.state.features.is_empty());
 }
 
-/// A feature the user's own config turns on is on from the start, and its key
-/// turns it off, by removing it, and on again.
+/// A feature the user's own config enables is enabled from the start, and its key
+/// disables it, by removing it, and enables it again.
 #[test]
 fn a_feature_key_turns_off_a_feature_the_users_config_turns_on() {
     let mut ctx = setup_clone!();
@@ -592,8 +592,8 @@ fn renderer_features_offers_those_in_git_config_a_pattern_matches() {
 
 #[test]
 fn choosing_a_renderer_feature_marks_it() {
-    // Picking `side-by-side` turns it on; re-opening shows it marked, and
-    // picking it again turns it back off.
+    // Picking `side-by-side` enables it; re-opening shows it marked, and
+    // picking it again disables it.
     let ctx = setup_clone!();
     let mut ctx = ctx;
     let mut app = ctx.init_app();

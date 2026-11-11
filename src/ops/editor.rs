@@ -541,13 +541,13 @@ fn theme_of(data: &PickerData) -> Option<String> {
     Some(data.display().to_owned()).filter(|theme| !theme.is_empty())
 }
 
-/// Each feature, marked if it is on, beside its key if it has one.
+/// Each feature, marked if it is enabled, beside its key if it has one.
 fn feature_items(app: &App, offered: &[String]) -> Vec<PickerItem> {
     let enabled = enabled_by_config(app);
     offered
         .iter()
         .map(|feature| {
-            let mark = if is_on(app, feature, &enabled) {
+            let mark = if is_enabled(app, feature, &enabled) {
                 '●'
             } else {
                 ' '
@@ -563,19 +563,25 @@ fn feature_items(app: &App, offered: &[String]) -> Vec<PickerItem> {
 
 pub(crate) fn toggle_feature(app: &mut App, feature: &str) -> Res<()> {
     let enabled = enabled_by_config(app);
-    app.state.features = toggled(&app.state.features, feature, is_enabled(feature, &enabled));
+    app.state.features = toggled(
+        &app.state.features,
+        feature,
+        is_enabled_by_config(feature, &enabled),
+    );
     app.rerender_screens()
 }
 
-/// Whether `feature` is on: turned on in-session, or enabled by the user's own
-/// configuration (`enabled`) and not turned off in-session.
-fn is_on(app: &App, feature: &str, enabled: &[String]) -> bool {
+/// Whether `feature` is enabled: enabled in-session, or enabled by the user's own
+/// configuration (`enabled`) and not disabled in-session. Whether it is then in
+/// effect is delta's to decide, from the rest of the user's configuration, such
+/// as a minimum width.
+fn is_enabled(app: &App, feature: &str, enabled: &[String]) -> bool {
     let held = |entry: &str| app.state.features.iter().any(|held| held == entry);
-    held(feature) || (is_enabled(feature, enabled) && !held(&format!("-{feature}")))
+    held(feature) || (is_enabled_by_config(feature, enabled) && !held(&format!("-{feature}")))
 }
 
 /// Whether `feature` is among `enabled`, which are by delta's name.
-fn is_enabled(feature: &str, enabled: &[String]) -> bool {
+fn is_enabled_by_config(feature: &str, enabled: &[String]) -> bool {
     let deltas_name = crate::diff_renderer::deltas_name(feature);
     enabled.contains(&deltas_name)
 }
@@ -620,13 +626,13 @@ fn set_feature_key(app: &mut App, feature: &str, key: char) {
     }
 }
 
-/// `features` with `feature` toggled. Its entry turns it on, or, if the user's
-/// own configuration enables it (`in_force`), turns it off as `-feature`; the entry
-/// is removed if present, returning to the user's configuration, and appended
-/// if not. Order is otherwise kept, since delta resolves a conflict between two
-/// features in favour of the later one.
-fn toggled(features: &[String], feature: &str, in_force: bool) -> Rc<[String]> {
-    let entry = if in_force {
+/// `features` with `feature` toggled. Its entry enables it, or, if the user's own
+/// configuration enables it (`enabled_by_config`), disables it as `-feature`; the
+/// entry is removed if present, returning to the user's configuration, and
+/// appended if not. Order is otherwise kept, since delta resolves a conflict
+/// between two features in favour of the later one.
+fn toggled(features: &[String], feature: &str, enabled_by_config: bool) -> Rc<[String]> {
+    let entry = if enabled_by_config {
         format!("-{feature}")
     } else {
         feature.to_owned()
