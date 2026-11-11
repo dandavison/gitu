@@ -215,6 +215,9 @@ impl From<Vec<Item>> for Items {
 
 pub(crate) struct Screen {
     pub(crate) size: (u16, u16),
+    /// The width the rows were last rendered at. The renderer lays rows out at the width, so
+    /// when the terminal's width is no longer this one, the rows are rendered again.
+    pub(crate) rendered_width: u16,
     /// The keymap this screen imposes while it is on top, if it isn't the
     /// ordinary one (the interactive rebase todo has its own single-key actions).
     pub(crate) menu: Option<crate::menu::Menu>,
@@ -300,6 +303,7 @@ impl Screen {
             is_status: false,
             scroll: Scroll::default(),
             size: params.size,
+            rendered_width: params.size.0,
             config,
             features: params.features,
             context: params.context,
@@ -706,6 +710,7 @@ impl Screen {
             .or_else(|| {
                 (!self.items.is_empty()).then(|| (self.lineage(self.cursor), self.cursor_row()))
             });
+        self.rendered_width = self.size.0;
         let Items { now, later } = (self.refresh_items)(self.params())?;
         self.take_items(now);
         self.later = later;

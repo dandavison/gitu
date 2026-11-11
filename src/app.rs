@@ -82,9 +82,10 @@ pub(crate) struct State {
     /// in-session is saved ([`crate::config::ReadOnly`]).
     pub read_only: bool,
     needs_redraw: bool,
-    /// When to render every screen again at the terminal's new width: once no resize has come
-    /// for [`RESIZE_RENDER_DELAY`], so that dragging a window's edge runs the renderer once.
-    rerender_after_resize: Option<Instant>,
+    /// The terminal's width as last seen, and since when it has been that width. Rows are
+    /// rendered again at a new width once it has held for [`RESIZE_RENDER_DELAY`], so that
+    /// dragging a window's edge runs the renderer once.
+    terminal_width: Option<(u16, Instant)>,
     file_watcher: Option<FileWatcher>,
     inhibit_close_menu: bool,
 }
@@ -184,7 +185,7 @@ impl App {
                 read_only,
                 file_watcher: None,
                 needs_redraw: true,
-                rerender_after_resize: None,
+                terminal_width: None,
                 inhibit_close_menu: false,
             },
         };
@@ -246,13 +247,7 @@ impl App {
             self.handle_event(term, e)?;
         }
 
-        if let Some(at) = self.state.rerender_after_resize
-            && Instant::now() >= at
-            && !term.has_pending_event()?
-        {
-            self.state.rerender_after_resize = None;
-            self.rerender_screens()?;
-        }
+        self.rerender_at_terminal_width(term)?;
 
         if let Some(file_watcher) = &mut self.state.file_watcher
             && file_watcher.pending_updates()
@@ -284,6 +279,40 @@ impl App {
             self.stage_redraw();
         }
         Ok(())
+    }
+
+    /// Render every screen again when the terminal's width is no longer the one its rows were
+    /// rendered at, once that width has held for [`RESIZE_RENDER_DELAY`] and no event is waiting.
+    /// The width is the terminal's own, not a resize's, which during a fast drag lags behind it.
+    fn rerender_at_terminal_width(&mut self, term: &mut Term) -> Res<()> {
+        let width = term.size().map_err(Error::Term)?.0;
+        let now = Instant::now();
+        let since = match self.state.terminal_width {
+            Some((seen, since)) if seen == width => since,
+            _ => {
+                self.state.terminal_width = Some((width, now));
+                now
+            }
+        };
+        let delay = if self.state.enable_async_cmds {
+            RESIZE_RENDER_DELAY
+        } else {
+            Duration::ZERO
+        };
+        let stale = self
+            .state
+            .screens
+            .iter()
+            .any(|screen| screen.rendered_width != width);
+        if !stale || now < since + delay || term.has_pending_event()? {
+            return Ok(());
+        }
+
+        for screen in &mut self.state.screens {
+            let height = screen.size.1;
+            screen.resize(width, height)?;
+        }
+        self.rerender_screens()
     }
 
     pub fn update_screens(&mut self) -> Res<()> {
@@ -329,19 +358,11 @@ impl App {
     pub fn handle_event(&mut self, term: &mut Term, event: Event) -> Res<()> {
         match event {
             Event::Resize(w, h) => {
-                // The renderer lays rows out at the width, so a new width renders them again; until
-                // then the rows it drew are fitted to the new size.
-                let width_changed = self.state.screens.iter().any(|screen| screen.size.0 != w);
+                // The rows are fitted to the new size at once; they are rendered again at a new
+                // width by `rerender_at_terminal_width`, which reads the terminal's width itself,
+                // since a resize's may already be out of date.
                 for screen in self.state.screens.iter_mut() {
                     screen.resize(w, h)?;
-                }
-                if width_changed {
-                    let delay = if self.state.enable_async_cmds {
-                        RESIZE_RENDER_DELAY
-                    } else {
-                        Duration::ZERO
-                    };
-                    self.state.rerender_after_resize = Some(Instant::now() + delay);
                 }
 
                 self.stage_redraw();
