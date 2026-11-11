@@ -100,3 +100,20 @@ fn a_resize_renders_at_the_terminals_width_when_its_events_lag_behind() {
     let screen = ctx.redact_buffer();
     assert!(screen.contains("firstfile @118"), "{screen}");
 }
+
+/// While rows wait to be rendered again at the terminal's width, the event loop wakes when that is
+/// due, not at its next tick.
+#[test]
+fn the_event_loop_wakes_when_a_render_at_the_new_width_is_due() {
+    let mut ctx = with_a_change(setup_clone!(), None);
+    let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    let tick = std::time::Duration::from_millis(100);
+    let now = std::time::Instant::now();
+
+    app.state.terminal_width = Some((80, now));
+    assert_eq!(app.poll_timeout(tick, now), tick);
+
+    // The terminal became 120 columns wide; the rows were rendered at 80.
+    app.state.terminal_width = Some((120, now));
+    assert!(app.poll_timeout(tick, now) < tick);
+}

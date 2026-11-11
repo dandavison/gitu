@@ -85,7 +85,7 @@ pub(crate) struct State {
     /// The terminal's width as last seen, and since when it has been that width. Rows are
     /// rendered again at a new width once it has held for [`RESIZE_RENDER_DELAY`], so that
     /// dragging a window's edge runs the renderer once.
-    terminal_width: Option<(u16, Instant)>,
+    pub(crate) terminal_width: Option<(u16, Instant)>,
     file_watcher: Option<FileWatcher>,
     inhibit_close_menu: bool,
 }
@@ -228,7 +228,7 @@ impl App {
 
     pub fn run(&mut self, term: &mut Term, max_tick_delay: Duration) -> Res<()> {
         while !self.state.quit {
-            let event = if term.poll_event(max_tick_delay)? {
+            let event = if term.poll_event(self.poll_timeout(max_tick_delay, Instant::now()))? {
                 Some(term.read_event()?)
             } else if term.hung_up() {
                 return Ok(());
@@ -284,6 +284,11 @@ impl App {
     /// Render every screen again when the terminal's width is no longer the one its rows were
     /// rendered at, once that width has held for [`RESIZE_RENDER_DELAY`] and no event is waiting.
     /// The width is the terminal's own, not a resize's, which during a fast drag lags behind it.
+    /// How long the event loop waits for an event before it updates anyway.
+    pub(crate) fn poll_timeout(&self, max_tick_delay: Duration, _now: Instant) -> Duration {
+        max_tick_delay
+    }
+
     fn rerender_at_terminal_width(&mut self, term: &mut Term) -> Res<()> {
         let width = term.size().map_err(Error::Term)?.0;
         let now = Instant::now();
