@@ -32,6 +32,7 @@ mod read_only;
 mod rebase;
 mod remote;
 mod reset;
+mod resize;
 mod reverse;
 mod search;
 mod show;

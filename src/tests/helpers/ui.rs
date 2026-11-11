@@ -218,6 +218,19 @@ impl TestContext {
         app
     }
 
+    /// Resize the terminal to each of `sizes` in turn, as dragging a window's edge does, and
+    /// tell the app of each.
+    pub fn resize(&mut self, app: &mut App, sizes: &[(u16, u16)]) {
+        let (width, height) = *sizes.last().unwrap();
+        let TermBackend::Test { buffer, .. } = &mut self.term else {
+            unreachable!();
+        };
+        *buffer = TestBuffer::new(width, height);
+        self.size = (width, height);
+        let events = sizes.iter().map(|&(w, h)| Event::Resize(w, h)).collect();
+        self.update(app, events);
+    }
+
     pub fn update(&mut self, app: &mut App, new_events: Vec<Event>) {
         let TermBackend::Test { events, .. } = &mut self.term else {
             unreachable!();
