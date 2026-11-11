@@ -196,11 +196,6 @@ pub struct DiffRendererConfig {
     /// gitu starts. `None` when gitu is not run by delta.
     #[serde(skip)]
     pub color_mode: Option<ColorMode>,
-    /// The features delta uses with the user's own configuration, by delta's
-    /// name, set by `delta --gitu`, which resolves them before gitu starts. Empty
-    /// when gitu is not run by delta.
-    #[serde(skip)]
-    pub features_in_force: Vec<String>,
     /// Which features the user's own configuration enables, by delta's name, asked each time the
     /// answer is needed, so that a change to the user's git config during a session counts. Set
     /// by `delta --gitu`; without it, the user's configuration enables none.
@@ -211,7 +206,9 @@ pub struct DiffRendererConfig {
 /// Asks the renderer which features the user's own configuration, as it is now, enables in the
 /// repository at a path.
 #[derive(Clone, Default)]
-pub struct EnabledFeatures(Option<Arc<dyn Fn(&Path) -> Vec<String> + Send + Sync>>);
+pub struct EnabledFeatures(Option<Arc<AskEnabledFeatures>>);
+
+type AskEnabledFeatures = dyn Fn(&Path) -> Vec<String> + Send + Sync;
 
 impl EnabledFeatures {
     pub fn new(ask: impl Fn(&Path) -> Vec<String> + Send + Sync + 'static) -> Self {

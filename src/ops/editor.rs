@@ -543,10 +543,15 @@ fn theme_of(data: &PickerData) -> Option<String> {
 
 /// Each feature, marked if it is on, beside its key if it has one.
 fn feature_items(app: &App, offered: &[String]) -> Vec<PickerItem> {
+    let enabled = enabled_by_config(app);
     offered
         .iter()
         .map(|feature| {
-            let mark = if is_on(app, feature) { '●' } else { ' ' };
+            let mark = if is_on(app, feature, &enabled) {
+                '●'
+            } else {
+                ' '
+            };
             let key = app.state.feature_keys.get(feature).copied().unwrap_or(' ');
             PickerItem::new(
                 format!("{mark} {key} {feature}"),
@@ -557,26 +562,33 @@ fn feature_items(app: &App, offered: &[String]) -> Vec<PickerItem> {
 }
 
 pub(crate) fn toggle_feature(app: &mut App, feature: &str) -> Res<()> {
-    app.state.features = toggled(&app.state.features, feature, in_force(app, feature));
+    let enabled = enabled_by_config(app);
+    app.state.features = toggled(&app.state.features, feature, is_enabled(feature, &enabled));
     app.rerender_screens()
 }
 
-/// Whether `feature` is on: turned on in-session, or used with the user's own
-/// configuration and not turned off in-session.
-fn is_on(app: &App, feature: &str) -> bool {
+/// Whether `feature` is on: turned on in-session, or enabled by the user's own
+/// configuration (`enabled`) and not turned off in-session.
+fn is_on(app: &App, feature: &str, enabled: &[String]) -> bool {
     let held = |entry: &str| app.state.features.iter().any(|held| held == entry);
-    held(feature) || (in_force(app, feature) && !held(&format!("-{feature}")))
+    held(feature) || (is_enabled(feature, enabled) && !held(&format!("-{feature}")))
 }
 
-/// Whether delta uses `feature` with the user's own configuration.
-fn in_force(app: &App, feature: &str) -> bool {
+/// Whether `feature` is among `enabled`, which are by delta's name.
+fn is_enabled(feature: &str, enabled: &[String]) -> bool {
     let deltas_name = crate::diff_renderer::deltas_name(feature);
+    enabled.contains(&deltas_name)
+}
+
+/// The features the user's own configuration enables now, by delta's name.
+fn enabled_by_config(app: &App) -> Vec<String> {
+    let dir = app.state.repo.workdir().unwrap_or(app.state.repo.path());
     app.state
         .config
         .general
         .diff_renderer
-        .features_in_force
-        .contains(&deltas_name)
+        .enabled_features
+        .get(dir)
 }
 
 /// Make `key` toggle `feature` at the top level, in this session and, by saving
@@ -609,7 +621,7 @@ fn set_feature_key(app: &mut App, feature: &str, key: char) {
 }
 
 /// `features` with `feature` toggled. Its entry turns it on, or, if the user's
-/// own configuration uses it (`in_force`), turns it off as `-feature`; the entry
+/// own configuration enables it (`in_force`), turns it off as `-feature`; the entry
 /// is removed if present, returning to the user's configuration, and appended
 /// if not. Order is otherwise kept, since delta resolves a conflict between two
 /// features in favour of the later one.

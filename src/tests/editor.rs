@@ -170,6 +170,12 @@ fn renderer_features_offers_the_configured_ones() {
 
 /// Give `feature` the only key, as a user's config does: its feature keys replace
 /// the default ones.
+/// Make the user's config enable `features`, by delta's name, as delta tells gitu.
+fn enable_by_config(ctx: &mut TestContext, features: Vec<String>) {
+    ctx.config().general.diff_renderer.enabled_features =
+        crate::config::EnabledFeatures::new(move |_| features.clone());
+}
+
 fn with_feature_key(ctx: &mut TestContext, feature: &str, key: char) {
     ctx.config().general.diff_renderer.feature_keys = [(feature.into(), key)].into();
 }
@@ -216,7 +222,7 @@ fn a_feature_key_toggles_its_feature() {
 fn a_feature_key_turns_off_a_feature_the_users_config_turns_on() {
     let mut ctx = setup_clone!();
     with_feature_key(&mut ctx, "side-by-side", 'x');
-    ctx.config().general.diff_renderer.features_in_force = vec!["side-by-side".into()];
+    enable_by_config(&mut ctx, vec!["side-by-side".into()]);
     let mut app = ctx.init_app();
 
     ctx.update(&mut app, keys("x"));
@@ -256,7 +262,7 @@ fn every_feature_key_toggles_its_feature_the_same_way() {
                 .collect();
             ctx.config().general.diff_renderer.features = vec![name.into()];
             if enabled_by_config {
-                ctx.config().general.diff_renderer.features_in_force = vec![name.into()];
+                enable_by_config(&mut ctx, vec![name.into()]);
             }
             with_feature_key(&mut ctx, name, 'x');
             commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
@@ -318,7 +324,7 @@ fn a_feature_key_follows_a_change_to_the_users_config_during_the_session() {
 #[test]
 fn plus_turns_off_the_plus_minus_markers_the_users_config_turns_on() {
     let mut ctx = setup_clone!();
-    ctx.config().general.diff_renderer.features_in_force = vec!["keep-plus-minus-markers".into()];
+    enable_by_config(&mut ctx, vec!["keep-plus-minus-markers".into()]);
     let mut app = ctx.init_app();
 
     ctx.update(&mut app, keys("+"));
@@ -330,7 +336,7 @@ fn plus_turns_off_the_plus_minus_markers_the_users_config_turns_on() {
 #[test]
 fn the_feature_list_marks_the_features_the_users_config_turns_on() {
     let mut ctx = setup_clone!();
-    ctx.config().general.diff_renderer.features_in_force = vec!["line-numbers".into()];
+    enable_by_config(&mut ctx, vec!["line-numbers".into()]);
     let mut app = ctx.init_app();
     ctx.update(&mut app, keys("-"));
     assert!(ctx.redact_buffer().contains("● L line-numbers"));
