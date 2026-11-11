@@ -283,6 +283,37 @@ fn every_feature_key_toggles_its_feature_the_same_way() {
     assert!(failures.is_empty(), "\n{}", failures.join("\n"));
 }
 
+/// Whether the user's config enables a feature is asked when a key is pressed, so a change to
+/// the user's git config during the session counts.
+#[test]
+fn a_feature_key_follows_a_change_to_the_users_config_during_the_session() {
+    let mut ctx = setup_clone!();
+    with_feature_key(&mut ctx, "side-by-side", 'x');
+    let enabled = ctx.dir.join(".git").join("enabled-features");
+    let asked = enabled.clone();
+    ctx.config().general.diff_renderer.enabled_features =
+        crate::config::EnabledFeatures::new(move |_| {
+            fs::read_to_string(&asked)
+                .unwrap_or_default()
+                .split_whitespace()
+                .map(String::from)
+                .collect()
+        });
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("x"));
+    assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
+    ctx.update(&mut app, keys("x"));
+    assert!(app.state.features.is_empty());
+
+    // The user turns side-by-side on in their git config.
+    fs::write(&enabled, "side-by-side").unwrap();
+    ctx.update(&mut app, keys("x"));
+    assert_eq!(&*app.state.features, ["-side-by-side".to_string()]);
+    ctx.update(&mut app, keys("x"));
+    assert!(app.state.features.is_empty());
+}
+
 /// delta calls the +/- markers `keep-plus-minus-markers`.
 #[test]
 fn plus_turns_off_the_plus_minus_markers_the_users_config_turns_on() {

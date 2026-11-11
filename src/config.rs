@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use crate::config_git::{self, FEATURE_KEYS};
 use crate::style::{Color, Modifier, Style};
@@ -197,6 +201,36 @@ pub struct DiffRendererConfig {
     /// when gitu is not run by delta.
     #[serde(skip)]
     pub features_in_force: Vec<String>,
+    /// Which features the user's own configuration enables, by delta's name, asked each time the
+    /// answer is needed, so that a change to the user's git config during a session counts. Set
+    /// by `delta --gitu`; without it, the user's configuration enables none.
+    #[serde(skip)]
+    pub enabled_features: EnabledFeatures,
+}
+
+/// Asks the renderer which features the user's own configuration, as it is now, enables in the
+/// repository at a path.
+#[derive(Clone, Default)]
+pub struct EnabledFeatures(Option<Arc<dyn Fn(&Path) -> Vec<String> + Send + Sync>>);
+
+impl EnabledFeatures {
+    pub fn new(ask: impl Fn(&Path) -> Vec<String> + Send + Sync + 'static) -> Self {
+        Self(Some(Arc::new(ask)))
+    }
+
+    pub fn get(&self, dir: &Path) -> Vec<String> {
+        self.0.as_ref().map(|ask| ask(dir)).unwrap_or_default()
+    }
+}
+
+impl std::fmt::Debug for EnabledFeatures {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.is_some() {
+            "EnabledFeatures(..)"
+        } else {
+            "EnabledFeatures(none)"
+        })
+    }
 }
 
 /// Whether delta renders for a dark or a light terminal background.
