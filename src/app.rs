@@ -281,36 +281,49 @@ impl App {
         Ok(())
     }
 
-    /// Render every screen again when the terminal's width is no longer the one its rows were
-    /// rendered at, once that width has held for [`RESIZE_RENDER_DELAY`] and no event is waiting.
-    /// The width is the terminal's own, not a resize's, which during a fast drag lags behind it.
-    /// How long the event loop waits for an event before it updates anyway.
-    pub(crate) fn poll_timeout(&self, max_tick_delay: Duration, _now: Instant) -> Duration {
-        max_tick_delay
+    /// How long the event loop waits for an event before it updates anyway: its tick, or less if
+    /// a render at the terminal's new width is due sooner.
+    pub(crate) fn poll_timeout(&self, max_tick_delay: Duration, now: Instant) -> Duration {
+        match self.resize_render_due() {
+            Some(due) => max_tick_delay.min(due.saturating_duration_since(now)),
+            None => max_tick_delay,
+        }
     }
 
-    fn rerender_at_terminal_width(&mut self, term: &mut Term) -> Res<()> {
-        let width = term.size().map_err(Error::Term)?.0;
-        let now = Instant::now();
-        let since = match self.state.terminal_width {
-            Some((seen, since)) if seen == width => since,
-            _ => {
-                self.state.terminal_width = Some((width, now));
-                now
-            }
-        };
-        let delay = if self.state.enable_async_cmds {
-            RESIZE_RENDER_DELAY
-        } else {
-            Duration::ZERO
-        };
+    /// When the screens are due to be rendered again at the terminal's width, if any screen's rows
+    /// were rendered at another: once that width has held for [`RESIZE_RENDER_DELAY`]. Tests,
+    /// which have no async commands, render as soon as no event is waiting.
+    fn resize_render_due(&self) -> Option<Instant> {
+        let (width, since) = self.state.terminal_width?;
         let stale = self
             .state
             .screens
             .iter()
             .any(|screen| screen.rendered_width != width);
-        if !stale || now < since + delay || term.has_pending_event()? {
-            return Ok(());
+        let delay = if self.state.enable_async_cmds {
+            RESIZE_RENDER_DELAY
+        } else {
+            Duration::ZERO
+        };
+        stale.then_some(since + delay)
+    }
+
+    /// Render every screen again when the terminal's width is no longer the one its rows were
+    /// rendered at, once that width has held for [`RESIZE_RENDER_DELAY`] and no event is waiting.
+    /// The width is the terminal's own, not a resize's, which during a fast drag lags behind it.
+    fn rerender_at_terminal_width(&mut self, term: &mut Term) -> Res<()> {
+        let width = term.size().map_err(Error::Term)?.0;
+        let now = Instant::now();
+        if self
+            .state
+            .terminal_width
+            .is_none_or(|(seen, _)| seen != width)
+        {
+            self.state.terminal_width = Some((width, now));
+        }
+        match self.resize_render_due() {
+            Some(due) if now >= due && !term.has_pending_event()? => {}
+            _ => return Ok(()),
         }
 
         for screen in &mut self.state.screens {
@@ -1198,9 +1211,10 @@ fn rebase_todo_screen(
 /// How far back [`App::pick_commit`] lists commits.
 const COMMIT_PICK_LIMIT: usize = 256;
 
-/// How long after the last resize the screens are rendered again at the new width. Tests, which
-/// have no async commands, render as soon as no event is waiting.
-const RESIZE_RENDER_DELAY: Duration = Duration::from_millis(150);
+/// How long the terminal's width must hold before the screens are rendered again at it, so that
+/// a burst of resizes runs the renderer once. Terminals delay their own resize signals too: kitty
+/// by 100ms where the system does not report the end of a resize, Ghostty by 25ms.
+const RESIZE_RENDER_DELAY: Duration = Duration::from_millis(50);
 
 pub(crate) fn root_menu(config: &Config) -> Option<Menu> {
     if config.general.always_show_help.enabled {
