@@ -11,6 +11,7 @@ use std::process::Stdio;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use arboard::Clipboard;
@@ -59,7 +60,7 @@ pub(crate) struct State {
     pub exit_code: i32,
     pub screens: Vec<Screen>,
     pub pending_menu: Option<PendingMenu>,
-    pending_cmd: Option<(Child, Arc<RwLock<CmdLogEntry>>)>,
+    pending_cmd: Option<PendingCmd>,
     enable_async_cmds: bool,
     pub debug: bool,
     pub current_cmd_log: CmdLog,
@@ -698,15 +699,21 @@ impl App {
 
         let mut child = cmd.spawn().map_err(Error::SpawnCmd)?;
 
-        use std::io::Write;
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(input)
-            .map_err(Error::Term)?;
+        // Its input is written and its output read while it runs, on threads of
+        // their own: a command that fills a pipe waits until there is room.
+        let mut stdin = child.stdin.take().unwrap();
+        let input = input.to_vec();
+        let stdin = std::thread::spawn(move || stdin.write_all(&input));
+        let stdout = read_to_end_on_thread(child.stdout.take().unwrap());
+        let stderr = read_to_end_on_thread(child.stderr.take().unwrap());
 
-        self.state.pending_cmd = Some((child, log_entry));
+        self.state.pending_cmd = Some(PendingCmd {
+            child,
+            log_entry,
+            stdin,
+            stdout,
+            stderr,
+        });
 
         if !self.state.enable_async_cmds {
             self.await_pending_cmd()?;
@@ -716,7 +723,7 @@ impl App {
     }
 
     fn await_pending_cmd(&mut self) -> Res<()> {
-        if let Some((child, _)) = &mut self.state.pending_cmd {
+        if let Some(PendingCmd { child, .. }) = &mut self.state.pending_cmd {
             child.wait().map_err(Error::CouldntAwaitCmd)?;
         }
         Ok(())
@@ -724,7 +731,7 @@ impl App {
 
     /// Handles any pending_cmd in State without blocking. Returns `true` if a cmd was handled.
     fn handle_pending_cmd(&mut self) -> Res<()> {
-        let Some((ref mut child, ref mut log_rwlock)) = self.state.pending_cmd else {
+        let Some(PendingCmd { ref mut child, .. }) = self.state.pending_cmd else {
             return Ok(());
         };
 
@@ -734,8 +741,8 @@ impl App {
 
         log::debug!("pending cmd finished with {status:?}");
 
-        let result = write_child_output_to_log(log_rwlock, child, status);
-        self.state.pending_cmd = None;
+        let pending = self.state.pending_cmd.take().unwrap();
+        let result = write_child_output_to_log(pending, status);
         self.update_screens()?;
         result?;
 
@@ -1265,36 +1272,42 @@ pub(crate) fn root_menu(config: &Config) -> Option<Menu> {
     }
 }
 
-fn write_child_output_to_log(
-    log_rwlock: &mut Arc<RwLock<CmdLogEntry>>,
-    child: &mut Child,
-    status: std::process::ExitStatus,
-) -> Res<()> {
-    let mut log = log_rwlock.write().unwrap();
+/// A command started by [`App::run_cmd_async`], with the threads writing its
+/// input and reading its output.
+struct PendingCmd {
+    child: Child,
+    log_entry: Arc<RwLock<CmdLogEntry>>,
+    stdin: JoinHandle<std::io::Result<()>>,
+    stdout: JoinHandle<std::io::Result<Vec<u8>>>,
+    stderr: JoinHandle<std::io::Result<Vec<u8>>>,
+}
+
+fn read_to_end_on_thread(
+    mut pipe: impl Read + Send + 'static,
+) -> JoinHandle<std::io::Result<Vec<u8>>> {
+    std::thread::spawn(move || {
+        let mut bytes = vec![];
+        pipe.read_to_end(&mut bytes)?;
+        Ok(bytes)
+    })
+}
+
+fn write_child_output_to_log(pending: PendingCmd, status: std::process::ExitStatus) -> Res<()> {
+    let mut log = pending.log_entry.write().unwrap();
 
     let CmdLogEntry::Cmd { args, out: out_log } = log.deref_mut() else {
         unreachable!("pending_cmd is always CmdLogEntry::Cmd variant");
     };
 
-    drop(child.stdin.take());
-
-    let mut err_bytes = vec![];
-    log::debug!("Reading stderr");
-
-    child
-        .stderr
-        .take()
-        .unwrap()
-        .read_to_end(&mut err_bytes)
-        .map_err(Error::CouldntReadCmdOutput)?;
-
+    let join = |handle: JoinHandle<std::io::Result<Vec<u8>>>| {
+        handle
+            .join()
+            .expect("reading a command's output panicked")
+            .map_err(Error::CouldntReadCmdOutput)
+    };
+    let err_bytes = join(pending.stderr)?;
     let mut out_bytes = err_bytes.clone();
-    child
-        .stdout
-        .take()
-        .unwrap()
-        .read_to_end(&mut out_bytes)
-        .map_err(Error::CouldntReadCmdOutput)?;
+    out_bytes.extend(join(pending.stdout)?);
 
     let out_string = String::from_utf8_lossy(&out_bytes).to_string();
     *out_log = Some(out_string.into());
@@ -1307,7 +1320,11 @@ fn write_child_output_to_log(
         ));
     }
 
-    Ok(())
+    pending
+        .stdin
+        .join()
+        .expect("writing a command's input panicked")
+        .map_err(Error::Term)
 }
 
 type DefaultFn = Box<dyn Fn(&App) -> Option<String>>;
