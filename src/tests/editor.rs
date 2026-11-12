@@ -667,3 +667,25 @@ fn the_help_calls_the_hotkeys_hotkeys() {
     assert!(heading.is_some(), "{buffer}");
     assert!(!buffer.contains("Features"), "{buffer}");
 }
+
+/// The help lists each column's keys in order, so that a key is found where it would be in a
+/// dictionary.
+#[test]
+fn the_help_lists_each_columns_keys_in_order() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("?"));
+    let buffer = ctx.redact_buffer();
+
+    // The first column's keys: the first word of each row under the "Commands" heading.
+    let keys: Vec<String> = buffer
+        .lines()
+        .skip_while(|row| !row.trim_start().starts_with("Commands"))
+        .skip(1)
+        .filter_map(|row| row.split_whitespace().next().map(String::from))
+        .filter(|key| key != "|" && !key.starts_with("styles_hash"))
+        .collect();
+    let mut sorted = keys.clone();
+    sorted.sort_by_key(|key| (key.to_lowercase(), key.chars().any(char::is_uppercase)));
+    assert_eq!(keys, sorted, "{buffer}");
+}
