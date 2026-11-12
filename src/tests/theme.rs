@@ -119,7 +119,7 @@ fn a_theme_for_the_other_mode_stays_on_going_back_to_one_row() {
     let light = Some(ColorMode::Light);
     let (rendered, screen) = after_in(function_name!(), light, "T<ctrl+l><down><down><ctrl+l>");
     assert_eq!(rendered, ["theme-a"]);
-    assert!(screen.contains("Theme theme-a (dark)"), "{screen}");
+    assert!(screen.contains("Theme: theme-a (dark)"), "{screen}");
 
     let (rendered, _) = after_in(function_name!(), light, "T<ctrl+l><down><down><ctrl+l><up>");
     assert_eq!(rendered, ["theme-b"]);

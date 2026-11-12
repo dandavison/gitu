@@ -26,6 +26,7 @@ mod keys;
 mod log;
 mod merge;
 mod pager;
+mod prompt;
 mod pull;
 mod push;
 mod quit;

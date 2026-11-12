@@ -444,7 +444,7 @@ fn the_files_asked_for_come_back_for_editing() {
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
     ctx.update(&mut app, keys("kd&"));
     assert!(
-        ctx.redact_buffer().contains("Files: › !a.rs"),
+        ctx.redact_buffer().contains("File filters: !a.rs"),
         "{}",
         ctx.redact_buffer()
     );
@@ -496,7 +496,7 @@ fn command_and_file_histories_persist_separately() {
     assert_eq!(ctx.prompt_line(), "git diff --cached|");
 
     ctx.update(&mut app, keys("&<up>"));
-    assert_eq!(ctx.prompt_line(), "? Files: › !a.rs|");
+    assert_eq!(ctx.prompt_line(), "File filters: !a.rs|");
 
     ctx.update(&mut app, keys(":<up><up><down>"));
     assert_eq!(ctx.prompt_line(), "git diff --cached|");
