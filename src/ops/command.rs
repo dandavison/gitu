@@ -20,8 +20,17 @@ pub(crate) fn run(app: &mut App, term: &mut Term, name: &str) -> Res<()> {
     let Some(template) = app.state.config.general.commands.get(name) else {
         return Ok(());
     };
+    let mut template = template.clone();
+    if template.contains(COMMAND) {
+        let Some((line, _)) = shown_command(app) else {
+            app.display_error(no_command(name));
+            return Ok(());
+        };
+        // Already as a shell takes it.
+        template = template.replace(COMMAND, &line);
+    }
     let target = &app.screen().get_selected_item().data;
-    let command = match filled_in(template, target, |value| {
+    let command = match filled_in(&template, target, |value| {
         shell_words::quote(value).into_owned()
     }) {
         Ok(command) => command,
@@ -48,9 +57,34 @@ pub(crate) fn open_view(app: &mut App, term: &mut Term, name: &str) -> Res<()> {
         app.display_error(format!("{name}: {}", Error::EditedCommandQuotes));
         return Ok(());
     };
+    // The command shown is several words, so it is a word of its own here, and
+    // stands for those words.
+    if words
+        .iter()
+        .any(|word| word != COMMAND && word.contains(COMMAND))
+    {
+        app.display_error(format!("{name}: {COMMAND} must be a word of its own"));
+        return Ok(());
+    }
+    let mut prefix = String::new();
+    let mut spliced = Vec::new();
+    for word in words {
+        if word != COMMAND {
+            spliced.push(word);
+            continue;
+        }
+        let Some((line, shown_prefix)) = shown_command(app) else {
+            app.display_error(no_command(name));
+            return Ok(());
+        };
+        // Its paths are relative to where it was run.
+        prefix = shown_prefix;
+        spliced.extend(shell_words::split(&line).map_err(|_| Error::EditedCommandQuotes)?);
+    }
+
     let target = &app.screen().get_selected_item().data;
     // Word by word, so that a value with spaces stays one word.
-    let argv: Result<Vec<String>, _> = words
+    let argv: Result<Vec<String>, _> = spliced
         .iter()
         .map(|word| filled_in(word, target, |value| value.to_owned()))
         .collect();
@@ -71,14 +105,33 @@ pub(crate) fn open_view(app: &mut App, term: &mut Term, name: &str) -> Res<()> {
     }
 
     let params = app.render_params(term.size().map_err(Error::Term)?);
-    let screen = screen::pager::live(
+    let screen = screen::pager::live_in(
         Arc::clone(&app.state.config),
         Rc::clone(&app.state.repo),
         params,
         argv,
+        prefix,
     )?;
     app.state.screens.push(screen);
     Ok(())
+}
+
+/// The placeholder for the git command the screen is showing.
+const COMMAND: &str = "{command}";
+
+/// The git command the screen in view is showing, as `:` shows it, and where it
+/// was run (see [`GitCommand::prefix`]). `None` for a screen that is not a git
+/// command's output, such as the status view.
+fn shown_command(app: &App) -> Option<(String, String)> {
+    let git = app.screen().git_command.as_ref()?.borrow();
+    Some((
+        git.line(app.state.context.as_deref()),
+        git.prefix().to_owned(),
+    ))
+}
+
+fn no_command(name: &str) -> String {
+    format!("{name}: this screen shows no git command, for {COMMAND}")
 }
 
 /// `template` with each placeholder replaced by `written` of its value for

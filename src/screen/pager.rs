@@ -119,6 +119,17 @@ pub(crate) fn live(
     params: RenderParams,
     git_argv: Vec<String>,
 ) -> Res<Screen> {
+    live_in(config, repo, params, git_argv, String::new())
+}
+
+/// [`live`], for a command run in `prefix` (see [`GitCommand::prefix`]).
+pub(crate) fn live_in(
+    config: Arc<Config>,
+    repo: Rc<Repository>,
+    params: RenderParams,
+    git_argv: Vec<String>,
+    prefix: String,
+) -> Res<Screen> {
     create(
         config,
         repo,
@@ -126,7 +137,7 @@ pub(crate) fn live(
         Paged {
             text: String::new(),
             git_argv: Some(git_argv),
-            prefix: String::new(),
+            prefix,
             truncated: false,
         },
     )
