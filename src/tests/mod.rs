@@ -14,6 +14,7 @@ use std::fs;
 #[macro_use]
 pub(crate) mod helpers;
 mod arg;
+mod back;
 mod blame;
 mod branch;
 mod cherry_pick;
