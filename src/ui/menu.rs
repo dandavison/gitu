@@ -80,6 +80,9 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
     };
 
     let separator_style = Style::from(&style.separator);
+    // The help's columns are in order of key, so that a key is found as in a dictionary; a menu's
+    // keep the order they are configured in.
+    let sorted = matches!(pending.menu, Menu::Root | Menu::Help);
 
     // Says why the ops that write are missing from the menus that list them.
     let read_only_notice = (state.read_only && matches!(pending.menu, Menu::Root | Menu::Help))
@@ -107,17 +110,20 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
                     layout_keybinds_table(
                         layout,
                         config,
-                        non_menu_binds
-                            .into_iter()
-                            .map(|(op, binds)| {
-                                (
-                                    binds.iter().map(|bind| bind.raw.as_str()).join("/").into(),
-                                    MenuValue::Text(
-                                        op.clone().implementation().display(state).into(),
-                                    ),
-                                )
-                            })
-                            .collect(),
+                        in_order(
+                            sorted,
+                            non_menu_binds
+                                .into_iter()
+                                .map(|(op, binds)| {
+                                    (
+                                        binds.iter().map(|bind| bind.raw.as_str()).join("/").into(),
+                                        MenuValue::Text(
+                                            op.clone().implementation().display(state).into(),
+                                        ),
+                                    )
+                                })
+                                .collect(),
+                        ),
                     );
                 });
             }
@@ -132,19 +138,26 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
                         layout_keybinds_table(
                             layout,
                             config,
-                            menu_binds
-                                .into_iter()
-                                .map(|(op, binds)| {
-                                    let Op::OpenMenu(menu) = op else {
-                                        unreachable!();
-                                    };
+                            in_order(
+                                sorted,
+                                menu_binds
+                                    .into_iter()
+                                    .map(|(op, binds)| {
+                                        let Op::OpenMenu(menu) = op else {
+                                            unreachable!();
+                                        };
 
-                                    (
-                                        binds.iter().map(|bind| bind.raw.as_str()).join("/").into(),
-                                        MenuValue::Text(menu.to_string().into()),
-                                    )
-                                })
-                                .collect(),
+                                        (
+                                            binds
+                                                .iter()
+                                                .map(|bind| bind.raw.as_str())
+                                                .join("/")
+                                                .into(),
+                                            MenuValue::Text(menu.to_string().into()),
+                                        )
+                                    })
+                                    .collect(),
+                            ),
                         );
                     }
 
@@ -153,7 +166,7 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
                             layout_line(layout, " ".into(), Style::new());
                         }
                         layout_line(layout, "Hotkeys".into(), Style::from(&style.menu.heading));
-                        layout_keybinds_table(layout, config, feature_binds);
+                        layout_keybinds_table(layout, config, in_order(sorted, feature_binds));
                     }
                 });
             }
@@ -215,6 +228,17 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
             });
         });
     });
+}
+
+/// `rows` in order of key if `sorted`: ignoring case, with a lowercase key before its capital.
+fn in_order<'a>(
+    sorted: bool,
+    mut rows: Vec<(Cow<'a, str>, MenuValue<'a>)>,
+) -> Vec<(Cow<'a, str>, MenuValue<'a>)> {
+    if sorted {
+        rows.sort_by_key(|(key, _)| (key.to_lowercase(), key.chars().any(char::is_uppercase)));
+    }
+    rows
 }
 
 fn layout_keybinds_table<'a>(
