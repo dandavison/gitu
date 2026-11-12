@@ -287,6 +287,28 @@ fn theme_mode_without_themes_says_so() {
     );
 }
 
+/// The themes are those the renderer finds in git config, which may not be those gitu finds:
+/// offered a theme the renderer cannot find, the user would see the selector change theme while
+/// the diff does not.
+#[test]
+fn theme_mode_offers_only_the_themes_the_renderer_finds() {
+    let mut ctx = setup_clone!();
+    with_themes(&ctx);
+    let empty = ctx.dir.join(".git").join("renderer-gitconfig");
+    fs::write(&empty, "").unwrap();
+    ctx.config().general.diff_renderer.git_config =
+        crate::config::RendererGitConfig::new(move |_| git2::Config::open(&empty).ok());
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("T"));
+    assert!(app.state.picker.is_none());
+    assert!(
+        ctx.redact_buffer().contains("No themes are defined"),
+        "{}",
+        ctx.redact_buffer()
+    );
+}
+
 /// A digit renders with the theme of that number at once, so that two can be
 /// compared by switching back and forth. 0 is no theme.
 #[test]

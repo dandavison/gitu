@@ -201,6 +201,38 @@ pub struct DiffRendererConfig {
     /// by `delta --gitu`; without it, the user's configuration enables none.
     #[serde(skip)]
     pub enabled_features: EnabledFeatures,
+    /// The git config the renderer reads in the repository at a path, which gitu uses for what it
+    /// offers from git config, such as themes. Set by `delta --gitu`; without it, gitu reads the
+    /// repository's own.
+    #[serde(skip)]
+    pub git_config: RendererGitConfig,
+}
+
+/// Opens the git config the renderer reads in the repository at a path.
+#[derive(Clone, Default)]
+pub struct RendererGitConfig(Option<Arc<OpenGitConfig>>);
+
+type OpenGitConfig = dyn Fn(&Path) -> Option<git2::Config> + Send + Sync;
+
+impl RendererGitConfig {
+    pub fn new(open: impl Fn(&Path) -> Option<git2::Config> + Send + Sync + 'static) -> Self {
+        Self(Some(Arc::new(open)))
+    }
+
+    /// The renderer's git config at `dir`, or `None` if the renderer has not said how it opens it.
+    pub fn open(&self, dir: &Path) -> Option<Option<git2::Config>> {
+        self.0.as_ref().map(|open| open(dir))
+    }
+}
+
+impl std::fmt::Debug for RendererGitConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.is_some() {
+            "RendererGitConfig(..)"
+        } else {
+            "RendererGitConfig(none)"
+        })
+    }
 }
 
 /// Asks the renderer which features the user's own configuration, as it is now, enables in the
