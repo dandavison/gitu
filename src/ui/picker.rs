@@ -41,12 +41,13 @@ pub(crate) fn layout_picker<'a>(
             return;
         }
 
-        let status_text = format!(" {}/{}   ", state.filtered_count(), state.total_items());
+        let status_text = format!(" {}/{}  ", state.filtered_count(), state.total_items());
         layout_span(layout, (status_text.into(), info_style));
 
-        // Prompt with separator (like regular prompt)
-        layout_span(layout, (state.prompt_text.as_ref().into(), prompt_style));
-        layout_span(layout, (" › ".into(), prompt_style));
+        layout_span(
+            layout,
+            (format!("{}: ", state.prompt_text).into(), prompt_style),
+        );
         let (before, at_cursor, after) = state.input_state.split_at_cursor();
         layout_span(layout, (before.into(), Style::new()));
         layout_cursor(layout, at_cursor);
@@ -183,7 +184,7 @@ fn layout_one_row<'a>(layout: &mut UiTree<'a>, state: &'a PickerState, config: &
         layout_span(layout, (format!(" {number}/{last}  ").into(), info_style));
         layout_span(
             layout,
-            (format!("{} ", state.prompt_text).into(), prompt_style),
+            (format!("{}: ", state.prompt_text).into(), prompt_style),
         );
         if let Some(item) = state.selected() {
             layout_span(layout, (item.display.as_ref().into(), selection_style));
@@ -191,7 +192,7 @@ fn layout_one_row<'a>(layout: &mut UiTree<'a>, state: &'a PickerState, config: &
         if !state.pattern().is_empty() {
             layout_span(
                 layout,
-                (format!("   › {}", state.pattern()).into(), info_style),
+                (format!("   filter: {}", state.pattern()).into(), info_style),
             );
         }
     });

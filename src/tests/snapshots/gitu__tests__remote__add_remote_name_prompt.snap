@@ -21,5 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
-? Remote name: › █                                                              |
-styles_hash: b7ec087605bf3360
+Remote name: █                                                                  |
+styles_hash: c02a7e2532ef2101

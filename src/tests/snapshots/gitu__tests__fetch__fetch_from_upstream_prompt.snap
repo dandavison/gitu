@@ -21,5 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
-? Set upstream then fetch: › █                                                  |
-styles_hash: 31af9e3487391f8b
+Set upstream then fetch: █                                                      |
+styles_hash: a3152819fed5a22d

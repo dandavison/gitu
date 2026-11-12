@@ -831,9 +831,7 @@ impl App {
         let prompt_text = match (params.prompt, &default) {
             ("", _) => Cow::Borrowed(""),
             (prompt, _) if params.bare => Cow::Borrowed(prompt),
-            (prompt, Some(default)) if !params.prefill => {
-                format!("{prompt} (default {default}):").into()
-            }
+            (prompt, Some(default)) if !params.prefill => format!("{prompt} ({default}):").into(),
             (prompt, _) => format!("{prompt}:").into(),
         };
 

@@ -11,7 +11,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- 2/2   Checkout › █                                                             |
+ 2/2  Checkout: █                                                               |
 ▌origin/HEAD                                                                    |
  origin/main                                                                    |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: fa64648e61c6960
+styles_hash: 9d0064daffc50b05

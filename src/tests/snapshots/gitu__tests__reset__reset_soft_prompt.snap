@@ -21,5 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
-? Soft reset to (default origin/main): › q█                                     |
-styles_hash: 7c23f0bc1ab93818
+Soft reset to (origin/main): q█                                                 |
+styles_hash: 91828974cbe0f012

@@ -11,7 +11,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- 7/7   Checkout › █                                                             |
+ 7/7  Checkout: █                                                               |
 ▌bugfix-123                                                                     |
  feature-a                                                                      |
  feature-b                                                                      |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: b66edd998bb81998
+styles_hash: b78addb44d61d8b8

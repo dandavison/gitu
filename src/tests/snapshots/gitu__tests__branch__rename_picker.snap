@@ -11,7 +11,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- 4/4   Rename branch › █                                                        |
+ 4/4  Rename branch: █                                                          |
 ▌bugfix-123                                                                     |
  feature-a                                                                      |
  feature-b                                                                      |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 4c00b9703010fa07
+styles_hash: 2f3fbc9cfa67a1d8

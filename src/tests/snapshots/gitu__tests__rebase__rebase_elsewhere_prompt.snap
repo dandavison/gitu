@@ -11,7 +11,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- 3/3   Rebase onto › █                                                          |
+ 3/3  Rebase onto: █                                                            |
 ▌main                                                                           |
  origin/HEAD                                                                    |
  origin/main                                                                    |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 25006876f42379cb
+styles_hash: 999ff856be9e0c7e

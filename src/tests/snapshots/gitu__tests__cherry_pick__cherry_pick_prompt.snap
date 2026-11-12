@@ -11,7 +11,7 @@ expression: ctx.redact_buffer()
      Commit body goes here                                                      |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- 4/4   Cherry-pick › █                                                          |
+ 4/4  Cherry-pick: █                                                            |
 ▌main                                                                           |
  other-branch                                                                   |
  origin/HEAD                                                                    |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 84ee2ca39c022acc
+styles_hash: 3fcb17cd5bc74c70

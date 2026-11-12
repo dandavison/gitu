@@ -27,7 +27,7 @@ impl OpTrait for Quit {
             if menu == app.base_menu() {
                 if app.state.screens.len() == 1 {
                     if app.state.config.general.confirm_quit.enabled {
-                        app.confirm(term, "Really quit? (y or n)")?;
+                        app.confirm(term, "Really quit? [y/n]")?;
                     };
 
                     app.state.quit = true;

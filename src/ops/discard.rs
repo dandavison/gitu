@@ -71,7 +71,7 @@ impl OpTrait for Discard {
 
 fn discard_branch(branch: String) -> Action {
     Rc::new(move |app, term| {
-        confirm(app, term, "Really discard? (y or n)")?;
+        confirm(app, term, "Really discard? [y/n]")?;
         super::branch::delete(app, term, &branch)
     })
 }
@@ -114,7 +114,7 @@ fn reverse_index_and_worktree(patch: String) -> Action {
 
 fn confirm_discard(app: &mut App, term: &mut Term) -> Res<()> {
     if app.state.config.general.confirm_discard <= ConfirmDiscardOption::File {
-        confirm(app, term, "Really discard? (y or n)")?;
+        confirm(app, term, "Really discard? [y/n]")?;
     }
     Ok(())
 }

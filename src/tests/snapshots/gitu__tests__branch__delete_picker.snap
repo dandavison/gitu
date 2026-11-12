@@ -11,7 +11,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- 3/3   Delete › █                                                               |
+ 3/3  Delete: █                                                                 |
 ▌bugfix-123                                                                     |
  feature-a                                                                      |
  feature-b                                                                      |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: bcdd5bacd00f9c8d
+styles_hash: 5ee6509281217cf

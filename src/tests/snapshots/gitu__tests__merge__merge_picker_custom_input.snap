@@ -11,7 +11,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- 0/7   Merge › HEAD~2█                                                          |
+ 0/7  Merge: HEAD~2█                                                            |
 ▌HEAD~2                                                                         |
                                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 783bcbfd8c574dfb
+styles_hash: 40d3c253ec38ce36

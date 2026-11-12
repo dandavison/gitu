@@ -21,5 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
-? Branch is not fully merged. Really delete? (y or n) › █                       |
-styles_hash: 5f175d9ea95e9323
+Branch is not fully merged. Really delete? [y/n] █                              |
+styles_hash: 5af8a8f91c9afae8

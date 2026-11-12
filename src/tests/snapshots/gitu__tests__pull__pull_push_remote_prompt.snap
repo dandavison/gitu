@@ -21,5 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
-? Set pushRemote then pull: › █                                                 |
-styles_hash: 11573ebf06a04a
+Set pushRemote then pull: █                                                     |
+styles_hash: 936194174b81e7c7

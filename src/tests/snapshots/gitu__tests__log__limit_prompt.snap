@@ -21,5 +21,5 @@ expression: ctx.redact_buffer()
  o     other        -n Limit number of commits (-n)                             |
  q/esc Quit/Close                                                               |
 ────────────────────────────────────────────────────────────────────────────────|
-? Limit number of commits (default 256): › █                                    |
-styles_hash: 504e7b4e7a077d7e
+Limit number of commits (256): █                                                |
+styles_hash: cab60751aff43861

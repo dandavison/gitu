@@ -6,9 +6,8 @@ use crate::app::State;
 use crate::error::Error;
 use crate::screen;
 use crate::search;
-use crate::style::{Color, Modifier, Style};
+use crate::style::{Modifier, Style};
 use crate::term::TermBackend;
-use crate::text_input::Status;
 use crate::ui::layout::{LayoutItem, Measure, Payload};
 use itertools::Itertools;
 use layout::LayoutTree;
@@ -182,12 +181,6 @@ fn layout_prompt<'a>(layout: &mut UiTree<'a>, state: &'a State, width: usize) {
         return;
     };
 
-    let (symbol, symbol_color) = match state.prompt.state.status {
-        Status::Pending => ("?", Color::Cyan),
-        Status::Aborted => ("✘", Color::Red),
-        Status::Done => ("✔", Color::Green),
-    };
-
     let separator_style = Style::from(&state.config.style.separator);
     let prompt_style = Style::from(&state.config.style.prompt);
 
@@ -202,20 +195,8 @@ fn layout_prompt<'a>(layout: &mut UiTree<'a>, state: &'a State, width: usize) {
         } else if !prompt_data.prompt_text.is_empty() {
             layout_span(
                 layout,
-                (
-                    symbol.into(),
-                    Style {
-                        fg: Some(symbol_color),
-                        ..Style::new()
-                    },
-                ),
+                (format!("{} ", prompt_data.prompt_text).into(), prompt_style),
             );
-            layout_span(layout, (" ".into(), Style::new()));
-            layout_span(
-                layout,
-                (prompt_data.prompt_text.as_ref().into(), prompt_style),
-            );
-            layout_span(layout, (" › ".into(), prompt_style));
         }
         let (before, at_cursor, after) = state.prompt.state.split_at_cursor();
         layout_span(layout, (before.into(), Style::new()));

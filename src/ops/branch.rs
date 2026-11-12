@@ -62,7 +62,7 @@ impl OpTrait for CheckoutNewBranch {
             let branch_name = app.prompt(
                 term,
                 &PromptParams {
-                    prompt: "Create and checkout branch:",
+                    prompt: "Create and checkout branch",
                     ..Default::default()
                 },
             )?;
@@ -128,7 +128,7 @@ pub fn delete(app: &mut App, term: &mut Term, branch_name: &str) -> Res<()> {
     cmd.args(["branch", "-d"]);
 
     if !is_branch_merged(&app.state.repo, branch_name).unwrap_or(false) {
-        app.confirm(term, "Branch is not fully merged. Really delete? (y or n)")?;
+        app.confirm(term, "Branch is not fully merged. Really delete? [y/n]")?;
         cmd.arg("-f");
     }
 
