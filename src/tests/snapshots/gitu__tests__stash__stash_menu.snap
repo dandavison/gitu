@@ -2,7 +2,7 @@
 source: src/tests/stash.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Untracked files                                                                |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  p     pop                                                                      |
  k     drop                                                                     |
  q/esc Quit/Close                                                               |
-styles_hash: 377ad9bf69d48a20
+styles_hash: fb2ee903b2979ada

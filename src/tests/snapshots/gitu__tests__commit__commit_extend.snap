@@ -2,7 +2,7 @@
 source: src/tests/commit.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch and 'origin/main' have diverged,and have 1 and 1 different commits |
 each, respectively.                                                             |
                                                                                 |
@@ -22,4 +22,4 @@ each, respectively.                                                             
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git commit --amend --no-edit                                                  |
-styles_hash: 8471c865337c63cd
+styles_hash: 2d45d09a748d3fe3

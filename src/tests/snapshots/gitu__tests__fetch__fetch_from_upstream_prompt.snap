@@ -2,7 +2,7 @@
 source: src/tests/fetch.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                       Author Name __ |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 ? Set upstream then fetch: › █                                                  |
-styles_hash: e5d62babd37ae543
+styles_hash: 31af9e3487391f8b

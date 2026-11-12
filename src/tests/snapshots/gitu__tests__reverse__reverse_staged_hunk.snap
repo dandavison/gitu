@@ -2,7 +2,7 @@
 source: src/tests/reverse.rs
 expression: out
 ---
- On branch main                                                                 |
+ Branch: main                                                                   |
  Your branch is ahead of 'origin/main' by 1 commit(s).                          |
                                                                                 |
  Unstaged changes (1)                                                           |
@@ -22,7 +22,7 @@ expression: out
 ▌ BAZ                                                                           |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git apply --reverse                                                           |
-styles_hash: ba9069307b47872d
+styles_hash: d4dacc020bffaa97
 
 [file before]
 blahonga

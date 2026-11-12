@@ -2,7 +2,7 @@
 source: src/tests/commit.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
+ Branch: main                                                                   |
  Your branch is ahead of 'origin/main' by 3 commit(s).                          |
                                                                                 |
  Unstaged changes (1)                                                           |
@@ -22,4 +22,4 @@ $ git rebase -i -q --autostash --keep-empty --autosquash                        
 efc77f3bea683ce4ea27f2e9d7d1bdf04c91a57f^                                       |
 Applied autostash.                                                              |
 Created autostash: d682ced                                                      |
-styles_hash: 40b1a49144c1e779
+styles_hash: c4cc20dee0f53912

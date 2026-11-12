@@ -187,7 +187,7 @@ pub(crate) fn layout_item<'a>(
                 SectionHeader::NoBranch => "No branch".into(),
                 SectionHeader::OnBranch(branch) => {
                     if config.general.verbose_branch_status {
-                        format!("On branch {branch}").into()
+                        format!("Branch: {branch}").into()
                     } else {
                         branch.as_str().into()
                     }

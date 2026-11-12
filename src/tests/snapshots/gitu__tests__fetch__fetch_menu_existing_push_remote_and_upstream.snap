@@ -2,7 +2,7 @@
 source: src/tests/fetch.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Recent commits                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  u     from origin                                                              |
  e     from elsewhere                                                           |
  q/esc Quit/Close                                                               |
-styles_hash: 3b2f116b54be63b2
+styles_hash: 8d5b6b23f6506b4c

@@ -2,7 +2,7 @@
 source: src/tests/commit.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Staged changes (1)                                                             |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  F     instant fixup      author)                                               |
  q/esc Quit/Close      -s Add Signed-off-by line (--signoff)                    |
                        -v Show diff of changes to be committed (--verbose)      |
-styles_hash: 4690a19dde7cbfb9
+styles_hash: 7af40ea01b742f8d

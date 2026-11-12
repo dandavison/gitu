@@ -2,7 +2,7 @@
 source: src/tests/pull.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch new-branch                                                           |
+▌Branch: new-branch                                                             |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main new-branch origin/main add initial-file            Author Name __ |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
 ────────────────────────────────────────────────────────────────────────────────|
 $ git branch --set-upstream-to new-branch                                       |
 warning: not setting branch 'new-branch' as its own upstream                    |
-styles_hash: 3f964eeb1cca6c39
+styles_hash: 47df18cd39f7b742

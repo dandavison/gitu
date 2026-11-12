@@ -2,7 +2,7 @@
 source: src/tests/log.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is ahead of 'origin/main' by 3 commit(s).                          |
                                                                                 |
  Recent commits                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
 ────────────────────────────────────────────────────────────────────────────────|
 ! Couldn't find git revision: failed to parse revision specifier - Invalid      |
 pattern ' '; class=Invalid (3); code=InvalidSpec (-12)                          |
-styles_hash: 3a34ae7f25fd827
+styles_hash: 716a5d1a028a8897

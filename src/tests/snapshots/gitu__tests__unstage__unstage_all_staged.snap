@@ -2,7 +2,7 @@
 source: src/tests/unstage.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
+ Branch: main                                                                   |
  Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Untracked files                                                                |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git reset HEAD --                                                             |
-styles_hash: e0692c6beb9dc87a
+styles_hash: 1b1a0a815189a63c

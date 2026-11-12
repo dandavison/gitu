@@ -2,7 +2,7 @@
 source: src/tests/search.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is ahead of 'origin/main' by 3 commit(s).                          |
                                                                                 |
  Recent commits                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 ! No previous search                                                            |
-styles_hash: 1854571c7d0db91d
+styles_hash: 960f867639bb85cb

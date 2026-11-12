@@ -2,7 +2,7 @@
 source: src/tests/push.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is ahead of 'origin/main' by 1 commit(s).                          |
                                                                                 |
  Recent commits                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  u     to origin/main             -F Force (--force)                            |
  e     to elsewhere               -f Force with lease (--force-with-lease)      |
  q/esc Quit/Close                 -h Disable hooks (--no-verify)                |
-styles_hash: ab6a41ee8fc8fc92
+styles_hash: f6a952b668286ddf

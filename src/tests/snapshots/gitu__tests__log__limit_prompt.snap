@@ -2,7 +2,7 @@
 source: src/tests/log.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is ahead of 'origin/main' by 3 commit(s).                          |
                                                                                 |
  Recent commits                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  q/esc Quit/Close                                                               |
 ────────────────────────────────────────────────────────────────────────────────|
 ? Limit number of commits (default 256): › █                                    |
-styles_hash: 15e73bd9294d10
+styles_hash: 504e7b4e7a077d7e

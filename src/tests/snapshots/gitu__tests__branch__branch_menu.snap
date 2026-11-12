@@ -2,7 +2,7 @@
 source: src/tests/branch.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Recent commits                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  K     Delete branch                                                            |
  m     Rename branch                                                            |
  q/esc Quit/Close                                                               |
-styles_hash: 932fdf42b6b7789f
+styles_hash: ded87f2e1a565ba8

@@ -2,7 +2,7 @@
 source: src/tests/unstage.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
+ Branch: main                                                                   |
  Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Untracked files                                                                |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git restore --staged file with space.txt                                      |
-styles_hash: 88229c86af3c34e3
+styles_hash: c1234700da90db2d

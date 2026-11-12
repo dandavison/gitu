@@ -2,7 +2,7 @@
 source: src/tests/commit.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
+ Branch: main                                                                   |
  Your branch is ahead of 'origin/main' by 2 commit(s).                          |
                                                                                 |
  Recent commits                                                                 |
@@ -22,4 +22,4 @@ $ git commit --fixup efc77f3bea683ce4ea27f2e9d7d1bdf04c91a57f                   
  1 file changed, 1 insertion(+), 1 deletion(-)                                  |
 $ git rebase -i -q --autostash --keep-empty --autosquash                        |
 efc77f3bea683ce4ea27f2e9d7d1bdf04c91a57f^                                       |
-styles_hash: 24705e923581dd7d
+styles_hash: 5a1408121ed6e9ff

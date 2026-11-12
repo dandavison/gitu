@@ -59,7 +59,7 @@ pub const LOG_FILE_NAME: &str = "gitu.log";
 //                  │
 //                  ▼
 //                 ┌──────────────────────────────────────────────────────────────────┐
-//        Item───┬─► On branch master                                                 │
+//        Item───┬─► Branch: master                                                   │
 //        Item   └─► Your branch is up to date with 'origin/master'.                  │
 //        ...      │                                                                  │
 //                 │ Untracked files                                                  │

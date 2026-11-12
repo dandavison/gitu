@@ -2,7 +2,7 @@
 source: src/tests/branch.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch new                                                                  |
+▌Branch: new                                                                    |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main new origin/main add initial-file                   Author Name __ |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
 ────────────────────────────────────────────────────────────────────────────────|
 $ git checkout -b new                                                           |
 Switched to a new branch 'new'                                                  |
-styles_hash: b25c3a955ed49870
+styles_hash: b757de43a0673f7a

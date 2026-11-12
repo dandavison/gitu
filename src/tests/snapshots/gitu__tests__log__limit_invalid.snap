@@ -2,7 +2,7 @@
 source: src/tests/log.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is ahead of 'origin/main' by 3 commit(s).                          |
                                                                                 |
  Recent commits                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 ! Value must be a number greater than 0                                         |
-styles_hash: 5c2a82023115d6cc
+styles_hash: b7f7a4d0ba97d8c

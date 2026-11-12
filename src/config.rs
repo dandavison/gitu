@@ -74,8 +74,8 @@ pub struct GeneralConfig {
     /// stops a `git log -p` over a whole history from showing nothing for
     /// minutes. What is past the limit is dropped, not deferred.
     pub max_input_bytes: u64,
-    /// Whether the branch section uses git's wording - 'On branch {name}' over
-    /// a line placing it relative to its upstream - or the branch name alone.
+    /// Whether the branch section is 'Branch: {name}' over a line placing it
+    /// relative to its upstream, or the branch name alone.
     pub verbose_branch_status: bool,
     /// Globs whose files are dropped from a paged view, as if the patch never
     /// had them. Generated code and fixtures recur, so hiding them is worth

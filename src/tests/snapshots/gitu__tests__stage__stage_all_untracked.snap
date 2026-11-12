@@ -2,7 +2,7 @@
 source: src/tests/stage.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
+ Branch: main                                                                   |
  Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
 ▌Staged changes (2)                                                             |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git add file-a file-b                                                         |
-styles_hash: 84ff78ad9437dc67
+styles_hash: 519bd07eb6550082

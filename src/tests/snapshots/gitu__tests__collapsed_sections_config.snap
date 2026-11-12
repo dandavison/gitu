@@ -2,7 +2,7 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main…                                                                |
+▌Branch: main…                                                                  |
                                                                                 |
  Untracked files…                                                               |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: c1b5d9b336d37d55
+styles_hash: 44802af4ff7b6b2b

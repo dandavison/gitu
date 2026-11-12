@@ -26,8 +26,8 @@ mouse_scroll_lines = 3
 # until all of it has been read and rendered.
 max_input_bytes = 2_000_000
 
-# The branch section is git's wording: 'On branch {name}' over a line placing
-# the branch relative to its upstream. Off, it is the branch name alone.
+# The branch section is 'Branch: {name}' over a line placing the branch
+# relative to its upstream. Off, it is the branch name alone.
 verbose_branch_status = true
 
 # Files to drop from a paged view (`gitu --pager`), as if the patch never had

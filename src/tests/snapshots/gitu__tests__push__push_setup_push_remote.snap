@@ -2,7 +2,7 @@
 source: src/tests/push.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Recent commits                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
  u     to origin/main   -F Force (--force)                                      |
  e     to elsewhere     -f Force with lease (--force-with-lease)                |
  q/esc Quit/Close       -h Disable hooks (--no-verify)                          |
-styles_hash: efce8527ddf6e007
+styles_hash: aaf6d372e2f60811

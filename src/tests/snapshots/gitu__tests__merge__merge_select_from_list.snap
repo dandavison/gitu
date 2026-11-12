@@ -2,7 +2,7 @@
 source: src/tests/merge.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is ahead of 'origin/main' by 1 commit(s).                          |
                                                                                 |
  Recent commits                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git merge feature-a                                                           |
-styles_hash: d2bed94dbb249409
+styles_hash: d6aa62780b7f8947
