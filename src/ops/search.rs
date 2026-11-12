@@ -69,6 +69,7 @@ fn prompt_search(app: &mut App, term: &mut Term, direction: SearchDirection) -> 
         &PromptParams {
             prompt,
             bare: true,
+            history: Some(crate::prompt::HistoryKind::Search),
             ..Default::default()
         },
     ) {

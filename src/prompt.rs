@@ -19,6 +19,7 @@ pub(crate) struct PromptData {
 pub(crate) enum HistoryKind {
     GitCommand,
     FilePatterns,
+    Search,
 }
 
 pub(crate) struct Prompt {
@@ -277,6 +278,7 @@ fn history_path(dir: &Path, kind: HistoryKind) -> PathBuf {
     dir.join(match kind {
         HistoryKind::GitCommand => "git-command-history",
         HistoryKind::FilePatterns => "file-pattern-history",
+        HistoryKind::Search => "search-history",
     })
 }
 
