@@ -252,3 +252,15 @@ fn status_with_stat_rows_is_drawn_before_the_renderer_reaches_its_files() {
     let buffer = ctx.redact_buffer();
     assert!(buffer.contains("f12.rs"), "{buffer}");
 }
+
+/// The branch is labelled as a field is, not in a sentence.
+#[test]
+fn the_branch_is_labelled_branch() {
+    let mut ctx = setup_clone!();
+    ctx.init_app();
+    let buffer = ctx.redact_buffer();
+    assert!(
+        buffer.lines().next().unwrap().contains("Branch: main "),
+        "{buffer}"
+    );
+}
