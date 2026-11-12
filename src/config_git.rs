@@ -4,7 +4,7 @@
 //! A key's place in gitu's config is its subsection, split at dots, then its
 //! name, with dashes for underscores: `[delta-tui "style.menu"] active-arg` is
 //! `style.menu.active_arg`. A key with no subsection is under `general`. A
-//! feature key keeps its name, which is the feature's.
+//! feature key keeps its name, which is the feature's, and a command its own.
 //!
 //! Git config values are untyped, so each takes the type of gitu's default for
 //! it: a boolean or integer is read as git reads one, a list is the key given
@@ -26,6 +26,9 @@ pub(crate) const SECTION: &str = "delta-tui";
 
 /// Where feature keys are in gitu's config.
 pub(crate) const FEATURE_KEYS: &str = "general.diff_renderer.feature_keys";
+
+/// Where commands are in gitu's config.
+pub(crate) const COMMANDS: &str = "general.commands";
 
 /// Where feature keys are in git config.
 pub(crate) const FEATURE_KEYS_SECTION: &str = "delta-tui.general.diff-renderer.feature-keys";
@@ -114,7 +117,7 @@ fn config_path(name: &str) -> Vec<String> {
         None => ("general", key),
     };
     let mut path: Vec<String> = subsection.split('.').map(underscored).collect();
-    if path.join(".") == FEATURE_KEYS {
+    if [FEATURE_KEYS, COMMANDS].contains(&path.join(".").as_str()) {
         path.push(variable.to_owned());
     } else {
         path.push(underscored(variable));

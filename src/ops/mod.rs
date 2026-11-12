@@ -14,6 +14,7 @@ pub(crate) mod apply;
 pub(crate) mod blame;
 pub(crate) mod branch;
 pub(crate) mod cherry_pick;
+pub(crate) mod command;
 pub(crate) mod commit;
 pub(crate) mod copy_hash;
 pub(crate) mod discard;

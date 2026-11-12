@@ -472,31 +472,45 @@ impl OpTrait for RendererFeatures {
                 &app.state.config.general.diff_renderer.features,
                 &app.state.repo.config().map_err(Error::ReadGitConfig)?,
             )?;
-            if offered.is_empty() {
+            let commands: Vec<String> = app.state.config.general.commands.keys().cloned().collect();
+            if offered.is_empty() && commands.is_empty() {
                 app.display_error("No renderer features are configured");
                 return Ok(());
             }
+            // The features, then the commands, which a key runs rather than
+            // toggles.
+            let names: Vec<&String> = offered.iter().chain(&commands).collect();
+            let is_command = |name: &str| commands.iter().any(|command| command == name);
+            let title = if commands.is_empty() {
+                "Features"
+            } else {
+                "Features and commands"
+            };
 
             let mut cursor = 0;
             loop {
-                let picker = PickerState::new("Features", feature_items(app, &offered), false)
+                let items = feature_items(app, &offered)
+                    .into_iter()
+                    .chain(command_items(app))
+                    .collect();
+                let picker = PickerState::new(title, items, false)
                     .assigning_keys()
                     .with_cursor(cursor);
                 match app.pick_or_set_key(term, picker)? {
                     None => return Ok(()),
+                    Some(Picked::Item(picked)) if is_command(picked.display()) => {
+                        return crate::ops::command::run(app, term, picked.display());
+                    }
                     Some(Picked::Item(picked)) => return toggle_feature(app, picked.display()),
                     Some(Picked::KeySet(key, picked)) => {
-                        let feature = picked.display();
-                        cursor = offered
-                            .iter()
-                            .position(|offered| offered == feature)
-                            .unwrap_or(0);
+                        let name = picked.display();
+                        cursor = names.iter().position(|held| *held == name).unwrap_or(0);
                         // Space enables or disables the feature and keeps the list open; any
-                        // other key becomes the feature's key.
-                        if key == ' ' {
-                            toggle_feature(app, feature)?;
-                        } else {
-                            set_feature_key(app, feature, key);
+                        // other key becomes the feature's or command's key.
+                        if key != ' ' {
+                            set_feature_key(app, name, key);
+                        } else if !is_command(name) {
+                            toggle_feature(app, name)?;
                         }
                     }
                 }
@@ -621,6 +635,23 @@ fn feature_items(app: &App, offered: &[String]) -> Vec<PickerItem> {
         .collect()
 }
 
+/// Each command, marked `$` as a shell command, beside its key if it has one.
+fn command_items(app: &App) -> Vec<PickerItem> {
+    app.state
+        .config
+        .general
+        .commands
+        .iter()
+        .map(|(name, command)| {
+            let key = app.state.feature_keys.get(name).copied().unwrap_or(' ');
+            PickerItem::new(
+                format!("$ {key} {name}  {command}"),
+                PickerData::Item(name.clone()),
+            )
+        })
+        .collect()
+}
+
 pub(crate) fn toggle_feature(app: &mut App, feature: &str) -> Res<()> {
     let enabled = enabled_by_config(app);
     app.state.features = toggled(
@@ -657,9 +688,9 @@ fn enabled_by_config(app: &App) -> Vec<String> {
         .get(dir)
 }
 
-/// Make `key` toggle `feature` at the top level, in this session and, by saving
-/// it to the config file, the next. `feature`'s own key unsets it, and a key
-/// bound already is refused.
+/// Make `key` toggle `feature`, or run the command of that name, at the top
+/// level, in this session and, by saving it to the config file, the next.
+/// `feature`'s own key unsets it, and a key bound already is refused.
 fn set_feature_key(app: &mut App, feature: &str, key: char) {
     let key = if app.state.feature_keys.get(feature) == Some(&key) {
         None

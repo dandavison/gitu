@@ -60,10 +60,11 @@ status_cursor_on_changes = true
 # metadata the renderer emits, not from how the row looks.
 diff_renderer.features = ["side-by-side", "line-numbers", "plus-minus-markers", "*"]
 
-# Top-level keys that toggle features. A key already bound at the top level is
-# refused. Feature keys in your config replace these, rather than adding to
-# them. In the `renderer_features` list, a letter sets the selected feature's
-# key, the same letter again unsets it, and Gitu writes them all here.
+# Top-level keys that toggle features, or run commands (`commands` below), by
+# name. A key already bound at the top level is refused. Feature keys in your
+# config replace these, rather than adding to them. In the `renderer_features`
+# list, a letter sets the selected feature's or command's key, the same letter
+# again unsets it, and Gitu writes them all here.
 diff_renderer.feature_keys = { side-by-side = "S", line-numbers = "L" }
 
 # The theme overlaid on your delta configuration, after the features above, as
@@ -109,6 +110,17 @@ read_only = "auto"
 # -p`, and a commit opened from the log. A patch still arriving when the first
 # screen is drawn is taken not to fit.
 start_folded = false
+
+# Shell commands, by name, that a key from `diff_renderer.feature_keys` runs,
+# as `renderer_features` lists them. `{commit}`, `{file}` and `{branch}` are
+# filled in, quoted for the shell, from what is under the cursor; a command
+# using one that is not there is not run. It runs in the repository's root,
+# while gitu stays usable, as a fetch does, and the screens are rebuilt when it
+# exits. Its output is not shown; one that fails says so, with its exit code.
+# In git config:
+#   [delta-tui "general.commands"]
+#       open-pr = gh pr view --web {commit}
+commands = {}
 
 # When to prompt for discard confirmation. Options:
 # "line"  - always prompt even for individual lines (default),

@@ -108,6 +108,11 @@ pub struct GeneralConfig {
     /// Whether gitu leaves the repository and git config as it finds them.
     #[serde(default)]
     pub read_only: ReadOnly,
+    /// Shell commands, by name, run by the keys `diff_renderer.feature_keys`
+    /// gives them, with `{commit}`, `{file}` and `{branch}` filled in from what
+    /// is under the cursor.
+    #[serde(default)]
+    pub commands: BTreeMap<String, String>,
 }
 
 /// Whether gitu runs commands that change the repository (stage, commit,
@@ -181,7 +186,8 @@ pub struct DiffRendererConfig {
     #[serde(default)]
     pub features: Vec<String>,
     /// Keys that toggle a feature from `renderer_features` before anything is
-    /// typed to filter it, by feature.
+    /// typed to filter it, by feature, or run a command from
+    /// `general.commands`, by its name.
     #[serde(default)]
     pub feature_keys: BTreeMap<String, char>,
     /// The theme overlaid on the user's own delta configuration: a feature that
