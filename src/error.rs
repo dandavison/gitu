@@ -167,14 +167,16 @@ impl Display for Error {
             Error::CouldntAwaitCmd(e) => f.write_fmt(format_args!("Couldn't await command: {e}")),
             Error::NoRepoWorkdir => f.write_str("No repository working directory"),
             Error::SpawnCmd(e) => f.write_fmt(format_args!("Failed to spawn command: {e}")),
-            // The command last, so that it can be copied from the line whole.
+            // The command on a line of its own, so that it can be copied whole.
             Error::CmdBadExit(command, code, stderr) => {
+                writeln!(f, "{command}")?;
                 match code {
-                    Some(code) => write!(f, "exit code {code}: {command}")?,
-                    None => write!(f, "ended by a signal: {command}")?,
+                    Some(code) => write!(f, "exit code: {code}")?,
+                    None => write!(f, "ended by a signal")?,
                 }
-                for line in stderr.trim_end().lines() {
-                    write!(f, "\n{line}")?;
+                let stderr = stderr.trim_end();
+                if !stderr.is_empty() {
+                    write!(f, "\nstderr:\n{stderr}")?;
                 }
                 Ok(())
             }

@@ -15,12 +15,12 @@ expression: ctx.redact_buffer()
  487ec57 main modify conflict-file                               Author Name __ |
  415b98a add conflict-file                                       Author Name __ |
  b66a0bf origin/main add initial-file                            Author Name __ |
-                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git cherry-pick --continue                                                    |
 error: Committing is not possible because you have unmerged files.              |
 hint: Fix them up in the work tree, and then use 'git add/rm <file>'            |
 hint: as appropriate to mark resolution and make a commit.                      |
 fatal: Exiting because of an unresolved conflict.                               |
-! exit code 128: git cherry-pick --continue                                     |
-styles_hash: 3ecf537735bd00b4
+! git cherry-pick --continue                                                    |
+  exit code: 128                                                                |
+styles_hash: 7d1b92e15a58a84f

@@ -16,11 +16,11 @@ expression: ctx.redact_buffer()
 ▌initial-file                                                                   |
 ▌@@ -1 +1 @@                                                                    |
 ▌-hello                                                                         |
-▌+added                                                                         |
-                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git apply --reverse --index --recount                                         |
 error: initial-file: does not match index                                       |
-! exit code 1: git apply --reverse --index --recount                            |
+! git apply --reverse --index --recount                                         |
+  exit code: 1                                                                  |
+  stderr:                                                                       |
   error: initial-file: does not match index                                     |
-styles_hash: 4d58957cbf3820c5
+styles_hash: 741aa8b390027264
