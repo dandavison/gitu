@@ -86,3 +86,26 @@ fn the_feature_list_lists_commands() {
         ctx.redact_buffer()
     );
 }
+
+/// A command that fails says how, with what it wrote to stderr, and shows the
+/// command as it was written, filled in, to be pasted into a shell: not the
+/// `sh -c` that runs it.
+#[test]
+fn a_failing_command_shows_its_stderr_and_the_command_as_written() {
+    let ctx = setup_clone!();
+    commit(&ctx.dir, "a", "");
+    let mut ctx = with_command(ctx, "fail", "echo {commit} oops >&2; exit 3", 'o');
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("llo"));
+
+    let head = run(&ctx.dir, &["git", "rev-parse", "HEAD"]);
+    let head = head.trim();
+    let buffer = ctx.redact_buffer();
+    assert!(
+        buffer.contains(&format!("exit code 3: echo {head} oops >&2; exit 3")),
+        "{buffer}"
+    );
+    assert!(buffer.contains(&format!("  {head} oops")), "{buffer}");
+    assert!(!buffer.contains("sh -c"), "{buffer}");
+}
