@@ -98,14 +98,14 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
     // the other end of a pipe exits as soon as its output fits in the pipe, and
     // cannot be found once it has. Reading to EOF is always too late — EOF is
     // git closing the pipe.
-    let git_argv = args.pager.then(calling_process::paging_for).flatten();
+    let paging = pages(args, io::stdin().is_terminal());
+    let git_argv = paging.then(calling_process::paging_for).flatten();
     log::debug!("Paging the output of {git_argv:?}");
 
     log::debug!("Opening repo");
     let repo = open_repo_from_env()?;
 
-    let piped = args
-        .pager
+    let piped = paging
         .then(|| read_piped_input(git_argv, repo.workdir(), config.general.max_input_bytes))
         .transpose()?;
 
@@ -130,6 +130,12 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
     let result = run_app(&mut app, args, term);
     term.reset_term(&config).map_err(Error::Term)?;
     result
+}
+
+/// Whether gitu browses a patch on stdin, as git's pager, rather than opening
+/// the status view or a subcommand's screen.
+pub(crate) fn pages(args: &cli::Args, _stdin_is_terminal: bool) -> bool {
+    args.pager
 }
 
 fn run_app(app: &mut app::App, args: &cli::Args, term: &mut Term) -> Res<i32> {
