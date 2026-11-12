@@ -258,7 +258,10 @@ root.search_backward = []
 root.search_next = ["n"]
 root.search_previous = ["N"]
 root.show_refs = ["Y"]
-root.show = ["enter", "right"]
+# Enter opens a file or hunk in the editor; right stays in gitu, unfolding a
+# folded file or hunk instead.
+root.show = ["enter"]
+root.show_or_unfold = ["right"]
 root.discard = ["K"]
 root.stage = ["s"]
 root.unstage = ["u"]
