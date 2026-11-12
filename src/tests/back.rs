@@ -1,4 +1,5 @@
 use super::*;
+use crate::item_data::ItemData;
 
 #[test]
 fn left_goes_back_to_the_screen_before() {
@@ -78,4 +79,53 @@ fn left_goes_back_from_a_hunk_the_screen_opened_unfolded() {
 
     ctx.update(&mut app, keys("<left>"));
     assert_eq!(app.state.screens.len(), 2);
+}
+
+/// Left folds what right unfolded from anywhere inside it, moving the cursor
+/// back onto it.
+#[test]
+fn left_from_inside_what_right_unfolded_folds_it() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("ll<right><alt+left><tab><right><down>"));
+    let screen = app.screen();
+    assert!(matches!(
+        screen.get_selected_item().data,
+        ItemData::Hunk { .. }
+    ));
+
+    ctx.update(&mut app, keys("<left>"));
+    assert_eq!(app.state.screens.len(), 3);
+    let screen = app.screen();
+    assert!(matches!(
+        screen.get_selected_item().data,
+        ItemData::Delta { .. }
+    ));
+    assert!(screen.is_collapsed(screen.get_selected_item()));
+}
+
+#[test]
+fn left_from_a_line_of_a_file_right_unfolded_folds_the_file() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "a", "a\n");
+    fs::write(ctx.dir.join("a"), "changed\n").unwrap();
+    ctx.config().general.status_cursor_on_changes = true;
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("<right><down><down>"));
+    assert!(matches!(
+        app.screen().get_selected_item().data,
+        ItemData::HunkLine { .. }
+    ));
+
+    ctx.update(&mut app, keys("<left>"));
+    assert!(matches!(
+        app.screen().get_selected_item().data,
+        ItemData::Delta { .. }
+    ));
+    assert!(
+        !ctx.redact_buffer().contains("changed"),
+        "{}",
+        ctx.redact_buffer()
+    );
 }
