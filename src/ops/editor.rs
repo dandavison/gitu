@@ -464,8 +464,16 @@ pub(crate) struct RendererThemes;
 impl OpTrait for RendererThemes {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {
         Some(Rc::new(|app: &mut App, term: &mut Term| {
+            // The git config the renderer reads, since a theme it cannot find would change
+            // nothing.
+            let dir = app.state.repo.workdir().unwrap_or(app.state.repo.path());
+            let git_config = match app.state.config.general.diff_renderer.git_config.open(dir) {
+                Some(Some(git_config)) => git_config,
+                Some(None) => git2::Config::new().map_err(Error::ReadGitConfig)?,
+                None => app.state.repo.config().map_err(Error::ReadGitConfig)?,
+            };
             let themes = crate::diff_renderer::themes(
-                &app.state.repo.config().map_err(Error::ReadGitConfig)?,
+                &git_config,
                 &app.state.config.general.diff_renderer.builtin_themes,
             )?;
             if themes.is_empty() {
