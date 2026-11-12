@@ -32,6 +32,46 @@ fn up_brings_back_earlier_searches() {
     assert_eq!(ctx.prompt_line(), "/first|");
 }
 
+/// As in neovim, the cursor moves to the first match while the query is being
+/// typed, and back to where it was if the search is called off.
+#[test]
+fn the_cursor_moves_to_a_match_while_typing() {
+    let mut ctx = setup(setup_clone!());
+    let mut app = ctx.init_app();
+    let start = cursor_row(&ctx);
+
+    ctx.update(&mut app, keys("/second"));
+    assert!(
+        cursor_row(&ctx).contains("add secondfile"),
+        "{}",
+        ctx.redact_buffer()
+    );
+
+    ctx.update(&mut app, keys("/second<esc>"));
+    assert_eq!(cursor_row(&ctx), start);
+}
+
+/// ... and enter leaves it on that match, rather than going on to the next.
+#[test]
+fn enter_keeps_the_match_found_while_typing() {
+    let mut ctx = setup(setup_clone!());
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("/file<enter>"));
+    assert!(
+        cursor_row(&ctx).contains("add thirdfile"),
+        "{}",
+        ctx.redact_buffer()
+    );
+}
+
+fn cursor_row(ctx: &TestContext) -> String {
+    ctx.redact_buffer()
+        .lines()
+        .find(|row| row.starts_with('▌'))
+        .unwrap_or_default()
+        .to_string()
+}
+
 #[test]
 fn search_prompt() {
     snapshot!(setup(setup_clone!()), "/");
