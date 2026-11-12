@@ -72,3 +72,59 @@ fn a_view_needing_a_commit_is_not_opened_off_one() {
         ctx.redact_buffer()
     );
 }
+
+/// `H` lists features, commands and views in three columns, each under its
+/// heading.
+#[test]
+fn the_feature_list_has_a_column_each_for_features_commands_and_views() {
+    let ctx = setup_clone!();
+    let mut ctx = with_view(ctx, "subject", "git show {commit}", 'o');
+    ctx.config()
+        .general
+        .commands
+        .insert("record".to_owned(), "echo > recorded".to_owned());
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("H"));
+
+    let buffer = ctx.redact_buffer();
+    let headings = buffer
+        .lines()
+        .find(|row| row.contains("Features"))
+        .unwrap_or_default();
+    assert!(
+        headings.contains("Commands") && headings.contains("Views"),
+        "{buffer}"
+    );
+    assert!(buffer.contains("o subject"), "{buffer}");
+    assert!(!buffer.contains("git show {commit}"), "{buffer}");
+}
+
+/// `right` moves to the next column: enter on a command runs it, and on a view
+/// opens it.
+#[test]
+fn right_moves_to_the_commands_and_then_the_views() {
+    let ctx = setup_clone!();
+    commit(&ctx.dir, "a", "");
+    let mut ctx = with_view(ctx, "subject", "git show --format=viewed-%s {commit}", 'o');
+    ctx.config()
+        .general
+        .commands
+        .insert("record".to_owned(), "echo ran > recorded".to_owned());
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("llH<right><enter>"));
+    assert_eq!(
+        fs::read_to_string(ctx.dir.join("recorded")).unwrap(),
+        "ran\n",
+        "{}",
+        ctx.redact_buffer()
+    );
+
+    ctx.update(&mut app, keys("H<right><right><enter>"));
+    assert!(
+        ctx.redact_buffer().contains("viewed-add a"),
+        "{}",
+        ctx.redact_buffer()
+    );
+}
