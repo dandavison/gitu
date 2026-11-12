@@ -153,3 +153,24 @@ fn a_command_gets_the_width_and_features_gitu_draws_with() {
     assert!(recorded.starts_with("78 "), "{recorded:?}");
     assert!(recorded.contains("side-by-side"), "{recorded:?}");
 }
+
+/// A command may write more than a pipe holds. Were its output read only once
+/// it exits, it would wait forever for room to write; here the command stops
+/// its writer after 5s, and does not record that it finished.
+#[test]
+fn a_command_writing_much_output_finishes() {
+    let ctx = setup_clone!();
+    let mut ctx = with_command(
+        ctx,
+        "write",
+        "yes | head -c 1000000 & w=$!; \
+         (sleep 5; kill $w) >/dev/null 2>&1 & \
+         wait $w && touch finished",
+        'o',
+    );
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("o"));
+
+    assert!(ctx.dir.join("finished").exists(), "{}", ctx.redact_buffer());
+}
