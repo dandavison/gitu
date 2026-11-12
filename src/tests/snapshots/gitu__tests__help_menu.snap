@@ -5,13 +5,13 @@ expression: ctx.redact_buffer()
 ▌Branch: main                                                                                                                                         |
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────|
  Commands                                                           Submenus          Section                                                         |
- &                Files                   shift+down Select down    A   Cherry-pick   tab Fold                                                        |
- +                Wider context           shift+tab  Fold all       b   Branch                                                                        |
- -                Narrower context        shift+up   Select up      c   Commit                                                                        |
- /                Search                  T          Themes         f   Fetch                                                                         |
- :                Edit git command        U          Diff context   F   Pull                                                                          |
- alt+h/alt+left   Parent section          Y          Show Refs      h/? Help                                                                          |
- alt+j/alt+down   Next section                                      l   Log                                                                           |
+ &                Files                   q/esc      Quit/Close     A   Cherry-pick   tab Fold                                                        |
+ +                Wider context           shift+down Select down    b   Branch                                                                        |
+ -                Narrower context        shift+tab  Fold all       c   Commit                                                                        |
+ /                Search                  shift+up   Select up      f   Fetch                                                                         |
+ :                Edit git command        T          Themes         F   Pull                                                                          |
+ alt+h/alt+left   Parent section          U          Diff context   h/? Help                                                                          |
+ alt+j/alt+down   Next section            Y          Show Refs      l   Log                                                                           |
  alt+k/alt+up     Prev section                                      m   Merge                                                                         |
  ctrl+d           Scroll half page down                             M   Remote                                                                        |
  ctrl+e           Scroll view down                                  P   Push                                                                          |
@@ -27,9 +27,9 @@ expression: ctx.redact_buffer()
  H                Hotkeys                                                                                                                             |
  j/down           Down line                                                                                                                           |
  k/up             Up line                                                                                                                             |
+ left             Back                                                                                                                                |
  n                Next match                                                                                                                          |
  N                Previous match                                                                                                                      |
  pagedown/space   Scroll page down                                                                                                                    |
  pageup/backspace Scroll page up                                                                                                                      |
- q/esc            Quit/Close                                                                                                                          |
-styles_hash: ac3cc45f246f6856
+styles_hash: eae8d69753a581d3

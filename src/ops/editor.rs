@@ -46,6 +46,32 @@ impl OpTrait for Quit {
     }
 }
 
+/// Closes the screen on top, as quit does, but on the first screen does nothing
+/// rather than leave gitu.
+pub(crate) struct Back;
+impl OpTrait for Back {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        Some(Rc::new(|app, _term| {
+            let menu = app
+                .state
+                .pending_menu
+                .as_ref()
+                .map(|pending_menu| pending_menu.menu);
+
+            if menu == app.base_menu() && app.state.screens.len() > 1 {
+                app.state.screens.pop();
+                app.screen_mut().come_back()?;
+            }
+
+            Ok(())
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        "Back".into()
+    }
+}
+
 pub(crate) struct OpenMenu(pub crate::menu::Menu);
 impl OpTrait for OpenMenu {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {

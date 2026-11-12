@@ -17,9 +17,9 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- Cherry-pick                   Arguments                                        |
- a     Abort                   -e Edit commit message (--edit)                  |
- c     Continue                -n Don't commit (--no-commit)                    |
- A     Cherry-pick commit(s)   -s Add Signed-off-by lines (--signoff)           |
- q/esc Quit/Close                                                               |
-styles_hash: 46a0baf4376b5a3d
+ Cherry-pick                        Arguments                                   |
+ a          Abort                   -e Edit commit message (--edit)             |
+ c          Continue                -n Don't commit (--no-commit)               |
+ A          Cherry-pick commit(s)   -s Add Signed-off-by lines (--signoff)      |
+ q/esc/left Quit/Close                                                          |
+styles_hash: d20f83eae4720339

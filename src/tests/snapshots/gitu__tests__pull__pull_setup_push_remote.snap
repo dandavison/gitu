@@ -17,9 +17,9 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- Pull                     Arguments                                             |
- p     from origin        -r Rebase local commits (--rebase)                    |
- u     from origin/main                                                         |
- e     from elsewhere                                                           |
- q/esc Quit/Close                                                               |
-styles_hash: 540941a16273e4eb
+ Pull                          Arguments                                        |
+ p          from origin        -r Rebase local commits (--rebase)               |
+ u          from origin/main                                                    |
+ e          from elsewhere                                                      |
+ q/esc/left Quit/Close                                                          |
+styles_hash: 1d04a477717ece9

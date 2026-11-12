@@ -17,9 +17,9 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- Merge                Arguments                                                 |
- m       merge        -f Fast-forward only (--ff-only)                          |
- a       abort        -n No fast-forward (--no-ff)                              |
- c       continue                                                               |
- q/<esc> Quit/Close                                                             |
-styles_hash: e6c5b9659f26bd39
+ Merge                     Arguments                                            |
+ m            merge        -f Fast-forward only (--ff-only)                     |
+ a            abort        -n No fast-forward (--no-ff)                         |
+ c            continue                                                          |
+ q/<esc>/left Quit/Close                                                        |
+styles_hash: cc906aa59723af2c

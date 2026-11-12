@@ -18,8 +18,8 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
  Remote                                                                         |
- a     add remote                                                               |
- K     remove remote                                                            |
- r     rename remote                                                            |
- q/esc Quit/Close                                                               |
-styles_hash: 27653a37658b7822
+ a          add remote                                                          |
+ K          remove remote                                                       |
+ r          rename remote                                                       |
+ q/esc/left Quit/Close                                                          |
+styles_hash: ba74ca1103463a2e

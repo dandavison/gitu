@@ -14,12 +14,12 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- Commit                Arguments                                                |
- c     Commit          -a Stage all modified and deleted files (--all)          |
- a     amend           -e Allow empty commit (--allow-empty)                    |
- e     extend          -n Disable hooks (--no-verify)                           |
- f     fixup           -R Claim authorship and reset author date (--reset-      |
- F     instant fixup      author)                                               |
- q/esc Quit/Close      -s Add Signed-off-by line (--signoff)                    |
-                       -v Show diff of changes to be committed (--verbose)      |
-styles_hash: 7af40ea01b742f8d
+ Commit                     Arguments                                           |
+ c          Commit          -a Stage all modified and deleted files (--all)     |
+ a          amend           -e Allow empty commit (--allow-empty)               |
+ e          extend          -n Disable hooks (--no-verify)                      |
+ f          fixup           -R Claim authorship and reset author date (--reset- |
+ F          instant fixup      author)                                          |
+ q/esc/left Quit/Close      -s Add Signed-off-by line (--signoff)               |
+                            -v Show diff of changes to be committed (--verbose) |
+styles_hash: 9265c9bfadd91be
