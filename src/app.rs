@@ -841,6 +841,7 @@ impl App {
 
         loop {
             let event = term.read_event()?;
+            let was = self.state.prompt.state.value.clone();
             self.handle_event(term, event)?;
 
             if self.state.prompt.state.status == text_input::Status::Done {
@@ -851,6 +852,12 @@ impl App {
                 return Ok(value);
             } else if self.state.prompt.state.status == text_input::Status::Aborted {
                 return Err(Error::PromptAborted);
+            }
+            if let Some(on_edit) = &params.on_edit
+                && self.state.prompt.state.value != was
+            {
+                let value = self.state.prompt.state.value.clone();
+                on_edit(self, &value);
             }
 
             self.redraw_now(term)?;
@@ -1265,6 +1272,7 @@ fn write_child_output_to_log(
 }
 
 type DefaultFn = Box<dyn Fn(&App) -> Option<String>>;
+type EditFn = Box<dyn Fn(&mut App, &str)>;
 
 pub(crate) struct PromptParams {
     pub prompt: &'static str,
@@ -1277,6 +1285,8 @@ pub(crate) struct PromptParams {
     /// Draw `prompt` alone in front of the line typed on, as less and vim draw
     /// `/` for a search, rather than as a question.
     pub bare: bool,
+    /// Called with the answer each time it is edited, before it is given.
+    pub on_edit: Option<EditFn>,
 }
 
 impl Default for PromptParams {
@@ -1288,6 +1298,7 @@ impl Default for PromptParams {
             prefill: false,
             history: None,
             bare: false,
+            on_edit: None,
         }
     }
 }

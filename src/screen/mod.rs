@@ -40,6 +40,14 @@ pub(crate) enum NavMode {
     IncludeSubLines,
 }
 
+/// See [`Screen::place`].
+#[derive(Clone)]
+pub(crate) struct Place {
+    cursor: usize,
+    scroll: Scroll,
+    collapsed: HashSet<u64>,
+}
+
 /// See [`Screen::returning_to`].
 struct ReturningTo {
     /// The item's lineage (see [`Screen::lineage`]).
@@ -1498,8 +1506,8 @@ impl Screen {
     /// As [`Self::select_matching`], but the rows stay where they are on screen:
     /// the view scrolls only as far as it takes to bring the cursor, and the
     /// selectable items either side of it, into it whole, as moving to each
-    /// would, where the screen has room. An item being moved through a list then shows what it would pass
-    /// next.
+    /// would, where the screen has room. An item being moved through a list
+    /// then shows what it would pass next.
     pub(crate) fn select_matching_with_neighbours_in_view<F: Fn(&ItemData) -> bool>(
         &mut self,
         predicate: F,
@@ -1623,6 +1631,23 @@ impl Screen {
         layout
             .leaf_runs()
             .any(|run| matcher.is_match(run_text.read(run.map(|(leaf, span)| (leaf, span.text())))))
+    }
+
+    /// Where the view is, to go back to: the cursor, the scroll, and what is
+    /// folded.
+    pub(crate) fn place(&self) -> Place {
+        Place {
+            cursor: self.cursor,
+            scroll: self.scroll,
+            collapsed: self.collapsed.clone(),
+        }
+    }
+
+    pub(crate) fn go_back_to(&mut self, place: Place) {
+        self.cursor = place.cursor;
+        self.scroll = place.scroll;
+        self.collapsed = place.collapsed;
+        self.invalidate();
     }
 
     pub(crate) fn clear_search(&mut self) {
