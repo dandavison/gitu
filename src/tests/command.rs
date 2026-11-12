@@ -133,3 +133,23 @@ fn a_command_key_runs_the_command_on_the_git_command_shown() {
     let recorded = fs::read_to_string(ctx.dir.join("recorded")).unwrap_or_default();
     assert!(recorded.starts_with("git log"), "{recorded:?}");
 }
+
+/// A command is given the width and the features gitu draws with, as delta
+/// takes them, so that a delta it runs draws as the screen is drawn.
+#[test]
+fn a_command_gets_the_width_and_features_gitu_draws_with() {
+    let ctx = setup_clone!();
+    let mut ctx = with_command(
+        ctx,
+        "record",
+        r#"printf '%s %s' "$COLUMNS" "$DELTA_FEATURES" > recorded"#,
+        'o',
+    );
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("So"));
+
+    let recorded = fs::read_to_string(ctx.dir.join("recorded")).unwrap_or_default();
+    assert!(recorded.starts_with("78 "), "{recorded:?}");
+    assert!(recorded.contains("side-by-side"), "{recorded:?}");
+}
