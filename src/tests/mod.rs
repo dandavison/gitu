@@ -42,6 +42,7 @@ mod stash;
 mod status;
 mod theme;
 mod unstage;
+mod view;
 
 pub use keys::*;
 

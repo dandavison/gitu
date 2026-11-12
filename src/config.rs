@@ -778,6 +778,20 @@ mod tests {
         );
     }
 
+    /// A view is keyed by its own name, dashes and all, as a command is.
+    #[test]
+    fn git_config_sets_views_by_name() {
+        let config = configured(
+            "",
+            "[delta-tui \"general.views\"]\n\
+             \tdiff-since = git diff {commit}...\n",
+        );
+        assert_eq!(
+            config.general.views.into_iter().collect::<Vec<_>>(),
+            [("diff-since".to_string(), "git diff {commit}...".to_string())]
+        );
+    }
+
     #[test]
     fn git_config_sets_bindings() {
         let config = configured(
