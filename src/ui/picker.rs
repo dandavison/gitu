@@ -26,6 +26,11 @@ pub(crate) fn layout_picker<'a>(
     let separator_style = Style::from(&config.style.separator);
     repeat_chars(layout, width, DASHES, separator_style);
 
+    if state.grid().is_some() {
+        layout_grid(layout, state, config);
+        return;
+    }
+
     let prompt_style: Style = (&config.style.picker.prompt).into();
     let info_style: Style = (&config.style.picker.info).into();
     layout.row(opts(), |layout| {
@@ -94,6 +99,73 @@ pub(crate) fn layout_picker<'a>(
         layout.row(opts(), |layout| {
             layout_span(layout, (" ".into(), Style::new()));
         });
+    }
+}
+
+/// The items in their columns side by side, each under its heading, leaving out
+/// columns with none. The columns scroll together, to keep the cursor in view.
+fn layout_grid<'a>(layout: &mut UiTree<'a>, state: &'a PickerState, config: &Config) {
+    let Some(grid) = state.grid() else {
+        return;
+    };
+    let heading_style: Style = (&config.style.picker.prompt).into();
+    let columns: Vec<(usize, Vec<usize>)> = (0..grid.headings.len())
+        .map(|column| (column, state.column_positions(column)))
+        .filter(|(_, positions)| !positions.is_empty())
+        .collect();
+    let longest = columns
+        .iter()
+        .map(|(_, positions)| positions.len())
+        .max()
+        .unwrap_or(0);
+    let cursor_row = columns
+        .iter()
+        .find_map(|(_, positions)| positions.iter().position(|&p| p == state.cursor()))
+        .unwrap_or(0);
+    let start = calculate_visible_range(cursor_row, longest, MAX_ITEMS_DISPLAY);
+    let items: Vec<_> = state.filtered_items().map(|(_, item)| item).collect();
+
+    layout.row(opts().gap(3), |layout| {
+        for (column, positions) in &columns {
+            layout.col(opts(), |layout| {
+                layout.row(opts(), |layout| {
+                    let heading = format!(" {}", grid.headings[*column]);
+                    layout_span(layout, (heading.into(), heading_style));
+                });
+                for row in start..start + MAX_ITEMS_DISPLAY {
+                    layout.row(opts(), |layout| match positions.get(row) {
+                        Some(&position) => {
+                            layout_item(layout, items[position], position == state.cursor(), config)
+                        }
+                        None => layout_span(layout, (" ".into(), Style::new())),
+                    });
+                }
+            });
+        }
+    });
+}
+
+/// An item's row: the cursor's bar if it is selected, then its text.
+fn layout_item<'a>(
+    layout: &mut UiTree<'a>,
+    item: &'a crate::picker::PickerItem,
+    is_selected: bool,
+    config: &Config,
+) {
+    if is_selected {
+        let cursor_style: Style = (&config.style.cursor).into();
+        let indicator = format!("{}", config.style.cursor.symbol);
+        layout_span(layout, (indicator.into(), cursor_style));
+        layout_span(
+            layout,
+            (
+                item.display.as_ref().into(),
+                (&config.style.picker.selection_line).into(),
+            ),
+        );
+    } else {
+        layout_span(layout, (" ".into(), Style::new()));
+        layout_span(layout, (item.display.as_ref().into(), Style::new()));
     }
 }
 

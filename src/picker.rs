@@ -105,6 +105,21 @@ pub struct PickerState {
     /// item alone, with letters not typed. `None` for a picker that is always a
     /// list.
     one_row: Option<bool>,
+    /// For a picker shown in columns, the columns.
+    grid: Option<Grid>,
+}
+
+/// A picker's items laid out in columns side by side, each under a heading.
+pub(crate) struct Grid {
+    pub(crate) headings: Vec<&'static str>,
+    /// The column of each item, by its index among the items.
+    columns: Vec<usize>,
+}
+
+impl Grid {
+    pub(crate) fn column_of(&self, item_i: usize) -> usize {
+        self.columns[item_i]
+    }
 }
 
 pub(crate) struct PickerParams<'a> {
@@ -134,6 +149,7 @@ impl PickerState {
             custom_input_item: None,
             assigns_keys: false,
             one_row: None,
+            grid: None,
         };
         state.update_filter();
         state
@@ -151,6 +167,64 @@ impl PickerState {
     pub(crate) fn one_row(mut self) -> Self {
         self.one_row = Some(true);
         self
+    }
+
+    /// Show the items in columns side by side, each under its heading in
+    /// `headings`: the column of each item is its entry in `columns`. Up and
+    /// down then move within a column, and left and right between columns.
+    pub(crate) fn in_columns(mut self, headings: Vec<&'static str>, columns: Vec<usize>) -> Self {
+        self.grid = Some(Grid { headings, columns });
+        self
+    }
+
+    pub(crate) fn grid(&self) -> Option<&Grid> {
+        self.grid.as_ref()
+    }
+
+    /// The positions in the filtered list of the items in column `column`.
+    pub(crate) fn column_positions(&self, column: usize) -> Vec<usize> {
+        let Some(grid) = &self.grid else {
+            return vec![];
+        };
+        (0..self.filtered_indices.len())
+            .filter(|&position| grid.column_of(self.filtered_indices[position]) == column)
+            .collect()
+    }
+
+    /// The column of the selected item, in a grid.
+    pub(crate) fn cursor_column(&self) -> Option<usize> {
+        let grid = self.grid.as_ref()?;
+        let item_i = *self.filtered_indices.get(self.cursor)?;
+        Some(grid.column_of(item_i))
+    }
+
+    /// In a grid, move to the column `step` columns along that has items, to
+    /// the row the cursor is on, or the last row of a shorter column. Past the
+    /// first or last such column, the cursor stays where it is.
+    pub(crate) fn move_column(&mut self, step: isize) {
+        let (Some(grid), Some(column)) = (&self.grid, self.cursor_column()) else {
+            return;
+        };
+        let row = self
+            .column_positions(column)
+            .iter()
+            .position(|&position| position == self.cursor)
+            .unwrap_or(0);
+        let mut target = column;
+        loop {
+            let Some(next) = target
+                .checked_add_signed(step)
+                .filter(|&next| next < grid.headings.len())
+            else {
+                return;
+            };
+            target = next;
+            let positions = self.column_positions(target);
+            if let Some(&position) = positions.get(row).or(positions.last()) {
+                self.cursor = position;
+                return;
+            }
+        }
     }
 
     pub(crate) fn is_one_row(&self) -> bool {
@@ -325,14 +399,34 @@ impl PickerState {
             )
     }
 
-    /// Move cursor to next item
+    /// Move cursor to next item, in a grid the next in its column.
     pub fn next(&mut self) {
-        self.step(|cursor, total| (cursor + 1) % total);
+        if !self.step_in_column(1) {
+            self.step(|cursor, total| (cursor + 1) % total);
+        }
     }
 
-    /// Move cursor to previous item
+    /// Move cursor to previous item, in a grid the previous in its column.
     pub fn previous(&mut self) {
-        self.step(|cursor, total| (cursor + total - 1) % total);
+        if !self.step_in_column(-1) {
+            self.step(|cursor, total| (cursor + total - 1) % total);
+        }
+    }
+
+    /// In a grid, move `step` items along the cursor's column, wrapping round
+    /// its ends, and say so; otherwise do nothing.
+    fn step_in_column(&mut self, step: isize) -> bool {
+        let Some(column) = self.cursor_column() else {
+            return false;
+        };
+        let positions = self.column_positions(column);
+        let row = positions
+            .iter()
+            .position(|&position| position == self.cursor)
+            .unwrap_or(0);
+        let len = positions.len() as isize;
+        self.cursor = positions[(row as isize + step).rem_euclid(len) as usize];
+        true
     }
 
     /// Move the cursor by `step` until it is on an item it stops on: any item in

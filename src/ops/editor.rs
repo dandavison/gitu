@@ -472,44 +472,51 @@ impl OpTrait for RendererFeatures {
                 &app.state.config.general.diff_renderer.features,
                 &app.state.repo.config().map_err(Error::ReadGitConfig)?,
             )?;
-            let commands: Vec<String> = app.state.config.general.commands.keys().cloned().collect();
-            if offered.is_empty() && commands.is_empty() {
+            let general = &app.state.config.general;
+            let commands: Vec<String> = general.commands.keys().cloned().collect();
+            let views: Vec<String> = general.views.keys().cloned().collect();
+            if offered.is_empty() && commands.is_empty() && views.is_empty() {
                 app.display_error("No renderer features are configured");
                 return Ok(());
             }
-            // The features, then the commands, which a key runs rather than
-            // toggles.
-            let names: Vec<&String> = offered.iter().chain(&commands).collect();
+            // A column each: a feature's key toggles it, a command's runs it,
+            // and a view's opens it.
+            let names: Vec<&String> = offered.iter().chain(&commands).chain(&views).collect();
+            let columns: Vec<usize> = [(0, offered.len()), (1, commands.len()), (2, views.len())]
+                .into_iter()
+                .flat_map(|(column, len)| std::iter::repeat_n(column, len))
+                .collect();
             let is_command = |name: &str| commands.iter().any(|command| command == name);
-            let title = if commands.is_empty() {
-                "Features"
-            } else {
-                "Features and commands"
-            };
+            let is_view = |name: &str| views.iter().any(|view| view == name);
 
             let mut cursor = 0;
             loop {
                 let items = feature_items(app, &offered)
                     .into_iter()
-                    .chain(command_items(app))
+                    .chain(named_items(app, &commands))
+                    .chain(named_items(app, &views))
                     .collect();
-                let picker = PickerState::new(title, items, false)
+                let picker = PickerState::new("Features", items, false)
                     .assigning_keys()
+                    .in_columns(vec!["Features", "Commands", "Views"], columns.clone())
                     .with_cursor(cursor);
                 match app.pick_or_set_key(term, picker)? {
                     None => return Ok(()),
                     Some(Picked::Item(picked)) if is_command(picked.display()) => {
                         return crate::ops::command::run(app, term, picked.display());
                     }
+                    Some(Picked::Item(picked)) if is_view(picked.display()) => {
+                        return crate::ops::command::open_view(app, term, picked.display());
+                    }
                     Some(Picked::Item(picked)) => return toggle_feature(app, picked.display()),
                     Some(Picked::KeySet(key, picked)) => {
                         let name = picked.display();
                         cursor = names.iter().position(|held| *held == name).unwrap_or(0);
-                        // Space enables or disables the feature and keeps the list open; any
-                        // other key becomes the feature's or command's key.
+                        // Space enables or disables a feature and keeps the list open; any
+                        // other key becomes the feature's, command's or view's key.
                         if key != ' ' {
                             set_feature_key(app, name, key);
-                        } else if !is_command(name) {
+                        } else if !is_command(name) && !is_view(name) {
                             toggle_feature(app, name)?;
                         }
                     }
@@ -635,19 +642,13 @@ fn feature_items(app: &App, offered: &[String]) -> Vec<PickerItem> {
         .collect()
 }
 
-/// Each command, marked `$` as a shell command, beside its key if it has one.
-fn command_items(app: &App) -> Vec<PickerItem> {
-    app.state
-        .config
-        .general
-        .commands
+/// Each of `names`, a command or view, beside its key if it has one.
+fn named_items(app: &App, names: &[String]) -> Vec<PickerItem> {
+    names
         .iter()
-        .map(|(name, command)| {
+        .map(|name| {
             let key = app.state.feature_keys.get(name).copied().unwrap_or(' ');
-            PickerItem::new(
-                format!("$ {key} {name}  {command}"),
-                PickerData::Item(name.clone()),
-            )
+            PickerItem::new(format!("{key} {name}"), PickerData::Item(name.clone()))
         })
         .collect()
 }

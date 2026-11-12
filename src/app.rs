@@ -1161,8 +1161,13 @@ impl App {
                 }
             } else if picker.assigns_keys() {
                 // A letter sets a key here, but not the quit letter, which is
-                // bound at the top level and so could not be set anyway.
-                if bindings.quit.iter().any(|b| b == &key_combo) {
+                // bound at the top level and so could not be set anyway. In
+                // columns, left and right move between them.
+                if picker.grid().is_some() && key.code == event::KeyCode::Left {
+                    picker.move_column(-1);
+                } else if picker.grid().is_some() && key.code == event::KeyCode::Right {
+                    picker.move_column(1);
+                } else if bindings.quit.iter().any(|b| b == &key_combo) {
                     picker.cancel();
                 } else if let Some(c) = typed {
                     picker.set_key(c);
