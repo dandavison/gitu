@@ -128,3 +128,55 @@ fn right_moves_to_the_commands_and_then_the_views() {
         ctx.redact_buffer()
     );
 }
+
+/// `{command}` is the git command the screen is showing, so a view can change
+/// it: here the log, in a format of its own.
+#[test]
+fn a_view_of_the_command_shown_changes_it() {
+    let ctx = setup_clone!();
+    commit(&ctx.dir, "a", "");
+    let mut ctx = with_view(ctx, "formatted", "{command} --format=viewed-%s", 'o');
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("llo"));
+
+    assert!(
+        ctx.redact_buffer().contains("viewed-add a"),
+        "{}",
+        ctx.redact_buffer()
+    );
+}
+
+/// `{command}` is several words, so in a view it is a word of its own.
+#[test]
+fn a_view_with_the_command_inside_a_word_is_refused() {
+    let ctx = setup_clone!();
+    let mut ctx = with_view(ctx, "inside", "git log --grep={command}", 'o');
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("llo"));
+
+    assert_eq!(app.state.screens.len(), 2, "{}", ctx.redact_buffer());
+    assert!(
+        ctx.redact_buffer().contains("{command}"),
+        "{}",
+        ctx.redact_buffer()
+    );
+}
+
+/// The status view is no git command's output, so it has no `{command}`.
+#[test]
+fn a_view_of_the_command_shown_is_not_opened_off_one() {
+    let ctx = setup_clone!();
+    let mut ctx = with_view(ctx, "formatted", "{command} --oneline", 'o');
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("o"));
+
+    assert_eq!(app.state.screens.len(), 1);
+    assert!(
+        ctx.redact_buffer().contains("{command}"),
+        "{}",
+        ctx.redact_buffer()
+    );
+}

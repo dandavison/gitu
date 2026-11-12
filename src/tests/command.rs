@@ -120,3 +120,16 @@ fn a_failing_command_shows_its_stderr_and_the_command_as_written() {
         "{buffer}"
     );
 }
+
+/// `{command}` is the git command the screen is showing, as `:` shows it.
+#[test]
+fn a_command_key_runs_the_command_on_the_git_command_shown() {
+    let ctx = setup_clone!();
+    let mut ctx = with_command(ctx, "record", "echo {command} > recorded", 'o');
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("llo"));
+
+    let recorded = fs::read_to_string(ctx.dir.join("recorded")).unwrap_or_default();
+    assert!(recorded.starts_with("git log"), "{recorded:?}");
+}
