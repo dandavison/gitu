@@ -37,6 +37,7 @@ mod remote;
 mod reset;
 mod resize;
 mod reverse;
+mod right;
 mod search;
 mod show;
 mod stage;
