@@ -689,3 +689,28 @@ fn the_help_lists_each_columns_keys_in_order() {
     sorted.sort_by_key(|key| (key.to_lowercase(), key.chars().any(char::is_uppercase)));
     assert_eq!(keys, sorted, "{buffer}");
 }
+
+/// A help taller than the terminal wraps its columns, so that all of it fits a wide enough one.
+#[test]
+fn the_help_wraps_its_columns_to_fit_the_terminal() {
+    let mut ctx = setup_clone_wide!();
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("?"));
+
+    let buffer = ctx.redact_buffer();
+    for label in ["Files", "Fold all", "Show Refs", "Stash", "S side-by-side"] {
+        assert!(buffer.contains(label), "{label}:\n{buffer}");
+    }
+    assert!(!buffer.contains("more:"), "{buffer}");
+}
+
+/// A help that does not fit even wrapped says how much is cut, rather than dropping it silently.
+#[test]
+fn the_help_says_how_much_is_cut_when_it_does_not_fit() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("?"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains(" more: make the window larger"), "{buffer}");
+}
