@@ -323,7 +323,7 @@ impl OpTrait for FilePatterns {
             let answer = app.prompt(
                 term,
                 &PromptParams {
-                    prompt: "Files",
+                    prompt: "File filters",
                     create_default_value: Box::new(move |_| Some(patterns.clone())),
                     prefill: true,
                     history: Some(crate::prompt::HistoryKind::FilePatterns),
