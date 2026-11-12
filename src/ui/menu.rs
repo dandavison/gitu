@@ -152,7 +152,7 @@ pub(crate) fn layout_menu<'a>(layout: &mut UiTree<'a>, state: &'a State, width: 
                         if has_submenus {
                             layout_line(layout, " ".into(), Style::new());
                         }
-                        layout_line(layout, "Features".into(), Style::from(&style.menu.heading));
+                        layout_line(layout, "Hotkeys".into(), Style::from(&style.menu.heading));
                         layout_keybinds_table(layout, config, feature_binds);
                     }
                 });

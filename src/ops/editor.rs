@@ -526,7 +526,7 @@ impl OpTrait for RendererFeatures {
     }
 
     fn display(&self, _state: &State) -> String {
-        "Features".into()
+        "Hotkeys".into()
     }
 }
 

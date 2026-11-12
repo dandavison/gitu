@@ -6,7 +6,7 @@ expression: ctx.redact_buffer()
  Commands                            Submenus          Section                  |
  Y                Show Refs          b   Branch        tab Fold                 |
  g+s              Status             c   Commit                                 |
- H                Features           f   Fetch                                  |
+ H                Hotkeys            f   Fetch                                  |
  T                Themes             h/? Help                                   |
  shift+tab        Fold all           l   Log                                    |
  U                Diff context       m   Merge                                  |
@@ -19,7 +19,7 @@ expression: ctx.redact_buffer()
  ctrl+k/ctrl+up   Up                 A   Cherry-pick                            |
  ctrl+j/ctrl+down Down               z   Stash                                  |
  shift+up         Select up                                                     |
- shift+down       Select down        Features                                   |
+ shift+down       Select down        Hotkeys                                    |
  alt+k/alt+up     Prev section       x side-by-side                             |
  alt+j/alt+down   Next section                                                  |
-styles_hash: e51e65897cc1e940
+styles_hash: 6d8072cf9044d979
