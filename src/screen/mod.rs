@@ -1429,11 +1429,47 @@ impl Screen {
         self.collapsed.contains(&item.id)
     }
 
-    /// Whether the selected item is a section the user unfolded on this screen
-    /// and has not folded since.
-    pub(crate) fn selected_unfolded_here(&self) -> bool {
-        let id = self.get_selected_item().id;
-        self.unfolded.contains(&id) && !self.collapsed.contains(&id)
+    /// Whether there is a section for `fold_unfolded_here` to fold.
+    pub(crate) fn has_unfolded_here(&self) -> bool {
+        self.unfolded_here().is_some()
+    }
+
+    /// Folds the innermost section the cursor is on or inside that the user
+    /// unfolded on this screen and has not folded since, and moves the cursor
+    /// onto it. Returns whether there was one.
+    pub(crate) fn fold_unfolded_here(&mut self) -> Res<bool> {
+        let Some(item_i) = self.unfolded_here() else {
+            return Ok(false);
+        };
+        self.cursor = item_i;
+        self.toggle_section()?;
+        self.scroll_fit_start();
+        Ok(true)
+    }
+
+    fn unfolded_here(&self) -> Option<usize> {
+        if self.items.is_empty() {
+            return None;
+        }
+        let mut depth = self.items[self.cursor].depth + 1;
+        for item_i in (0..=self.cursor).rev() {
+            let item = &self.items[item_i];
+            if item.depth >= depth {
+                continue;
+            }
+            depth = item.depth;
+            // The lines of a hunk share its id, so only the hunk itself counts.
+            if item.data.is_section()
+                && self.unfolded.contains(&item.id)
+                && !self.collapsed.contains(&item.id)
+            {
+                return Some(item_i);
+            }
+            if depth == 0 {
+                break;
+            }
+        }
+        None
     }
 
     #[cfg(test)]

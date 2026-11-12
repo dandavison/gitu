@@ -212,8 +212,9 @@ blame.code_line = { mods = "DIM" }
 
 [bindings]
 root.quit = ["q", "esc"]
-# Fold a file or hunk unfolded on this screen. Otherwise like quit, but on the
-# first screen it does nothing rather than leave gitu.
+# Fold the file or hunk unfolded on this screen that the cursor is on or in.
+# Otherwise like quit, but on the first screen it does nothing rather than leave
+# gitu.
 root.fold_or_back = ["left"]
 root.refresh = ["g+r"]
 root.suspend = ["ctrl+z"]

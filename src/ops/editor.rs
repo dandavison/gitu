@@ -46,8 +46,8 @@ impl OpTrait for Quit {
     }
 }
 
-/// Folds the section the user unfolded on this screen, if that is what is
-/// selected. Otherwise closes the screen on top, as quit does, but on the first
+/// Folds the section the user unfolded on this screen that the cursor is on or
+/// inside. Otherwise closes the screen on top, as quit does, but on the first
 /// screen does nothing rather than leave gitu.
 pub(crate) struct FoldOrBack;
 impl OpTrait for FoldOrBack {
@@ -62,9 +62,7 @@ impl OpTrait for FoldOrBack {
             if menu != app.base_menu() {
                 return Ok(());
             }
-            if app.screen().selected_unfolded_here() {
-                app.screen_mut().toggle_section()?;
-            } else if app.state.screens.len() > 1 {
+            if !app.screen_mut().fold_unfolded_here()? && app.state.screens.len() > 1 {
                 app.state.screens.pop();
                 app.screen_mut().come_back()?;
             }
@@ -74,7 +72,7 @@ impl OpTrait for FoldOrBack {
     }
 
     fn display(&self, state: &State) -> String {
-        if state.screens.last().unwrap().selected_unfolded_here() {
+        if state.screens.last().unwrap().has_unfolded_here() {
             "Fold".into()
         } else {
             "Back".into()
