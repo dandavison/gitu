@@ -627,3 +627,57 @@ fn suspending_is_bound_to_ctrl_z() {
 
     assert_eq!(ops, ["suspend"]);
 }
+
+/// By default the list offers delta's switch features and every feature defined in git config,
+/// `H` opens it, and `+` and `-` are not feature keys.
+#[test]
+fn the_feature_list_offers_every_feature_by_default_and_h_opens_it() {
+    let config = crate::config::init_test_config().unwrap();
+    let renderer = &config.general.diff_renderer;
+    assert_eq!(
+        renderer.features,
+        ["side-by-side", "line-numbers", "plus-minus-markers", "*"]
+    );
+    assert!(!renderer.feature_keys.values().any(|key| *key == '+'));
+
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("H"));
+    assert!(app.state.picker.is_some(), "{}", ctx.redact_buffer());
+}
+
+/// Space enables or disables the selected feature and leaves the list open, so that several can
+/// be changed in one visit.
+#[test]
+fn space_toggles_a_feature_and_keeps_the_list_open() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("H<space>"));
+    assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
+    assert!(app.state.picker.is_some());
+
+    ctx.update(&mut app, keys("<space>"));
+    assert!(app.state.features.is_empty());
+}
+
+/// `+` and `-` widen and narrow the context by powers of two, from git's default of 3, so that a
+/// few presses go from narrow to wide; `U` sets a number exactly.
+#[test]
+fn plus_and_minus_step_the_context_by_powers_of_two() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+    let context = |app: &crate::app::App| app.state.context.as_deref().map(String::from);
+
+    let mut seen = vec![];
+    for key in ["+", "+", "+", "-", "-", "-", "-", "-", "-"] {
+        ctx.update(&mut app, keys(key));
+        seen.push(context(&app).unwrap_or_default());
+    }
+    assert_eq!(
+        seen,
+        [
+            "-U4", "-U8", "-U16", "-U8", "-U4", "-U2", "-U1", "-U0", "-U0"
+        ]
+    );
+}
