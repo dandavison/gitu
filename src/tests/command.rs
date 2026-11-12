@@ -87,9 +87,9 @@ fn the_feature_list_lists_commands() {
     );
 }
 
-/// A command that fails says how, with what it wrote to stderr, and shows the
-/// command as it was written, filled in, to be pasted into a shell: not the
-/// `sh -c` that runs it.
+/// A command that fails is shown as it was written, filled in, on a line of its
+/// own, to be pasted into a shell (not the `sh -c` that runs it), then how it
+/// exited and what it wrote to stderr.
 #[test]
 fn a_failing_command_shows_its_stderr_and_the_command_as_written() {
     let ctx = setup_clone!();
@@ -102,10 +102,21 @@ fn a_failing_command_shows_its_stderr_and_the_command_as_written() {
     let head = run(&ctx.dir, &["git", "rev-parse", "HEAD"]);
     let head = head.trim();
     let buffer = ctx.redact_buffer();
-    assert!(
-        buffer.contains(&format!("exit code 3: echo {head} oops >&2; exit 3")),
+    let rows: Vec<&str> = buffer
+        .lines()
+        .skip_while(|row| !row.starts_with('!'))
+        .take(4)
+        .map(str::trim_end)
+        .map(|row| row.trim_end_matches('|').trim_end())
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            format!("! echo {head} oops >&2; exit 3"),
+            "  exit code: 3".to_owned(),
+            "  stderr:".to_owned(),
+            format!("  {head} oops"),
+        ],
         "{buffer}"
     );
-    assert!(buffer.contains(&format!("  {head} oops")), "{buffer}");
-    assert!(!buffer.contains("sh -c"), "{buffer}");
 }
