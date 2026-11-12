@@ -21,13 +21,9 @@ pub struct Args {
     #[clap(long, action)]
     pub print: bool,
 
-    /// Read a patch on stdin and browse it, for use as git's pager:
-    ///     GIT_PAGER='gitu --pager' git show
-    #[clap(long, action, verbatim_doc_comment)]
-    pub pager: bool,
-
-    /// With --pager, print what fits on one screen and exit, as less's --quit-if-one-screen.
-    #[clap(long, action, requires = "pager")]
+    /// Paging a patch piped to gitu, as git's pager, print it and exit if it
+    /// fits on one screen, as less's --quit-if-one-screen.
+    #[clap(long, action)]
     pub quit_if_one_screen: bool,
 
     /// Enable logging to 'gitu.log'

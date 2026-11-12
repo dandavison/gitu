@@ -1,4 +1,4 @@
-//! The screen `gitu --pager` shows: a patch that arrived on stdin rather than
+//! The screen gitu shows as git's pager: a patch that arrived on stdin rather than
 //! one gitu asked git for.
 //!
 //! Set as git's pager, gitu is handed the very bytes `git diff` / `git show`

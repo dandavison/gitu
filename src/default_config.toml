@@ -30,7 +30,7 @@ max_input_bytes = 2_000_000
 # relative to its upstream. Off, it is the branch name alone.
 verbose_branch_status = true
 
-# Files to drop from a paged view (`gitu --pager`), as if the patch never had
+# Files to drop from a paged view (gitu as git's pager), as if the patch never had
 # them. The wildcards are git's: `*.pb.go` matches at any depth, and naming a
 # directory hides its subtree. `&` says which files to show while reading, and
 # `:` shows the pathspecs these became. e.g.:

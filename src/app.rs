@@ -110,7 +110,7 @@ impl App {
             streaming: enable_async_cmds,
         };
         let screens = match args.command {
-            // `--pager`: git's output is already in hand, with the command it ran.
+            // A patch piped to gitu: git's output is already in hand, with the command it ran.
             _ if let Some(paged) = piped => {
                 vec![screen::pager::create(
                     Arc::clone(&config),

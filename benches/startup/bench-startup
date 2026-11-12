@@ -77,8 +77,13 @@ def main() -> None:
 def cases(gitu: list[str]) -> dict[str, str | None]:
     """Shell commands per case; None where this gitu cannot be git's pager."""
     g = shlex.join(gitu)
-    pages = "--pager" in run([*gitu, "--help"])
-    pager = shlex.quote(f"{g} --pager --print")
+    usage = run([*gitu, "--help"])
+    # A gitu that pages what is piped to it has --quit-if-one-screen and no
+    # --pager; before that, --pager asked for paging; before that, it could not.
+    if "--pager" in usage:
+        pages, pager = True, shlex.quote(f"{g} --pager --print")
+    else:
+        pages, pager = "--quit-if-one-screen" in usage, shlex.quote(f"{g} --print")
     return {"status": f"{g} --print"} | {
         name: f"GIT_PAGER={pager} {cmd}" if pages else None
         for name, cmd in PAGED.items()

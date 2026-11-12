@@ -92,7 +92,7 @@ impl TestContext {
         self.init_app_with_args(path, Args::default())
     }
 
-    /// Start gitu as git's pager would (`[pager] diff = gitu --pager`), on the
+    /// Start gitu as git's pager would (`[pager] diff = gitu`), on the
     /// output of `cmd` and knowing that `cmd` is what produced it.
     pub fn init_app_as_pager_of(&mut self, cmd: &[&str]) -> App {
         self.init_app_as_pager_of_at(self.dir.clone(), cmd)
@@ -130,11 +130,7 @@ impl TestContext {
             text,
             Some(cmd.iter().map(|arg| (*arg).to_owned()).collect()),
         );
-        let args = Args {
-            pager: true,
-            ..Default::default()
-        };
-        self.init_app_streaming(args, Some(paged))
+        self.init_app_streaming(Args::default(), Some(paged))
     }
 
     /// [`Self::init_app_with_args`], drawing the first screen while the rest
@@ -184,14 +180,7 @@ impl TestContext {
     }
 
     fn init_app_paged_at(&mut self, path: PathBuf, paged: Paged) -> App {
-        self.init_app_inner(
-            path,
-            Args {
-                pager: true,
-                ..Default::default()
-            },
-            Some(paged),
-        )
+        self.init_app_inner(path, Args::default(), Some(paged))
     }
 
     /// Start gitu as one of its subcommands would (`gitu sequence-editor …`).

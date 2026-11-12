@@ -404,7 +404,7 @@ pub(crate) fn paging_for() -> Option<Vec<String>> {
         descendant = ancestor;
     }
 
-    // `git diff | gitu --pager`: the shell created both, so git is the sibling
+    // `git diff | gitu`: the shell created both, so git is the sibling
     // of gitu rather than its ancestor.
     let shell = system.process(me)?.parent()?;
     let is_sibling = |system: &System, pid: Pid| {

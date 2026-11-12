@@ -118,7 +118,7 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
         piped,
     )?;
 
-    if args.quit_if_one_screen && app.print_if_one_screen(term)? {
+    if args.quit_if_one_screen && paging && app.print_if_one_screen(term)? {
         return Ok(app.state.exit_code);
     }
 
@@ -134,8 +134,8 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
 
 /// Whether gitu browses a patch on stdin, as git's pager, rather than opening
 /// the status view or a subcommand's screen.
-pub(crate) fn pages(args: &cli::Args, _stdin_is_terminal: bool) -> bool {
-    args.pager
+pub(crate) fn pages(args: &cli::Args, stdin_is_terminal: bool) -> bool {
+    args.command.is_none() && !stdin_is_terminal
 }
 
 fn run_app(app: &mut app::App, args: &cli::Args, term: &mut Term) -> Res<i32> {
@@ -161,17 +161,12 @@ fn run_app(app: &mut app::App, args: &cli::Args, term: &mut Term) -> Res<i32> {
 }
 
 /// What git piped to us as its pager, alongside the command already found to
-/// have produced it. Reading the terminal instead would wait for input that is
-/// never coming, so that is refused outright.
+/// have produced it.
 fn read_piped_input(
     git_argv: Option<Vec<String>>,
     workdir: Option<&Path>,
     limit: u64,
 ) -> Res<Paged> {
-    if io::stdin().is_terminal() {
-        return Err(Error::PagerWithoutInput);
-    }
-
     paged(io::stdin(), git_argv, workdir, limit)
 }
 
