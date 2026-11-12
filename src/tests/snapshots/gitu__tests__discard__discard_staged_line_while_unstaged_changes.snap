@@ -1,5 +1,6 @@
 ---
 source: src/tests/discard.rs
+assertion_line: 86
 expression: ctx.redact_buffer()
 ---
  Branch: main                                                                   |
@@ -17,9 +18,9 @@ expression: ctx.redact_buffer()
 ▌-hello                                                                         |
  +added                                                                         |
                                                                                 |
- Recent commits                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git apply --reverse --index --recount                                         |
 error: initial-file: does not match index                                       |
-! 'git apply --reverse --index --recount' exited with code: 1                   |
-styles_hash: 4dd9c1f43b8cf388
+! exit code 1: git apply --reverse --index --recount                            |
+  error: initial-file: does not match index                                     |
+styles_hash: 7a903467e75300d7

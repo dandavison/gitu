@@ -58,11 +58,18 @@ fn layout_entry<'a>(layout: &mut UiTree<'a>, entry: &Arc<RwLock<CmdLogEntry>>, c
                 layout_line(layout, line.to_string().into(), Style::new());
             }
         }
-        CmdLogEntry::Error(err) => layout_line(
-            layout,
-            format!("! {err}").into(),
-            Style::from(&config.style.error_msg),
-        ),
+        // An error's lines after the first, such as a command's stderr, are
+        // indented under it.
+        CmdLogEntry::Error(err) => {
+            for (i, line) in err.lines().enumerate() {
+                let prefix = if i == 0 { "! " } else { "  " };
+                layout_line(
+                    layout,
+                    format!("{prefix}{line}").into(),
+                    Style::from(&config.style.error_msg),
+                );
+            }
+        }
         CmdLogEntry::Info(msg) => layout_line(
             layout,
             format!("> {msg}").into(),

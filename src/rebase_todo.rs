@@ -105,10 +105,9 @@ impl RebaseTodo {
 
         // The editor exits non-zero once it has the list, so git aborts the
         // rebase before doing anything (an --autostash is created and restored).
-        let output = Command::new("git")
-            .args(["rebase", "-i"])
-            .args(args)
-            .arg(base)
+        let mut cmd = Command::new("git");
+        cmd.args(["rebase", "-i"]).args(args).arg(base);
+        let output = cmd
             .env("GIT_SEQUENCE_EDITOR", CAPTURE_EDITOR)
             .env(TODO_VAR, &todo_file)
             .current_dir(&workdir)
@@ -121,8 +120,9 @@ impl RebaseTodo {
         // No list means git bailed before reaching the editor; it says why.
         let Ok(text) = fs::read_to_string(&todo_file) else {
             return Err(Error::CmdBadExit(
-                String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                crate::cmd_log::command_args(&cmd).into_owned(),
                 output.status.code(),
+                String::from_utf8_lossy(&output.stderr).into_owned(),
             ));
         };
         let _ = fs::remove_file(&todo_file);

@@ -8,7 +8,9 @@ pub enum Error {
     Term(io::Error),
     Config(Box<figment::Error>),
     EditConfig(String),
-    Bindings { bad_key_bindings: Vec<String> },
+    Bindings {
+        bad_key_bindings: Vec<String>,
+    },
     FileWatcher(notify::Error),
     ReadRebaseStatusFile(io::Error),
     ReadRebaseTodo(io::Error),
@@ -49,7 +51,9 @@ pub enum Error {
     CouldntAwaitCmd(io::Error),
     NoRepoWorkdir,
     SpawnCmd(io::Error),
-    CmdBadExit(String, Option<i32>),
+    /// A command that failed: as it would be typed in a shell, its exit code
+    /// (none if a signal ended it), and what it wrote to stderr.
+    CmdBadExit(String, Option<i32>, String),
     CouldntReadCmdOutput(io::Error),
     ListGitReferences(git2::Error),
     OpenLogFile(io::Error),
@@ -163,12 +167,17 @@ impl Display for Error {
             Error::CouldntAwaitCmd(e) => f.write_fmt(format_args!("Couldn't await command: {e}")),
             Error::NoRepoWorkdir => f.write_str("No repository working directory"),
             Error::SpawnCmd(e) => f.write_fmt(format_args!("Failed to spawn command: {e}")),
-            Error::CmdBadExit(args, code) => f.write_fmt(format_args!(
-                "'{}' exited with code: {}",
-                args,
-                code.map(|c| c.to_string())
-                    .unwrap_or_else(|| "".to_string())
-            )),
+            // The command last, so that it can be copied from the line whole.
+            Error::CmdBadExit(command, code, stderr) => {
+                match code {
+                    Some(code) => write!(f, "exit code {code}: {command}")?,
+                    None => write!(f, "ended by a signal: {command}")?,
+                }
+                for line in stderr.trim_end().lines() {
+                    write!(f, "\n{line}")?;
+                }
+                Ok(())
+            }
             Error::CouldntReadCmdOutput(e) => {
                 f.write_fmt(format_args!("Couldn't read command output: {e}"))
             }

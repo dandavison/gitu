@@ -6,7 +6,6 @@ use crate::{
     item_data::{ItemData, Ref},
     term::Term,
 };
-use std::process::Command;
 
 /// Run the command `name`, with what it asks for filled in from the item under
 /// the cursor, as a fetch is run: in the repository's root, while gitu stays
@@ -27,9 +26,7 @@ pub(crate) fn run(app: &mut App, term: &mut Term, name: &str) -> Res<()> {
         }
     };
 
-    let mut cmd = Command::new("sh");
-    cmd.args(["-c", &command]);
-    app.run_cmd_async(term, &[], cmd)
+    app.run_shell_async(term, &command)
 }
 
 /// `template` with each placeholder replaced by its value for `target`, quoted

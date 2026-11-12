@@ -1,5 +1,6 @@
 ---
 source: src/tests/cherry_pick.rs
+assertion_line: 66
 expression: ctx.redact_buffer()
 ---
 ▌Cherry-picking other-branch                                                    |
@@ -21,5 +22,5 @@ error: Committing is not possible because you have unmerged files.              
 hint: Fix them up in the work tree, and then use 'git add/rm <file>'            |
 hint: as appropriate to mark resolution and make a commit.                      |
 fatal: Exiting because of an unresolved conflict.                               |
-! 'git cherry-pick--continue' exited with code: 128                             |
-styles_hash: 4b2171ffa7d881bd
+! exit code 128: git cherry-pick --continue                                     |
+styles_hash: 3ecf537735bd00b4

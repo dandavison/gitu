@@ -1,5 +1,6 @@
 ---
 source: src/tests/unstage.rs
+assertion_line: 54
 expression: ctx.redact_buffer()
 ---
  Branch: main                                                                   |
@@ -21,5 +22,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
-$ git restore --staged file with space.txt                                      |
-styles_hash: c1234700da90db2d
+$ git restore --staged 'file with space.txt'                                    |
+styles_hash: a40cdc22ccd115c9

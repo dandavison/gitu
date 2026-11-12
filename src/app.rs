@@ -653,7 +653,26 @@ impl App {
 
     /// Runs a `Command` and handles its output asynchronously (if async commands are enabled).
     /// Will return `Ok(())` if one is already running.
-    pub fn run_cmd_async(&mut self, term: &mut Term, input: &[u8], mut cmd: Command) -> Res<()> {
+    pub fn run_cmd_async(&mut self, term: &mut Term, input: &[u8], cmd: Command) -> Res<()> {
+        let shown = crate::cmd_log::command_args(&cmd);
+        self.run_cmd_async_shown(term, input, cmd, shown)
+    }
+
+    /// Run `command` with `sh -c`, as [`Self::run_cmd_async`] runs a command,
+    /// shown as it is written rather than as `sh -c` and it.
+    pub(crate) fn run_shell_async(&mut self, term: &mut Term, command: &str) -> Res<()> {
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", command]);
+        self.run_cmd_async_shown(term, &[], cmd, command.to_owned().into())
+    }
+
+    fn run_cmd_async_shown(
+        &mut self,
+        term: &mut Term,
+        input: &[u8],
+        mut cmd: Command,
+        shown: Cow<'static, str>,
+    ) -> Res<()> {
         cmd.env("CLICOLOR_FORCE", "1"); // No guarantee, but modern tools seem to implement this
 
         if self.state.pending_cmd.is_some() {
@@ -666,7 +685,7 @@ impl App {
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
 
-        let log_entry = self.state.current_cmd_log.push_cmd(&cmd);
+        let log_entry = self.state.current_cmd_log.push_cmd(shown);
 
         ui::ui(term, &mut self.state)?;
 
@@ -768,15 +787,11 @@ impl App {
         self.update_screens()?;
 
         if !status.success() {
+            // Its stderr went to the terminal.
             return Err(Error::CmdBadExit(
-                format!(
-                    "{} {}",
-                    cmd.get_program().to_string_lossy(),
-                    cmd.get_args()
-                        .map(|arg| arg.to_string_lossy())
-                        .collect::<String>()
-                ),
+                crate::cmd_log::command_args(&cmd).into_owned(),
                 status.code(),
+                String::new(),
             ));
         }
 
@@ -1251,16 +1266,17 @@ fn write_child_output_to_log(
 
     drop(child.stdin.take());
 
-    let mut out_bytes = vec![];
+    let mut err_bytes = vec![];
     log::debug!("Reading stderr");
 
     child
         .stderr
         .take()
         .unwrap()
-        .read_to_end(&mut out_bytes)
+        .read_to_end(&mut err_bytes)
         .map_err(Error::CouldntReadCmdOutput)?;
 
+    let mut out_bytes = err_bytes.clone();
     child
         .stdout
         .take()
@@ -1272,7 +1288,11 @@ fn write_child_output_to_log(
     *out_log = Some(out_string.into());
 
     if !status.success() {
-        return Err(Error::CmdBadExit(args.to_string(), status.code()));
+        return Err(Error::CmdBadExit(
+            args.to_string(),
+            status.code(),
+            String::from_utf8_lossy(&err_bytes).into_owned(),
+        ));
     }
 
     Ok(())
