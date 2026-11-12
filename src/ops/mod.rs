@@ -167,7 +167,7 @@ pub(crate) enum Op {
     Refresh,
     Suspend,
     Quit,
-    Back,
+    FoldOrBack,
 
     #[serde(untagged)]
     OpenMenu(Menu),
@@ -245,7 +245,7 @@ impl Op {
     pub fn implementation(self) -> Box<dyn OpTrait> {
         match self {
             Op::Quit => Box::new(editor::Quit),
-            Op::Back => Box::new(editor::Back),
+            Op::FoldOrBack => Box::new(editor::FoldOrBack),
             Op::OpenMenu(menu) => Box::new(editor::OpenMenu(menu)),
             Op::Refresh => Box::new(editor::Refresh),
             Op::Suspend => Box::new(editor::Suspend),

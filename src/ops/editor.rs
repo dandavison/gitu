@@ -46,10 +46,11 @@ impl OpTrait for Quit {
     }
 }
 
-/// Closes the screen on top, as quit does, but on the first screen does nothing
-/// rather than leave gitu.
-pub(crate) struct Back;
-impl OpTrait for Back {
+/// Folds the section the user unfolded on this screen, if that is what is
+/// selected. Otherwise closes the screen on top, as quit does, but on the first
+/// screen does nothing rather than leave gitu.
+pub(crate) struct FoldOrBack;
+impl OpTrait for FoldOrBack {
     fn get_action(&self, _target: &ItemData) -> Option<Action> {
         Some(Rc::new(|app, _term| {
             let menu = app
@@ -58,7 +59,12 @@ impl OpTrait for Back {
                 .as_ref()
                 .map(|pending_menu| pending_menu.menu);
 
-            if menu == app.base_menu() && app.state.screens.len() > 1 {
+            if menu != app.base_menu() {
+                return Ok(());
+            }
+            if app.screen().selected_unfolded_here() {
+                app.screen_mut().toggle_section()?;
+            } else if app.state.screens.len() > 1 {
                 app.state.screens.pop();
                 app.screen_mut().come_back()?;
             }
@@ -67,8 +73,12 @@ impl OpTrait for Back {
         }))
     }
 
-    fn display(&self, _state: &State) -> String {
-        "Back".into()
+    fn display(&self, state: &State) -> String {
+        if state.screens.last().unwrap().selected_unfolded_here() {
+            "Fold".into()
+        } else {
+            "Back".into()
+        }
     }
 }
 

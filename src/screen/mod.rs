@@ -272,6 +272,10 @@ pub(crate) struct Screen {
     /// Every item this screen has had. Only an item not seen before starts
     /// folded by default; whether one seen before is folded is the user's.
     seen: HashSet<ItemId>,
+    /// The sections the user has unfolded on this screen, which `fold_or_back`
+    /// folds again rather than leave the screen. Unfolding all sections at once
+    /// does not add to it.
+    unfolded: HashSet<ItemId>,
     search: Option<Search>,
 }
 
@@ -324,6 +328,7 @@ impl Screen {
             item_heights: RefCell::new(vec![]),
             collapsed,
             seen: HashSet::new(),
+            unfolded: HashSet::new(),
             search: None,
         };
 
@@ -686,8 +691,11 @@ impl Screen {
 
         if selected.data.is_section() {
             let id = selected.id;
-            if !self.collapsed.remove(&id) {
+            if self.collapsed.remove(&id) {
+                self.unfolded.insert(id);
+            } else {
                 self.collapsed.insert(id);
+                self.unfolded.remove(&id);
             }
 
             // Only the toggled section's own height changes, by gaining or
@@ -960,6 +968,15 @@ impl Screen {
             .map(|item| item.id)
             .collect();
         self.collapsed.extend(folded);
+        let unfolded: Vec<ItemId> = items
+            .iter()
+            .filter(|item| {
+                item.folds_like
+                    .is_some_and(|like| self.unfolded.contains(&like))
+            })
+            .map(|item| item.id)
+            .collect();
+        self.unfolded.extend(unfolded);
         self.seen.extend(items.iter().map(|item| item.id));
         self.items = fill_empty(items);
     }
@@ -1410,6 +1427,13 @@ impl Screen {
 
     pub(crate) fn is_collapsed(&self, item: &Item) -> bool {
         self.collapsed.contains(&item.id)
+    }
+
+    /// Whether the selected item is a section the user unfolded on this screen
+    /// and has not folded since.
+    pub(crate) fn selected_unfolded_here(&self) -> bool {
+        let id = self.get_selected_item().id;
+        self.unfolded.contains(&id) && !self.collapsed.contains(&id)
     }
 
     #[cfg(test)]
