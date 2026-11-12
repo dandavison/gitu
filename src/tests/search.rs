@@ -16,6 +16,22 @@ fn the_search_prompt_is_a_slash() {
     assert_eq!(ctx.prompt_line(), "/|");
 }
 
+/// As in less, up and down at the search prompt bring back earlier searches,
+/// also those of an earlier run.
+#[test]
+fn up_brings_back_earlier_searches() {
+    let mut ctx = setup(setup_clone!());
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("/first<enter>/second<enter>"));
+    drop(app);
+
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("/<up>"));
+    assert_eq!(ctx.prompt_line(), "/second|");
+    ctx.update(&mut app, keys("/<up><up>"));
+    assert_eq!(ctx.prompt_line(), "/first|");
+}
+
 #[test]
 fn search_prompt() {
     snapshot!(setup(setup_clone!()), "/");
