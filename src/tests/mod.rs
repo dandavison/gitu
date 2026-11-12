@@ -17,6 +17,7 @@ mod arg;
 mod blame;
 mod branch;
 mod cherry_pick;
+mod command;
 mod commit;
 mod discard;
 mod editor;

@@ -755,6 +755,23 @@ mod tests {
         );
     }
 
+    /// A command is keyed by its own name, dashes and all, as a feature key is.
+    #[test]
+    fn git_config_sets_commands_by_name() {
+        let config = configured(
+            "",
+            "[delta-tui \"general.commands\"]\n\
+             \topen-pr = gh pr view --web {commit}\n",
+        );
+        assert_eq!(
+            config.general.commands.into_iter().collect::<Vec<_>>(),
+            [(
+                "open-pr".to_string(),
+                "gh pr view --web {commit}".to_string()
+            )]
+        );
+    }
+
     #[test]
     fn git_config_sets_bindings() {
         let config = configured(
