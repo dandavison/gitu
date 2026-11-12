@@ -89,7 +89,7 @@ pub(crate) fn ui(term: &mut TermBackend, state: &mut State) -> Res<()> {
 
 /// The menu, command log, prompt and picker, which sit below the screen.
 fn layout_panels<'a>(layout: &mut UiTree<'a>, state: &'a State, size: (u16, u16)) {
-    menu::layout_menu(layout, state, size.0 as usize);
+    menu::layout_menu(layout, state, size);
     cmd_log::layout_cmd_log(
         layout,
         &state.current_cmd_log,

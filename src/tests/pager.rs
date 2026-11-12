@@ -1173,6 +1173,7 @@ fn the_help_menu_heads_its_columns_by_what_is_in_them() {
     ctx.config().general.diff_renderer.command = hunk_header_renderer();
 
     let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+    ctx.resize(&mut app, &[super::HELP_FITS]);
     ctx.update(&mut app, keys("?"));
     assert_eq!(menu_headings(&ctx), ["Commands", "Submenus", "Hunk"]);
 

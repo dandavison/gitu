@@ -53,11 +53,16 @@ use url::Url;
 
 use crate::tests::helpers::run_ignore_status;
 
+/// A terminal the whole help fits in, wrapped, for tests of what the help lists rather than of how
+/// it fits a small terminal.
+pub(crate) const HELP_FITS: (u16, u16) = (150, 30);
+
 #[test]
 fn help_menu() {
     let mut ctx = setup_clone!();
 
     let mut app = ctx.init_app();
+    ctx.resize(&mut app, &[HELP_FITS]);
     ctx.update(&mut app, keys(HELP));
     insta::assert_snapshot!(ctx.redact_buffer());
 }

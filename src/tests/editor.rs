@@ -354,6 +354,7 @@ fn the_help_menu_lists_feature_keys() {
     with_feature_key(&mut ctx, "side-by-side", 'x');
     let mut app = ctx.init_app();
 
+    ctx.resize(&mut app, &[super::HELP_FITS]);
     ctx.update(&mut app, keys("?"));
     let buffer = ctx.redact_buffer();
     assert!(
@@ -368,7 +369,10 @@ fn the_help_menu_lists_feature_keys() {
 fn the_help_menu_sets_feature_keys_apart_from_submenus() {
     let mut ctx = setup_clone!();
     with_feature_key(&mut ctx, "side-by-side", 'x');
-    snapshot!(ctx, "?");
+    let mut app = ctx.init_app();
+    ctx.resize(&mut app, &[super::HELP_FITS]);
+    ctx.update(&mut app, keys("?"));
+    insta::assert_snapshot!(ctx.redact_buffer());
 }
 
 /// A key that does something already keeps doing it.
@@ -652,6 +656,7 @@ fn plus_and_minus_step_the_context_by_powers_of_two() {
 fn the_help_calls_the_hotkeys_hotkeys() {
     let mut ctx = setup_clone!();
     let mut app = ctx.init_app();
+    ctx.resize(&mut app, &[super::HELP_FITS]);
     ctx.update(&mut app, keys("?"));
 
     let buffer = ctx.redact_buffer();
@@ -693,8 +698,9 @@ fn the_help_lists_each_columns_keys_in_order() {
 /// A help taller than the terminal wraps its columns, so that all of it fits a wide enough one.
 #[test]
 fn the_help_wraps_its_columns_to_fit_the_terminal() {
-    let mut ctx = setup_clone_wide!();
+    let mut ctx = setup_clone!();
     let mut app = ctx.init_app();
+    ctx.resize(&mut app, &[(150, 24)]);
     ctx.update(&mut app, keys("?"));
 
     let buffer = ctx.redact_buffer();

@@ -26,10 +26,17 @@ fn the_help_menu_offers_nothing_that_writes() {
     commit(&ctx.dir, "file", "a\n");
     fs::write(ctx.dir.join("file"), "b\n").unwrap();
     let mut app = ctx.init_app();
+    ctx.resize(&mut app, &[super::HELP_FITS]);
 
     ctx.update(&mut app, keys("jj?"));
 
+    // The help, below the screen.
     let buffer = ctx.redact_buffer();
+    let buffer = buffer
+        .lines()
+        .skip_while(|row| !row.starts_with('─'))
+        .collect::<Vec<_>>()
+        .join("\n");
     for writes in [
         "Branch",
         "Commit",
@@ -198,6 +205,7 @@ fn the_help_menu_says_it_is_read_only() {
     read_only(&mut ctx);
     let mut app = ctx.init_app();
 
+    ctx.resize(&mut app, &[super::HELP_FITS]);
     ctx.update(&mut app, keys("?"));
 
     let buffer = ctx.redact_buffer();
@@ -217,6 +225,7 @@ fn the_help_menu_says_a_jj_repository_is_read_only() {
     colocate_jj(&ctx);
     let mut app = ctx.init_app();
 
+    ctx.resize(&mut app, &[super::HELP_FITS]);
     ctx.update(&mut app, keys("?"));
 
     let buffer = ctx.redact_buffer();
