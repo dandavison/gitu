@@ -645,3 +645,25 @@ fn plus_and_minus_step_the_context_by_powers_of_two() {
         ]
     );
 }
+
+/// The help calls `H`, which lists what can be given a key, "Hotkeys", and lists the keys given to
+/// features under that heading too.
+#[test]
+fn the_help_calls_the_hotkeys_hotkeys() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("?"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(
+        buffer
+            .lines()
+            .any(|row| row.trim_start().starts_with("H ") && row.contains("Hotkeys")),
+        "{buffer}"
+    );
+    let heading = buffer.lines().position(|row| {
+        row.trim_end_matches(['|', ' ']).ends_with("Hotkeys") && !row.trim_start().starts_with("H ")
+    });
+    assert!(heading.is_some(), "{buffer}");
+    assert!(!buffer.contains("Features"), "{buffer}");
+}
