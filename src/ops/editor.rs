@@ -219,6 +219,50 @@ impl OpTrait for DiffContext {
     }
 }
 
+/// Widen (`true`) or narrow the context git is asked for, by a power of two: to the next power of
+/// two above the context, or below it, down to none. From the whole function, there is nothing
+/// to step from.
+pub(crate) struct StepDiffContext(pub(crate) bool);
+impl OpTrait for StepDiffContext {
+    fn get_action(&self, _target: &ItemData) -> Option<Action> {
+        let wider = self.0;
+        Some(Rc::new(move |app: &mut App, _term: &mut Term| {
+            let lines = match app.state.context.as_deref() {
+                Some("-W") => {
+                    app.display_error("The context is the whole function; U sets a number");
+                    return Ok(());
+                }
+                Some(flag) => flag.trim_start_matches("-U").parse().unwrap_or(3),
+                // git's own context, as configured or by default.
+                None => app
+                    .state
+                    .repo
+                    .config()
+                    .and_then(|config| config.get_i32("diff.context"))
+                    .map_or(3, |lines| lines.max(0) as u32),
+            };
+            let lines = if wider {
+                (lines + 1).next_power_of_two()
+            } else if lines <= 1 {
+                0
+            } else {
+                // The largest power of two below `lines`.
+                1 << (u32::BITS - 1 - (lines - 1).leading_zeros())
+            };
+            app.state.context = Some(Rc::from(format!("-U{lines}").as_str()));
+            app.rerender_screens()
+        }))
+    }
+
+    fn display(&self, _state: &State) -> String {
+        if self.0 {
+            "Wider context".into()
+        } else {
+            "Narrower context".into()
+        }
+    }
+}
+
 /// Edit the question git is being asked. Everything a view is — the revs, what
 /// is compared with what, which paths, how much context — is in that command,
 /// so this is the general case of which [`DiffContext`] is one canned edit.
@@ -447,7 +491,13 @@ impl OpTrait for RendererFeatures {
                             .iter()
                             .position(|offered| offered == feature)
                             .unwrap_or(0);
-                        set_feature_key(app, feature, key);
+                        // Space enables or disables the feature and keeps the list open; any
+                        // other key becomes the feature's key.
+                        if key == ' ' {
+                            toggle_feature(app, feature)?;
+                        } else {
+                            set_feature_key(app, feature, key);
+                        }
                     }
                 }
             }

@@ -58,13 +58,13 @@ status_cursor_on_changes = true
 # not delta's built-in features. A feature is free to restructure the diff
 # however it likes: Gitu maps each rendered row back to its patch line from the
 # metadata the renderer emits, not from how the row looks.
-diff_renderer.features = ["side-by-side", "line-numbers", "plus-minus-markers"]
+diff_renderer.features = ["side-by-side", "line-numbers", "plus-minus-markers", "*"]
 
 # Top-level keys that toggle features. A key already bound at the top level is
 # refused. Feature keys in your config replace these, rather than adding to
 # them. In the `renderer_features` list, a letter sets the selected feature's
 # key, the same letter again unsets it, and Gitu writes them all here.
-diff_renderer.feature_keys = { side-by-side = "S", line-numbers = "L", plus-minus-markers = "+" }
+diff_renderer.feature_keys = { side-by-side = "S", line-numbers = "L" }
 
 # The theme overlaid on your delta configuration, after the features above, as
 # `renderer_themes` sets it. A theme is a feature defined in git config that
@@ -191,6 +191,9 @@ root.status = ["g+s"]
 root.toggle_section = ["tab"]
 root.toggle_all_sections = ["shift+tab"]
 root.diff_context = ["U"]
+# Widen or narrow the context by a power of two: from git's 3, to 4, 8, 16, ...
+root.wider_diff_context = ["+"]
+root.narrower_diff_context = ["-"]
 # Edit the git command the view is the output of, and ask it again.
 root.edit_git_command = [":"]
 # Drop the file whose header is under the cursor from the view, or say which
@@ -233,8 +236,10 @@ root.apply = ["a"]
 root.reverse = ["v"]
 root.copy_hash = ["y"]
 root.blame = ["B"]
-# Turn a renderer feature (side-by-side, line numbers, ...) on or off in place.
-root.renderer_features = ["-"]
+# Enable or disable a renderer feature (side-by-side, line numbers, ...) in place.
+# In the list, space enables or disables the selected feature and keeps the list
+# open, enter does so and closes it, and a letter sets its key.
+root.renderer_features = ["H"]
 # Move through delta's themes for the mode it renders in, light or dark,
 # rendering the screen with each. A digit switches to the theme of that number,
 # 0 being none, so that two can be compared; a theme after the ninth has no

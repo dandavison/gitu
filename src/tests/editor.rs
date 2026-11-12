@@ -165,7 +165,7 @@ fn re_enter_picker_from_menu() {
 
 #[test]
 fn renderer_features_offers_the_configured_ones() {
-    snapshot!(setup_clone!(), "-");
+    snapshot!(setup_clone!(), "H");
 }
 
 /// Give `feature` the only key, as a user's config does: its feature keys replace
@@ -322,12 +322,13 @@ fn a_feature_key_follows_a_change_to_the_users_config_during_the_session() {
 
 /// delta calls the +/- markers `keep-plus-minus-markers`.
 #[test]
-fn plus_turns_off_the_plus_minus_markers_the_users_config_turns_on() {
+fn a_key_turns_off_the_plus_minus_markers_the_users_config_turns_on() {
     let mut ctx = setup_clone!();
+    with_feature_key(&mut ctx, "plus-minus-markers", 'x');
     enable_by_config(&mut ctx, vec!["keep-plus-minus-markers".into()]);
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("+"));
+    ctx.update(&mut app, keys("x"));
     assert_eq!(&*app.state.features, ["-plus-minus-markers".to_string()]);
 }
 
@@ -338,11 +339,11 @@ fn the_feature_list_marks_the_features_the_users_config_turns_on() {
     let mut ctx = setup_clone!();
     enable_by_config(&mut ctx, vec!["line-numbers".into()]);
     let mut app = ctx.init_app();
-    ctx.update(&mut app, keys("-"));
+    ctx.update(&mut app, keys("H"));
     assert!(ctx.redact_buffer().contains("● L line-numbers"));
 
     let mut app = ctx.init_app();
-    ctx.update(&mut app, keys("L-"));
+    ctx.update(&mut app, keys("LH"));
     assert!(ctx.redact_buffer().contains("  L line-numbers"));
 }
 
@@ -393,7 +394,7 @@ fn the_feature_list_is_moved_through_with_the_arrows() {
     let mut ctx = setup_clone!();
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("<-><down><enter>"));
+    ctx.update(&mut app, keys("H<down><enter>"));
     assert_eq!(&*app.state.features, ["line-numbers".to_string()]);
 }
 
@@ -402,7 +403,7 @@ fn the_feature_list_is_moved_through_with_the_arrows() {
 fn the_feature_list_shows_feature_keys() {
     let mut ctx = setup_clone!();
     with_feature_key(&mut ctx, "line-numbers", 'x');
-    snapshot!(ctx, "-");
+    snapshot!(ctx, "H");
 }
 
 /// In the list, a letter becomes the selected feature's key. It works at once,
@@ -414,7 +415,7 @@ fn a_letter_in_the_feature_list_sets_the_selected_features_key() {
     let mine = fs::read_to_string(&path).unwrap();
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("-x<esc>"));
+    ctx.update(&mut app, keys("Hx<esc>"));
     assert!(
         app.state.features.is_empty(),
         "setting a key toggles nothing"
@@ -426,11 +427,7 @@ fn a_letter_in_the_feature_list_sets_the_selected_features_key() {
     assert!(fs::read_to_string(&path).unwrap().starts_with(&mine));
     assert_eq!(
         saved_feature_keys(&path),
-        [
-            ("line-numbers".into(), 'L'),
-            ("plus-minus-markers".into(), '+'),
-            ("side-by-side".into(), 'x')
-        ]
+        [("line-numbers".into(), 'L'), ("side-by-side".into(), 'x')]
     );
 }
 
@@ -440,15 +437,9 @@ fn the_same_letter_again_unsets_the_key() {
     let path = repo_git_config(&ctx);
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("-xx<esc>x"));
+    ctx.update(&mut app, keys("Hxx<esc>x"));
     assert!(app.state.features.is_empty());
-    assert_eq!(
-        saved_feature_keys(&path),
-        [
-            ("line-numbers".into(), 'L'),
-            ("plus-minus-markers".into(), '+')
-        ]
-    );
+    assert_eq!(saved_feature_keys(&path), [("line-numbers".into(), 'L')]);
 }
 
 #[test]
@@ -457,18 +448,14 @@ fn another_letter_replaces_the_key() {
     let path = repo_git_config(&ctx);
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("-xw<esc>x"));
+    ctx.update(&mut app, keys("Hxw<esc>x"));
     assert!(app.state.features.is_empty());
 
     ctx.update(&mut app, keys("w"));
     assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
     assert_eq!(
         saved_feature_keys(&path),
-        [
-            ("line-numbers".into(), 'L'),
-            ("plus-minus-markers".into(), '+'),
-            ("side-by-side".into(), 'w')
-        ]
+        [("line-numbers".into(), 'L'), ("side-by-side".into(), 'w')]
     );
 }
 
@@ -478,19 +465,12 @@ fn a_key_set_for_one_feature_is_taken_from_another() {
     let path = repo_git_config(&ctx);
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("-x<down>x<esc>x"));
+    ctx.update(&mut app, keys("Hx<down>x<esc>x"));
     assert_eq!(&*app.state.features, ["line-numbers".to_string()]);
-    assert_eq!(
-        saved_feature_keys(&path),
-        [
-            ("line-numbers".into(), 'x'),
-            ("plus-minus-markers".into(), '+')
-        ]
-    );
+    assert_eq!(saved_feature_keys(&path), [("line-numbers".into(), 'x')]);
 }
 
-/// side-by-side, line numbers and +/- markers have keys without the user
-/// setting any.
+/// side-by-side and line numbers have keys without the user setting any.
 #[test]
 fn the_default_features_have_keys_by_default() {
     let dir = temp_dir::TempDir::new().unwrap();
@@ -498,21 +478,8 @@ fn the_default_features_have_keys_by_default() {
     fs::write(&path, "").unwrap();
     assert_eq!(
         saved_feature_keys(&path),
-        [
-            ("line-numbers".into(), 'L'),
-            ("plus-minus-markers".into(), '+'),
-            ("side-by-side".into(), 'S')
-        ]
+        [("line-numbers".into(), 'L'), ("side-by-side".into(), 'S')]
     );
-}
-
-#[test]
-fn plus_toggles_the_plus_minus_markers_by_default() {
-    let mut ctx = setup_clone!();
-    let mut app = ctx.init_app();
-
-    ctx.update(&mut app, keys("+"));
-    assert_eq!(&*app.state.features, ["plus-minus-markers".to_string()]);
 }
 
 /// The feature keys a user's config gives are all of them, as are those the
@@ -536,14 +503,8 @@ fn a_default_key_unset_in_the_list_stays_unset() {
     let path = repo_git_config(&ctx);
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("-S<esc>"));
-    assert_eq!(
-        saved_feature_keys(&path),
-        [
-            ("line-numbers".into(), 'L'),
-            ("plus-minus-markers".into(), '+')
-        ]
-    );
+    ctx.update(&mut app, keys("HS<esc>"));
+    assert_eq!(saved_feature_keys(&path), [("line-numbers".into(), 'L')]);
 }
 
 /// A letter that already does something at the top level stays as it is.
@@ -554,7 +515,7 @@ fn a_letter_bound_at_the_top_level_is_refused() {
     let mine = fs::read_to_string(&path).unwrap();
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("-s<esc>"));
+    ctx.update(&mut app, keys("Hs<esc>"));
     assert!(!app.state.feature_keys.values().any(|key| *key == 's'));
     assert_eq!(fs::read_to_string(&path).unwrap(), mine);
 }
@@ -568,7 +529,7 @@ fn q_leaves_the_feature_list() {
     let mine = fs::read_to_string(&path).unwrap();
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("-q"));
+    ctx.update(&mut app, keys("Hq"));
     assert!(app.state.picker.is_none(), "the feature list is gone");
     assert!(!ctx.redact_buffer().contains("bound already"));
     assert_eq!(fs::read_to_string(&path).unwrap(), mine);
@@ -586,7 +547,7 @@ fn renderer_features_offers_those_in_git_config_a_pattern_matches() {
     );
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("<-><enter>"));
+    ctx.update(&mut app, keys("H<enter>"));
     assert_eq!(&*app.state.features, ["my-theme".to_string()]);
 }
 
@@ -598,10 +559,10 @@ fn choosing_a_renderer_feature_marks_it() {
     let mut ctx = ctx;
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("<-><enter>"));
+    ctx.update(&mut app, keys("H<enter>"));
     assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
 
-    ctx.update(&mut app, keys("<-><enter>"));
+    ctx.update(&mut app, keys("H<enter>"));
     assert!(
         app.state.features.is_empty(),
         "picking it again turns it off"
@@ -643,7 +604,8 @@ fn the_feature_list_offers_every_feature_by_default_and_h_opens_it() {
     let mut ctx = setup_clone!();
     let mut app = ctx.init_app();
     ctx.update(&mut app, keys("H"));
-    assert!(app.state.picker.is_some(), "{}", ctx.redact_buffer());
+    let screen = ctx.redact_buffer();
+    assert!(screen.contains("side-by-side"), "{screen}");
 }
 
 /// Space enables or disables the selected feature and leaves the list open, so that several can
@@ -655,9 +617,11 @@ fn space_toggles_a_feature_and_keeps_the_list_open() {
 
     ctx.update(&mut app, keys("H<space>"));
     assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
-    assert!(app.state.picker.is_some());
+    let screen = ctx.redact_buffer();
+    assert!(screen.contains("● S side-by-side"), "{screen}");
 
-    ctx.update(&mut app, keys("<space>"));
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("H<space><space>"));
     assert!(app.state.features.is_empty());
 }
 

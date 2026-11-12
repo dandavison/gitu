@@ -253,7 +253,7 @@ fn the_feature_list_leaves_themes_out() {
     ctx.config().general.diff_renderer.features = vec!["*".into()];
     let mut app = ctx.init_app();
 
-    ctx.update(&mut app, keys("-"));
+    ctx.update(&mut app, keys("H"));
     let screen = ctx.redact_buffer();
     assert!(screen.contains("not-a-theme"), "{screen}");
     assert!(!screen.contains("theme-a"), "{screen}");

@@ -14,7 +14,7 @@ expression: ctx.redact_buffer()
  Features                                                                       |
 ▌  S side-by-side                                                               |
    L line-numbers                                                               |
-   + plus-minus-markers                                                         |
+     plus-minus-markers                                                         |
                                                                                 |
                                                                                 |
                                                                                 |

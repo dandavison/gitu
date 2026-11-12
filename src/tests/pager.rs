@@ -936,7 +936,7 @@ fn a_shorter_rendering_still_fills_the_screen() {
         "before the re-render"
     );
 
-    ctx.update(&mut app, keys("<-><enter>"));
+    ctx.update(&mut app, keys("H<enter>"));
     let buffer = ctx.redact_buffer();
     assert!(blank_rows_at_the_bottom(&buffer) <= 2, "{buffer}");
 }
@@ -1546,7 +1546,7 @@ fn a_rerender_keeps_the_cursor_on_a_line_drawn_late() {
     ctx.update(&mut app, keys("/new b<enter>"));
     assert_eq!(selected_line_of(&app), Some(("b.rs".into(), 1)));
 
-    ctx.update(&mut app, keys("<-><enter>"));
+    ctx.update(&mut app, keys("H<enter>"));
     assert_eq!(selected_line_of(&app), Some(("b.rs".into(), 1)));
 }
 
@@ -1968,7 +1968,7 @@ fn an_unfolded_file_stays_unfolded_through_a_slow_rerender() {
     ctx.update(&mut app, keys("gg<tab>"));
     assert!(ctx.redact_buffer().contains("alpha changed"));
 
-    ctx.update(&mut app, keys("<-><enter>"));
+    ctx.update(&mut app, keys("H<enter>"));
     finish_drawing(&mut ctx, &mut app);
 
     let buffer = ctx.redact_buffer();

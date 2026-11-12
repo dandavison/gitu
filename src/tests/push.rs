@@ -82,7 +82,7 @@ fn force_push() {
 fn open_push_menu_after_dash_input() {
     let ctx = setup_clone!();
     commit(&ctx.dir, "new-file", "");
-    snapshot!(ctx, "<-><esc>P");
+    snapshot!(ctx, "<->P");
 }
 
 #[test]
