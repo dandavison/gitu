@@ -14,8 +14,9 @@ use std::{rc::Rc, sync::Arc};
 
 /// Run the command `name`, with what it asks for filled in from the item under
 /// the cursor, as a fetch is run: in the repository's root, while gitu stays
-/// usable. Its output is not shown, unless with `--debug`; one that fails says
-/// so. A command asking for what is not under the cursor is not run.
+/// usable, with the width and features gitu draws with in its environment. Its
+/// output is not shown, unless with `--debug`; one that fails says so. A
+/// command asking for what is not under the cursor is not run.
 pub(crate) fn run(app: &mut App, term: &mut Term, name: &str) -> Res<()> {
     let Some(template) = app.state.config.general.commands.get(name) else {
         return Ok(());
@@ -42,7 +43,10 @@ pub(crate) fn run(app: &mut App, term: &mut Term, name: &str) -> Res<()> {
         }
     };
 
-    app.run_shell_async(term, &command)
+    // A delta it runs draws as gitu draws the screen.
+    let params = app.render_params(term.size().map_err(Error::Term)?);
+    let env = crate::diff_renderer::drawing_env(&params);
+    app.run_shell_async(term, &command, env)
 }
 
 /// Open the view `name` on top of the screen in view, with what it asks for

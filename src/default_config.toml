@@ -115,9 +115,13 @@ start_folded = false
 # as `renderer_features` lists them. `{commit}`, `{file}` and `{branch}` are
 # filled in, quoted for the shell, from what is under the cursor, and
 # `{command}` with the git command the screen is showing, as `:` shows it; a
-# command using one that is not there is not run. It runs in the repository's root,
-# while gitu stays usable, as a fetch does, and the screens are rebuilt when it
-# exits. Its output is not shown; one that fails says so, with its exit code.
+# command using one that is not there is not run. `COLUMNS` and
+# `DELTA_FEATURES` are set as gitu sets them for the delta it draws with, so
+# that `{command} --color=always | delta` draws as delta draws the screen, but
+# without what gitu adds: folds, counted stat rows, hidden files. It runs in
+# the repository's root, while gitu stays usable, as a fetch does, and the
+# screens are rebuilt when it exits. Its output is not shown; one that fails
+# says so, with its exit code.
 # In git config:
 #   [delta-tui "general.commands"]
 #       open-pr = gh pr view --web {commit}

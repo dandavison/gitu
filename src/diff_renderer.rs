@@ -252,24 +252,29 @@ pub(crate) fn renderer_command(
     params: &crate::items::RenderParams,
     dir: Option<&Path>,
 ) -> Option<Command> {
-    let width = params.width();
     let (program, args) = command.split_first()?;
 
     let mut command = Command::new(program);
     command
         .args(args)
         .env("OSC1717", OSC1717_ADVERTISED)
-        .env("COLUMNS", width.to_string());
-
-    if let Some(features) = feature_overlay(&params.features) {
-        command.env(FEATURES_VAR, features);
-    }
+        .envs(drawing_env(params));
 
     if let Some(dir) = dir {
         command.current_dir(dir);
     }
 
     Some(command)
+}
+
+/// The width and the features in force, as delta takes them from its
+/// environment: what makes a delta draw as gitu's screen is drawn.
+pub(crate) fn drawing_env(params: &crate::items::RenderParams) -> Vec<(&'static str, String)> {
+    let mut env = vec![("COLUMNS", params.width().to_string())];
+    if let Some(features) = feature_overlay(&params.features) {
+        env.push((FEATURES_VAR, features));
+    }
+    env
 }
 
 /// Run `command` in `dir`, feeding it `input` on stdin (a diff to render; the

@@ -660,11 +660,16 @@ impl App {
         self.run_cmd_async_shown(term, input, cmd, shown)
     }
 
-    /// Run `command` with `sh -c`, as [`Self::run_cmd_async`] runs a command,
-    /// shown as it is written rather than as `sh -c` and it.
-    pub(crate) fn run_shell_async(&mut self, term: &mut Term, command: &str) -> Res<()> {
+    /// Run `command` with `sh -c` and `env` set, as [`Self::run_cmd_async`]
+    /// runs a command, shown as it is written rather than as `sh -c` and it.
+    pub(crate) fn run_shell_async(
+        &mut self,
+        term: &mut Term,
+        command: &str,
+        env: Vec<(&'static str, String)>,
+    ) -> Res<()> {
         let mut cmd = Command::new("sh");
-        cmd.args(["-c", command]);
+        cmd.args(["-c", command]).envs(env);
         self.run_cmd_async_shown(term, &[], cmd, command.to_owned().into())
     }
 
