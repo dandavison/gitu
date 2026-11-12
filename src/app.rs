@@ -501,6 +501,8 @@ impl App {
                 if let Some(name) = feature {
                     if self.state.config.general.commands.contains_key(&name) {
                         crate::ops::command::run(self, term, &name)?;
+                    } else if self.state.config.general.views.contains_key(&name) {
+                        crate::ops::command::open_view(self, term, &name)?;
                     } else {
                         crate::ops::editor::toggle_feature(self, &name)?;
                     }
@@ -1088,7 +1090,7 @@ impl App {
     }
 
     /// The feature that `key` toggles in the picker's one row, if any. A key
-    /// that runs a command does nothing there.
+    /// that runs a command or opens a view does nothing there.
     fn feature_with_key_in_one_row(&self, key: event::KeyEvent) -> Option<String> {
         let picker = self.state.picker.as_ref()?;
         let quit = &self.state.config.picker_bindings.quit;
@@ -1098,15 +1100,17 @@ impl App {
                     && !c.is_ascii_digit()
                     && !quit.iter().any(|b| b == &vec![(key.modifiers, key.code)]) =>
             {
-                self.feature_with_key(c)
-                    .filter(|name| !self.state.config.general.commands.contains_key(name))
+                self.feature_with_key(c).filter(|name| {
+                    let general = &self.state.config.general;
+                    !general.commands.contains_key(name) && !general.views.contains_key(name)
+                })
             }
             _ => None,
         }
     }
 
-    /// The feature that `key` toggles, or the command that it runs, by name,
-    /// if any.
+    /// The feature that `key` toggles, the command that it runs or the view
+    /// that it opens, by name, if any.
     fn feature_with_key(&self, key: char) -> Option<String> {
         self.state
             .feature_keys

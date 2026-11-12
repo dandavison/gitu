@@ -113,6 +113,10 @@ pub struct GeneralConfig {
     /// is under the cursor.
     #[serde(default)]
     pub commands: BTreeMap<String, String>,
+    /// git commands, by name, opened as a screen by the keys
+    /// `diff_renderer.feature_keys` gives them, filled in as commands are.
+    #[serde(default)]
+    pub views: BTreeMap<String, String>,
 }
 
 /// Whether gitu runs commands that change the repository (stage, commit,
@@ -187,7 +191,7 @@ pub struct DiffRendererConfig {
     pub features: Vec<String>,
     /// Keys that toggle a feature from `renderer_features` before anything is
     /// typed to filter it, by feature, or run a command from
-    /// `general.commands`, by its name.
+    /// `general.commands` or open a view from `general.views`, by its name.
     #[serde(default)]
     pub feature_keys: BTreeMap<String, char>,
     /// The theme overlaid on the user's own delta configuration: a feature that

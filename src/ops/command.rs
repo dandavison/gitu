@@ -1,11 +1,16 @@
-//! Shell commands the user defines in `general.commands` and binds to keys.
+//! Shell commands and views the user defines in `general.commands` and
+//! `general.views` and binds to keys.
 
 use crate::{
     Res,
     app::App,
+    calling_process::GitCommand,
+    error::Error,
     item_data::{ItemData, Ref},
+    screen,
     term::Term,
 };
+use std::{rc::Rc, sync::Arc};
 
 /// Run the command `name`, with what it asks for filled in from the item under
 /// the cursor, as a fetch is run: in the repository's root, while gitu stays
@@ -16,7 +21,9 @@ pub(crate) fn run(app: &mut App, term: &mut Term, name: &str) -> Res<()> {
         return Ok(());
     };
     let target = &app.screen().get_selected_item().data;
-    let command = match filled_in(template, target) {
+    let command = match filled_in(template, target, |value| {
+        shell_words::quote(value).into_owned()
+    }) {
         Ok(command) => command,
         Err(placeholder) => {
             app.display_error(format!(
@@ -29,22 +36,71 @@ pub(crate) fn run(app: &mut App, term: &mut Term, name: &str) -> Res<()> {
     app.run_shell_async(term, &command)
 }
 
-/// `template` with each placeholder replaced by its value for `target`, quoted
-/// for the shell, or the first placeholder that has none.
-fn filled_in(template: &str, target: &ItemData) -> Result<String, &'static str> {
-    let mut command = template.to_owned();
+/// Open the view `name` on top of the screen in view, with what it asks for
+/// filled in from the item under the cursor. A view asking for what is not
+/// under the cursor, or that is not a `git diff`, `git show` or `git log`, is
+/// not opened.
+pub(crate) fn open_view(app: &mut App, term: &mut Term, name: &str) -> Res<()> {
+    let Some(template) = app.state.config.general.views.get(name) else {
+        return Ok(());
+    };
+    let Ok(words) = shell_words::split(template) else {
+        app.display_error(format!("{name}: {}", Error::EditedCommandQuotes));
+        return Ok(());
+    };
+    let target = &app.screen().get_selected_item().data;
+    // Word by word, so that a value with spaces stays one word.
+    let argv: Result<Vec<String>, _> = words
+        .iter()
+        .map(|word| filled_in(word, target, |value| value.to_owned()))
+        .collect();
+    let argv = match argv {
+        Ok(argv) => argv,
+        Err(placeholder) => {
+            app.display_error(format!(
+                "{name}: nothing under the cursor for {placeholder}"
+            ));
+            return Ok(());
+        }
+    };
+    if GitCommand::of(argv.clone()).is_none() {
+        app.display_error(format!(
+            "{name}: a view is a git diff, git show or git log command"
+        ));
+        return Ok(());
+    }
+
+    let params = app.render_params(term.size().map_err(Error::Term)?);
+    let screen = screen::pager::live(
+        Arc::clone(&app.state.config),
+        Rc::clone(&app.state.repo),
+        params,
+        argv,
+    )?;
+    app.state.screens.push(screen);
+    Ok(())
+}
+
+/// `template` with each placeholder replaced by `written` of its value for
+/// `target`, or the first placeholder that has none.
+fn filled_in(
+    template: &str,
+    target: &ItemData,
+    written: impl Fn(&str) -> String,
+) -> Result<String, &'static str> {
+    let mut filled = template.to_owned();
     for (placeholder, value) in [
         ("{commit}", commit_of(target)),
         ("{file}", file_of(target)),
         ("{branch}", branch_of(target)),
     ] {
-        if !command.contains(placeholder) {
+        if !filled.contains(placeholder) {
             continue;
         }
         let value = value.ok_or(placeholder)?;
-        command = command.replace(placeholder, &shell_words::quote(&value));
+        filled = filled.replace(placeholder, &written(&value));
     }
-    Ok(command)
+    Ok(filled)
 }
 
 fn commit_of(target: &ItemData) -> Option<String> {

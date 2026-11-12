@@ -113,7 +113,7 @@ pub(crate) fn log(
 
 /// The view of a git command gitu runs itself, as though git had been run with
 /// gitu as its pager.
-fn live(
+pub(crate) fn live(
     config: Arc<Config>,
     repo: Rc<Repository>,
     params: RenderParams,
