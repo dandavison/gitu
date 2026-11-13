@@ -83,9 +83,6 @@ const DATA = /*DATA*/null;
 const CASES = ["status", "diff", "diff --stat", "show", "log", "log -p"];
 const W = 520, H = 200, M = { l: 44, r: 8, t: 8, b: 20 };
 const NS = "http://www.w3.org/2000/svg";
-// Every case but status shares a y-axis; slower points are clipped, with values in the tooltip.
-const YMAX_MS = 200;
-
 const el = (tag, attrs = {}, parent) => {
   const e = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
@@ -115,7 +112,7 @@ function panel(name) {
   const pts = DATA.map((r, i) => ({ i, r, c: r.cases?.[name] }));
   const base = DATA.map((r, i) => ({ i, r, c: r.baseline?.[name] }));
   const ok = [...pts, ...base].filter(p => p.c && p.c.mean !== undefined);
-  const top = name === "status" ? Math.max(1, ...ok.map(p => ms(p.c.max))) : YMAX_MS;
+  const top = Math.max(1, ...ok.map(p => ms(p.c.max)));
   const step = tickStep(top);
   const ymax = Math.ceil(top / step) * step;
   const x = i => M.l + (DATA.length < 2 ? 0 : (i / (DATA.length - 1)) * (W - M.l - M.r));
