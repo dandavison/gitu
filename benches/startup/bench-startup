@@ -26,7 +26,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 WORK = ROOT / "target" / "bench-startup"
 FIXTURE = WORK / "fixture"
-FIXTURE_VERSION = "1"
+FIXTURE_VERSION = "2"
 
 # Upstream commits, so the fixture is the same whichever fork commit is benched.
 DIFF_BASE = "fe1ac3347125d9672ef6be2c6d5758769aaca340"  # v0.20.0
@@ -164,8 +164,11 @@ def ensure_fixture() -> None:
     subprocess.run(["rm", "-rf", str(FIXTURE)], check=True)
     home = FIXTURE / "home"
     (home / ".config" / "gitu").mkdir(parents=True)
+    # delta.dark stops `delta --gitu` asking the terminal its colours: nothing in
+    # the pty answers, and delta would wait 1s for an answer on every run.
     (home / ".gitconfig").write_text(
         "[user]\n\tname = bench\n\temail = bench@example.com\n"
+        "[delta]\n\tdark = true\n"
     )
     # diff_renderer.enabled is needed before d000ee4 and ignored after it.
     (home / ".config" / "gitu" / "config.toml").write_text(
