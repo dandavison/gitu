@@ -3,8 +3,8 @@ source: src/tests/commit.rs
 expression: ctx.redact_buffer()
 ---
 ▌Branch: main                                                                   |
-▌Your branch and 'origin/main' have diverged,and have 1 and 1 different commits |
-each, respectively.                                                             |
+▌Your branch and 'origin/main' have diverged, and have 1 and 1 different commits|
+ each, respectively.                                                            |
                                                                                 |
  Recent commits                                                                 |
  5dfe782 main add initial-file                                   Author Name __ |

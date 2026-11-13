@@ -221,7 +221,7 @@ pub(crate) fn layout_item<'a>(
                 format!("Your branch is behind '{upstream}' by {behind} commit(s).")
             } else {
                 format!(
-                    "Your branch and '{upstream}' have diverged,\nand have {ahead} and {behind} different commits each, respectively."
+                    "Your branch and '{upstream}' have diverged, and have {ahead} and {behind} different commits each, respectively."
                 )
             };
 
