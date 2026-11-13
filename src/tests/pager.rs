@@ -2078,9 +2078,9 @@ fn a_part_drawn_patch_has_only_the_files_drawn_so_far() {
     assert_eq!(files, vec![0]);
 }
 
-/// A patch of one file has nothing to fold it away from, so it opens unfolded.
+/// Asked to, a patch of one file opens folded too.
 #[test]
-fn a_patch_of_one_file_starts_unfolded() {
+fn a_patch_of_one_file_starts_folded_when_asked() {
     let mut ctx = setup_clone!();
     commit(&ctx.dir, "a.rs", "alpha\n");
     fs::write(ctx.dir.join("a.rs"), "alpha changed\n").unwrap();
@@ -2089,13 +2089,13 @@ fn a_patch_of_one_file_starts_unfolded() {
     ctx.init_app_as_pager_of(&["git", "diff"]);
 
     let buffer = ctx.redact_buffer();
-    assert!(buffer.contains("alpha changed"), "{buffer}");
+    assert!(buffer.contains("a.rs"), "{buffer}");
+    assert!(!buffer.contains("alpha changed"), "{buffer}");
 }
 
-/// A patch that fits on one screen is all in view already, so it opens
-/// unfolded.
+/// Asked to, a patch that fits on one screen opens folded too.
 #[test]
-fn a_patch_that_fits_on_one_screen_starts_unfolded() {
+fn a_patch_that_fits_on_one_screen_starts_folded_when_asked() {
     let mut ctx = setup_clone!();
     two_changed_files(&ctx);
     ctx.config().general.start_folded = true;
@@ -2103,8 +2103,9 @@ fn a_patch_that_fits_on_one_screen_starts_unfolded() {
     ctx.init_app_as_pager_of(&["git", "diff"]);
 
     let buffer = ctx.redact_buffer();
-    assert!(buffer.contains("alpha changed"), "{buffer}");
-    assert!(buffer.contains("beta changed"), "{buffer}");
+    assert!(buffer.contains("a.rs"), "{buffer}");
+    assert!(!buffer.contains("alpha changed"), "{buffer}");
+    assert!(!buffer.contains("beta changed"), "{buffer}");
 }
 
 /// A view that opens with its files folded puts the cursor on the first of
