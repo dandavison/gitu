@@ -254,7 +254,7 @@ fn every_feature_key_toggles_its_feature_the_same_way() {
                         "BEGIN{",
                         &format!(
                             r#"BEGIN{{print ENVIRON["DELTA_FEATURES"] >> "{}";"#,
-                            log.display()
+                            super::pager::awk_path(&log)
                         ),
                         1,
                     )

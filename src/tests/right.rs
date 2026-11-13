@@ -2,10 +2,15 @@ use super::*;
 use crate::app::App;
 use crate::cmd_log::CmdLogEntry;
 
-/// Whether the last key ran the editor, which the tests set to `true`.
+/// Whether the last key ran the editor, which the tests set to `true`. On
+/// Windows the editor is run through `cmd /C`.
 fn edited(app: &App) -> bool {
     app.state.current_cmd_log.entries.iter().any(|entry| {
-        matches!(&*entry.read().unwrap(), CmdLogEntry::Cmd { args, .. } if args.starts_with("true "))
+        matches!(
+            &*entry.read().unwrap(),
+            CmdLogEntry::Cmd { args, .. }
+                if args.trim_start_matches("cmd /C ").starts_with("true ")
+        )
     })
 }
 

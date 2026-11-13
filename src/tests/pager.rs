@@ -854,6 +854,13 @@ fn rendered_context_lines_are_visited_when_configured() {
     }
 }
 
+/// `path` as a string for an awk program in a test renderer to write to. awk
+/// reads a backslash in its program as an escape, so on Windows the path is
+/// written with forward slashes, which Windows also accepts.
+pub(super) fn awk_path(path: &std::path::Path) -> String {
+    path.display().to_string().replace('\\', "/")
+}
+
 /// A renderer that draws as delta does with its styles plain: for the same
 /// input, `delta` with the arguments `GITU_TEST_RENDERER=delta` gives it (in
 /// `helpers/ui.rs`) writes the same bytes. It speaks the protocol, so its rows

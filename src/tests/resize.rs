@@ -20,7 +20,10 @@ fn width_reporting_renderer(log: Option<&Path>) -> Vec<String> {
             match log {
                 Some(log) => arg.replacen(
                     "BEGIN{",
-                    &format!(r#"BEGIN{{print ENVIRON["COLUMNS"] >> "{}";"#, log.display()),
+                    &format!(
+                        r#"BEGIN{{print ENVIRON["COLUMNS"] >> "{}";"#,
+                        super::pager::awk_path(log)
+                    ),
                     1,
                 ),
                 None => arg,
