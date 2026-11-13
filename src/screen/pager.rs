@@ -356,12 +356,9 @@ fn built(
             // What came back has no diff in it: a log, a blame, a grep, a man
             // page. gitu has no structure of its own to impose, so the renderer
             // draws it.
-            // `git diff --stat` is the patch with its files folded. Otherwise
-            // folding is for finding a file in a patch that is not all in view,
-            // and one still arriving is taken not to fit.
-            let fits = snapshot.done && drawn.lines().count() <= params.size.1 as usize;
-            let fold = *stat == Stat::Folded
-                || config.general.start_folded && file_diffs.len() > 1 && !fits;
+            // `git diff --stat` is the patch with its files folded, as every
+            // patch is with `start_folded`.
+            let fold = *stat == Stat::Folded || config.general.start_folded;
             let patches = items::patches_of(&text, &file_diffs);
             if file_diffs.is_empty() {
                 items.extend(rows(repo, drawn));

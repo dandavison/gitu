@@ -105,10 +105,8 @@ file_header = "delta"
 # jj's own state; otherwise true or false.
 read_only = "auto"
 
-# Whether a patch of more than one file that does not fit on one screen starts
-# with its files folded, in every view of one: `git diff`, `git show`, `git log
-# -p`, and a commit opened from the log. A patch still arriving when the first
-# screen is drawn is taken not to fit.
+# Whether a patch starts with its files folded, in every view of one: `git
+# diff`, `git show`, `git log -p`, and a commit opened from the log.
 start_folded = false
 
 # Shell commands, by name, that a key from `diff_renderer.feature_keys` runs,
