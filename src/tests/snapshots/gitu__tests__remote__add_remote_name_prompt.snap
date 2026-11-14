@@ -2,7 +2,7 @@
 source: src/tests/remote.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Recent commits                                                                 |
@@ -21,5 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
-? Remote name: › █                                                              |
-styles_hash: b34d8dd7b6452ff3
+Remote name: █                                                                  |
+styles_hash: c02a7e2532ef2101

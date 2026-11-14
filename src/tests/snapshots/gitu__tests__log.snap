@@ -2,24 +2,24 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
-▌0c2c6c3 main a-tag add secondfile                               Author Name __ |
- 223428c annotated add firstfile                                 Author Name __ |
- b66a0bf origin/main add initial-file                            Author Name __ |
+▌commit 0c2c6c3770546d888444cfb6a95097222494e462                                |
+▌Author: Author Name <author@email.com>                                         |
+▌Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+▌                                                                               |
+▌    add secondfile                                                             |
+▌                                                                               |
+▌    Commit body goes here                                                      |
+▌                                                                               |
+ commit 223428c33e58735d072d7e76b83e9f3a317bf776                                |
+ Author: Author Name <author@email.com>                                         |
+ Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
                                                                                 |
+     add firstfile                                                              |
                                                                                 |
+     Commit body goes here                                                      |
                                                                                 |
+ commit b66a0bf82020d6a386e94d0fceedec1f817d20c7                                |
+ Author: Author Name <author@email.com>                                         |
+ Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
                                                                                 |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-styles_hash: 4178da3e6ca7da32
+styles_hash: 35e4449e7d5ab2df

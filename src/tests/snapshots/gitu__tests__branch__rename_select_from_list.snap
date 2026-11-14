@@ -2,7 +2,7 @@
 source: src/tests/branch.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Recent commits                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git branch -m feature-a feature-rename                                        |
-styles_hash: ea53b2f4331c1749
+styles_hash: 6ed2883bd683fcc6

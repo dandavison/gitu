@@ -1,0 +1,25 @@
+---
+source: src/tests/mod.rs
+expression: ctx.redact_buffer()
+---
+▌main                                                                           |
+                                                                                |
+ Recent commits                                                                 |
+ 0679022 main add new-file                                       Author Name __ |
+ b66a0bf origin/main add initial-file                            Author Name __ |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: 39c339c6243d9d28

@@ -1,25 +1,26 @@
 ---
 source: src/tests/cherry_pick.rs
+assertion_line: 66
 expression: ctx.redact_buffer()
 ---
 ▌Cherry-picking other-branch                                                    |
                                                                                 |
  Unstaged changes (1)                                                           |
- unmerged   conflict-file…                                                      |
+ conflict-file                                                                  |
                                                                                 |
  Staged changes (1)                                                             |
- unmerged   conflict-file…                                                      |
+ unmerged   conflict-file                                                       |
                                                                                 |
  Recent commits                                                                 |
  487ec57 main modify conflict-file                               Author Name __ |
  415b98a add conflict-file                                       Author Name __ |
  b66a0bf origin/main add initial-file                            Author Name __ |
-                                                                                |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git cherry-pick --continue                                                    |
 error: Committing is not possible because you have unmerged files.              |
 hint: Fix them up in the work tree, and then use 'git add/rm <file>'            |
 hint: as appropriate to mark resolution and make a commit.                      |
 fatal: Exiting because of an unresolved conflict.                               |
-! 'git cherry-pick--continue' exited with code: 128                             |
-styles_hash: ba7a1b0c1d3b847a
+! git cherry-pick --continue                                                    |
+  exit code: 128                                                                |
+styles_hash: 7d1b92e15a58a84f

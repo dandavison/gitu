@@ -2,7 +2,7 @@
 source: src/tests/remote.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Recent commits                                                                 |
@@ -18,8 +18,8 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
  Remote                                                                         |
- a     add remote                                                               |
- K     remove remote                                                            |
- r     rename remote                                                            |
- q/esc Quit/Close                                                               |
-styles_hash: f0b3d15664a45e6
+ a          add remote                                                          |
+ K          remove remote                                                       |
+ r          rename remote                                                       |
+ q/esc/left Quit/Close                                                          |
+styles_hash: ba74ca1103463a2e

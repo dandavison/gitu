@@ -2,7 +2,7 @@
 source: src/tests/stash.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Stashes                                                                        |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
 ────────────────────────────────────────────────────────────────────────────────|
 $ git stash drop 1                                                              |
 Dropped refs/stash@{1} (6e4ee08a012b0675b1f27465f158930aa1088b7a)               |
-styles_hash: 4eb35160e26a3ffa
+styles_hash: e996f9025b8f888e

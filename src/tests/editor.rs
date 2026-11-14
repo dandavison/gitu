@@ -1,4 +1,5 @@
 use super::*;
+use std::path::{Path, PathBuf};
 
 fn setup_scroll(mut ctx: TestContext) -> (TestContext, crate::app::App) {
     for file in ["file-1", "file-2", "file-3"] {
@@ -27,8 +28,102 @@ fn scroll_down() {
     insta::assert_snapshot!(ctx.redact_buffer());
 }
 
+/// One key folds the whole view down to its files, and opens it again.
 #[test]
-fn scroll_past_selection() {
+fn folding_everything_and_opening_it_again() {
+    let (mut ctx, mut app) = setup_scroll(setup_clone!());
+
+    ctx.update(&mut app, keys("<backtab>"));
+    let folded = ctx.redact_buffer();
+    ctx.update(&mut app, keys("<backtab>"));
+    let opened = ctx.redact_buffer();
+
+    assert!(!folded.contains("line 1 (file-1)"), "still open:\n{folded}");
+    assert!(folded.contains("file-1"), "{folded}");
+    assert!(
+        opened.contains("line 1 (file-1)"),
+        "still folded:\n{opened}"
+    );
+}
+
+/// The default binding is written as the keys pressed, and the help says so.
+#[test]
+fn folding_everything_is_bound_to_shift_tab() {
+    let (mut ctx, mut app) = setup_scroll(setup_clone!());
+
+    ctx.update(&mut app, keys("<shift+backtab>"));
+
+    assert!(
+        !ctx.redact_buffer().contains("line 1 (file-1)"),
+        "shift+tab did nothing:\n{}",
+        ctx.redact_buffer()
+    );
+    ctx.update(&mut app, keys("h"));
+    assert!(
+        ctx.redact_buffer().contains("shift+tab"),
+        "{}",
+        ctx.redact_buffer()
+    );
+}
+
+/// A terminal sends shift-tab as backtab with the shift modifier still set.
+/// The keycode already says shift was held, so a `backtab` binding — which is
+/// what config can name — has to match it.
+#[test]
+fn shift_tab_reaches_a_backtab_binding() {
+    let (mut ctx, mut app) = setup_scroll(setup_clone!());
+
+    ctx.update(&mut app, keys("<shift+backtab>"));
+
+    assert!(
+        !ctx.redact_buffer().contains("line 1 (file-1)"),
+        "shift-tab did nothing:\n{}",
+        ctx.redact_buffer()
+    );
+}
+
+/// A page is a whole viewport, which is two half pages.
+#[test]
+fn a_page_is_a_whole_viewport() {
+    let (mut halves, mut halves_app) = setup_scroll(TestContext::setup_clone("page_in_halves"));
+    halves.update(&mut halves_app, keys("<ctrl+d><ctrl+d>"));
+
+    let (mut page, mut page_app) = setup_scroll(TestContext::setup_clone("page_at_once"));
+    page.update(&mut page_app, keys("<pagedown>"));
+
+    assert_eq!(page.redact_buffer(), halves.redact_buffer());
+}
+
+/// Space is how every pager since `more` turns the page, and what magit binds
+/// it to; backspace is its other half.
+#[test]
+fn space_turns_the_page() {
+    let (mut keys_ctx, mut keys_app) = setup_scroll(TestContext::setup_clone("page_by_key"));
+    keys_ctx.update(&mut keys_app, keys("<pagedown><pagedown><pageup>"));
+
+    let (mut space_ctx, mut space_app) = setup_scroll(TestContext::setup_clone("page_by_space"));
+    space_ctx.update(&mut space_app, keys("<space><space><backspace>"));
+
+    assert_eq!(space_ctx.redact_buffer(), keys_ctx.redact_buffer());
+}
+
+#[test]
+fn a_page_down_and_a_page_up_come_back() {
+    let (mut ctx, mut app) = setup_scroll(setup_clone!());
+    let before = ctx.redact_buffer();
+
+    ctx.update(&mut app, keys("<pagedown>"));
+    let paged = ctx.redact_buffer();
+    ctx.update(&mut app, keys("<pageup>"));
+
+    assert_ne!(paged, before, "page down did not scroll");
+    assert_eq!(ctx.redact_buffer(), before, "page up did not come back");
+}
+
+/// Paging through a diff carries the cursor with the view, selecting whatever
+/// row it lands on — a line within a hunk, when that is what is there.
+#[test]
+fn paging_carries_the_cursor_into_the_hunk() {
     let (mut ctx, mut app) = setup_scroll(setup_clone!());
     ctx.update(
         &mut app,
@@ -66,4 +161,562 @@ fn exit_from_picker_exits_menu() {
 #[test]
 fn re_enter_picker_from_menu() {
     snapshot!(setup_clone!(), "bb<esc>bb");
+}
+
+#[test]
+fn renderer_features_offers_the_configured_ones() {
+    snapshot!(setup_clone!(), "H");
+}
+
+/// Give `feature` the only key, as a user's config does: its feature keys replace
+/// the default ones.
+/// Make the user's config enable `features`, by delta's name, as delta tells gitu.
+fn enable_by_config(ctx: &mut TestContext, features: Vec<String>) {
+    ctx.config().general.diff_renderer.enabled_features =
+        crate::config::EnabledFeatures::new(move |_| features.clone());
+}
+
+fn with_feature_key(ctx: &mut TestContext, feature: &str, key: char) {
+    ctx.config().general.diff_renderer.feature_keys = [(feature.into(), key)].into();
+}
+
+/// The repository's own git config, given a `delta-tui` section so that it is
+/// where a key set from the list is written.
+fn repo_git_config(ctx: &TestContext) -> PathBuf {
+    run(
+        &ctx.dir,
+        &["git", "config", "delta-tui.visit-context-lines", "true"],
+    );
+    ctx.dir.join(".git/config")
+}
+
+/// The feature keys gitu would read from the git config file at `path`.
+fn saved_feature_keys(path: &Path) -> Vec<(String, char)> {
+    let git_config = git2::Config::open(path).unwrap();
+    crate::config::init_config_from(PathBuf::from("/nonexistent/config.toml"), Some(&git_config))
+        .unwrap()
+        .general
+        .diff_renderer
+        .feature_keys
+        .into_iter()
+        .collect()
+}
+
+/// A feature's key is a top-level key: it toggles the feature without `-`.
+#[test]
+fn a_feature_key_toggles_its_feature() {
+    let mut ctx = setup_clone!();
+    with_feature_key(&mut ctx, "side-by-side", 'x');
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("x"));
+    assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
+
+    ctx.update(&mut app, keys("x"));
+    assert!(app.state.features.is_empty());
+}
+
+/// A feature the user's own config enables is enabled from the start, and its key
+/// disables it, by removing it, and enables it again.
+#[test]
+fn a_feature_key_turns_off_a_feature_the_users_config_turns_on() {
+    let mut ctx = setup_clone!();
+    with_feature_key(&mut ctx, "side-by-side", 'x');
+    enable_by_config(&mut ctx, vec!["side-by-side".into()]);
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("x"));
+    assert_eq!(&*app.state.features, ["-side-by-side".to_string()]);
+
+    ctx.update(&mut app, keys("x"));
+    assert!(app.state.features.is_empty());
+}
+
+/// Every feature key toggles its feature the same way, whatever the name: a builtin switch
+/// feature, a builtin style feature, the user's own feature, or a builtin name the user also has
+/// a section for (delta treats that section as part of the builtin). The first press enables the
+/// feature (`+name`), or disables it (`+-name`) if the user's config enables it; the second press
+/// returns to the user's config. The test reads what delta is given in `DELTA_FEATURES` each time
+/// it runs.
+#[test]
+fn every_feature_key_toggles_its_feature_the_same_way() {
+    let mut failures = vec![];
+    for name in ["side-by-side", "raw", "mine"] {
+        for enabled_by_config in [false, true] {
+            let mut ctx = TestContext::setup_clone(&format!(
+                "every_feature_key_toggles_{name}_{enabled_by_config}"
+            ));
+            let log = ctx.dir.join(".git").join("delta-features");
+            ctx.config().general.diff_renderer.command = super::pager::annotating_renderer()
+                .into_iter()
+                .map(|arg| {
+                    arg.replacen(
+                        "BEGIN{",
+                        &format!(
+                            r#"BEGIN{{print ENVIRON["DELTA_FEATURES"] >> "{}";"#,
+                            super::pager::awk_path(&log)
+                        ),
+                        1,
+                    )
+                })
+                .collect();
+            ctx.config().general.diff_renderer.features = vec![name.into()];
+            if enabled_by_config {
+                enable_by_config(&mut ctx, vec![name.into()]);
+            }
+            with_feature_key(&mut ctx, name, 'x');
+            commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
+            fs::write(ctx.dir.join("firstfile"), "changed\ntesttest\n").unwrap();
+
+            let mut app = ctx.init_app_as_pager_of(&["git", "diff"]);
+            ctx.update(&mut app, keys("x"));
+            ctx.update(&mut app, keys("x"));
+
+            let toggled = if enabled_by_config {
+                format!("+-{name}")
+            } else {
+                format!("+{name}")
+            };
+            let expected = format!("\n{toggled}\n\n");
+            let actual = fs::read_to_string(&log).unwrap_or_default();
+            if actual != expected {
+                failures.push(format!(
+                    "{name}, enabled by config: {enabled_by_config}: delta was given {actual:?}, not {expected:?}"
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+}
+
+/// Whether the user's config enables a feature is asked when a key is pressed, so a change to
+/// the user's git config during the session counts.
+#[test]
+fn a_feature_key_follows_a_change_to_the_users_config_during_the_session() {
+    let mut ctx = setup_clone!();
+    with_feature_key(&mut ctx, "side-by-side", 'x');
+    let enabled = ctx.dir.join(".git").join("enabled-features");
+    let asked = enabled.clone();
+    ctx.config().general.diff_renderer.enabled_features =
+        crate::config::EnabledFeatures::new(move |_| {
+            fs::read_to_string(&asked)
+                .unwrap_or_default()
+                .split_whitespace()
+                .map(String::from)
+                .collect()
+        });
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("x"));
+    assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
+    ctx.update(&mut app, keys("x"));
+    assert!(app.state.features.is_empty());
+
+    // The user turns side-by-side on in their git config.
+    fs::write(&enabled, "side-by-side").unwrap();
+    ctx.update(&mut app, keys("x"));
+    assert_eq!(&*app.state.features, ["-side-by-side".to_string()]);
+    ctx.update(&mut app, keys("x"));
+    assert!(app.state.features.is_empty());
+}
+
+/// delta calls the +/- markers `keep-plus-minus-markers`.
+#[test]
+fn a_key_turns_off_the_plus_minus_markers_the_users_config_turns_on() {
+    let mut ctx = setup_clone!();
+    with_feature_key(&mut ctx, "plus-minus-markers", 'x');
+    enable_by_config(&mut ctx, vec!["keep-plus-minus-markers".into()]);
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("x"));
+    assert_eq!(&*app.state.features, ["-plus-minus-markers".to_string()]);
+}
+
+/// The feature list marks as on a feature the user's own config turns on, until
+/// it is turned off.
+#[test]
+fn the_feature_list_marks_the_features_the_users_config_turns_on() {
+    let mut ctx = setup_clone!();
+    enable_by_config(&mut ctx, vec!["line-numbers".into()]);
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("H"));
+    assert!(ctx.redact_buffer().contains("● L line-numbers"));
+
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("LH"));
+    assert!(ctx.redact_buffer().contains("  L line-numbers"));
+}
+
+/// The help menu lists feature keys with the other top-level keys.
+#[test]
+fn the_help_menu_lists_feature_keys() {
+    let mut ctx = setup_clone!();
+    with_feature_key(&mut ctx, "side-by-side", 'x');
+    let mut app = ctx.init_app();
+
+    ctx.resize(&mut app, &[super::HELP_FITS]);
+    ctx.update(&mut app, keys("?"));
+    let buffer = ctx.redact_buffer();
+    assert!(
+        regex::Regex::new(r"\bx +side-by-side")
+            .unwrap()
+            .is_match(&buffer),
+        "{buffer}"
+    );
+}
+
+#[test]
+fn the_help_menu_sets_feature_keys_apart_from_submenus() {
+    let mut ctx = setup_clone!();
+    with_feature_key(&mut ctx, "side-by-side", 'x');
+    let mut app = ctx.init_app();
+    ctx.resize(&mut app, &[super::HELP_FITS]);
+    ctx.update(&mut app, keys("?"));
+    insta::assert_snapshot!(ctx.redact_buffer());
+}
+
+/// A key that does something already keeps doing it.
+#[test]
+fn a_configured_feature_key_that_is_already_bound_is_a_config_error() {
+    let dir = temp_dir::TempDir::new().unwrap();
+    let path = dir.path().join("gitconfig");
+    fs::write(
+        &path,
+        "[delta-tui \"general.diff-renderer.feature-keys\"]\n\tside-by-side = s\n",
+    )
+    .unwrap();
+    let git_config = git2::Config::open(&path).unwrap();
+
+    assert!(
+        crate::config::init_config_from(dir.path().join("config.toml"), Some(&git_config)).is_err()
+    );
+}
+
+/// The list is moved through, not searched: letters are keys.
+#[test]
+fn the_feature_list_is_moved_through_with_the_arrows() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("H<down><enter>"));
+    assert_eq!(&*app.state.features, ["line-numbers".to_string()]);
+}
+
+/// Each feature's key is written beside it.
+#[test]
+fn the_feature_list_shows_feature_keys() {
+    let mut ctx = setup_clone!();
+    with_feature_key(&mut ctx, "line-numbers", 'x');
+    snapshot!(ctx, "H");
+}
+
+/// In the list, a letter becomes the selected feature's key. It works at once,
+/// and is saved to the user's git config beside what was already there.
+#[test]
+fn a_letter_in_the_feature_list_sets_the_selected_features_key() {
+    let mut ctx = setup_clone!();
+    let path = repo_git_config(&ctx);
+    let mine = fs::read_to_string(&path).unwrap();
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("Hx<esc>"));
+    assert!(
+        app.state.features.is_empty(),
+        "setting a key toggles nothing"
+    );
+
+    ctx.update(&mut app, keys("x"));
+    assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
+
+    assert!(fs::read_to_string(&path).unwrap().starts_with(&mine));
+    assert_eq!(
+        saved_feature_keys(&path),
+        [("line-numbers".into(), 'L'), ("side-by-side".into(), 'x')]
+    );
+}
+
+#[test]
+fn the_same_letter_again_unsets_the_key() {
+    let mut ctx = setup_clone!();
+    let path = repo_git_config(&ctx);
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("Hxx<esc>x"));
+    assert!(app.state.features.is_empty());
+    assert_eq!(saved_feature_keys(&path), [("line-numbers".into(), 'L')]);
+}
+
+#[test]
+fn another_letter_replaces_the_key() {
+    let mut ctx = setup_clone!();
+    let path = repo_git_config(&ctx);
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("Hxw<esc>x"));
+    assert!(app.state.features.is_empty());
+
+    ctx.update(&mut app, keys("w"));
+    assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
+    assert_eq!(
+        saved_feature_keys(&path),
+        [("line-numbers".into(), 'L'), ("side-by-side".into(), 'w')]
+    );
+}
+
+#[test]
+fn a_key_set_for_one_feature_is_taken_from_another() {
+    let mut ctx = setup_clone!();
+    let path = repo_git_config(&ctx);
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("Hx<down>x<esc>x"));
+    assert_eq!(&*app.state.features, ["line-numbers".to_string()]);
+    assert_eq!(saved_feature_keys(&path), [("line-numbers".into(), 'x')]);
+}
+
+/// side-by-side and line numbers have keys without the user setting any.
+#[test]
+fn the_default_features_have_keys_by_default() {
+    let dir = temp_dir::TempDir::new().unwrap();
+    let path = dir.path().join("gitconfig");
+    fs::write(&path, "").unwrap();
+    assert_eq!(
+        saved_feature_keys(&path),
+        [("line-numbers".into(), 'L'), ("side-by-side".into(), 'S')]
+    );
+}
+
+/// The feature keys a user's config gives are all of them, as are those the
+/// list saves.
+#[test]
+fn a_users_feature_keys_replace_the_default_ones() {
+    let dir = temp_dir::TempDir::new().unwrap();
+    let path = dir.path().join("gitconfig");
+    fs::write(
+        &path,
+        "[delta-tui \"general.diff-renderer.feature-keys\"]\n\tside-by-side = x\n",
+    )
+    .unwrap();
+
+    assert_eq!(saved_feature_keys(&path), [("side-by-side".into(), 'x')]);
+}
+
+#[test]
+fn a_default_key_unset_in_the_list_stays_unset() {
+    let mut ctx = setup_clone!();
+    let path = repo_git_config(&ctx);
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("HS<esc>"));
+    assert_eq!(saved_feature_keys(&path), [("line-numbers".into(), 'L')]);
+}
+
+/// A letter that already does something at the top level stays as it is.
+#[test]
+fn a_letter_bound_at_the_top_level_is_refused() {
+    let mut ctx = setup_clone!();
+    let path = repo_git_config(&ctx);
+    let mine = fs::read_to_string(&path).unwrap();
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("Hs<esc>"));
+    assert!(!app.state.feature_keys.values().any(|key| *key == 's'));
+    assert_eq!(fs::read_to_string(&path).unwrap(), mine);
+}
+
+/// q leaves the feature list, as it leaves theme mode, rather than being a
+/// letter to set as a key.
+#[test]
+fn q_leaves_the_feature_list() {
+    let mut ctx = setup_clone!();
+    let path = repo_git_config(&ctx);
+    let mine = fs::read_to_string(&path).unwrap();
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("Hq"));
+    assert!(app.state.picker.is_none(), "the feature list is gone");
+    assert!(!ctx.redact_buffer().contains("bound already"));
+    assert_eq!(fs::read_to_string(&path).unwrap(), mine);
+}
+
+/// The features the user defined for themselves are theirs to choose from too,
+/// by a pattern rather than one by one.
+#[test]
+fn renderer_features_offers_those_in_git_config_a_pattern_matches() {
+    let mut ctx = setup_clone!();
+    ctx.config().general.diff_renderer.features = vec!["*".into()];
+    run(
+        &ctx.dir,
+        &["git", "config", "delta.my-theme.syntax-theme", "Nord"],
+    );
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("H<enter>"));
+    assert_eq!(&*app.state.features, ["my-theme".to_string()]);
+}
+
+#[test]
+fn choosing_a_renderer_feature_marks_it() {
+    // Picking `side-by-side` enables it; re-opening shows it marked, and
+    // picking it again disables it.
+    let ctx = setup_clone!();
+    let mut ctx = ctx;
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("H<enter>"));
+    assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
+
+    ctx.update(&mut app, keys("H<enter>"));
+    assert!(
+        app.state.features.is_empty(),
+        "picking it again turns it off"
+    );
+}
+
+/// ctrl+z stops gitu as a terminal's job control stops any program. In raw
+/// mode the terminal sends it as a key, so gitu has to be bound to it.
+#[test]
+fn suspending_is_bound_to_ctrl_z() {
+    let mut ctx = setup_clone!();
+    let ctrl_z = [(
+        crossterm::event::KeyModifiers::CONTROL,
+        crossterm::event::KeyCode::Char('z'),
+    )];
+
+    let ops: Vec<&str> = ctx
+        .config()
+        .bindings
+        .match_bindings(&crate::menu::Menu::Root, &ctrl_z)
+        .map(|binding| binding.op.as_ref())
+        .collect();
+
+    assert_eq!(ops, ["suspend"]);
+}
+
+/// By default the list offers delta's switch features and every feature defined in git config,
+/// `H` opens it, and `+` and `-` are not feature keys.
+#[test]
+fn the_feature_list_offers_every_feature_by_default_and_h_opens_it() {
+    let config = crate::config::init_test_config().unwrap();
+    let renderer = &config.general.diff_renderer;
+    assert_eq!(
+        renderer.features,
+        ["side-by-side", "line-numbers", "plus-minus-markers", "*"]
+    );
+    assert!(!renderer.feature_keys.values().any(|key| *key == '+'));
+
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("H"));
+    let screen = ctx.redact_buffer();
+    assert!(screen.contains("side-by-side"), "{screen}");
+}
+
+/// Space enables or disables the selected feature and leaves the list open, so that several can
+/// be changed in one visit.
+#[test]
+fn space_toggles_a_feature_and_keeps_the_list_open() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+
+    ctx.update(&mut app, keys("H<space>"));
+    assert_eq!(&*app.state.features, ["side-by-side".to_string()]);
+    let screen = ctx.redact_buffer();
+    assert!(screen.contains("● S side-by-side"), "{screen}");
+
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("H<space><space>"));
+    assert!(app.state.features.is_empty());
+}
+
+/// `+` and `-` widen and narrow the context by powers of two, from git's default of 3, so that a
+/// few presses go from narrow to wide; `U` sets a number exactly.
+#[test]
+fn plus_and_minus_step_the_context_by_powers_of_two() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+    let context = |app: &crate::app::App| app.state.context.as_deref().map(String::from);
+
+    let mut seen = vec![];
+    for key in ["+", "+", "+", "-", "-", "-", "-", "-", "-"] {
+        ctx.update(&mut app, keys(key));
+        seen.push(context(&app).unwrap_or_default());
+    }
+    assert_eq!(
+        seen,
+        [
+            "-U4", "-U8", "-U16", "-U8", "-U4", "-U2", "-U1", "-U0", "-U0"
+        ]
+    );
+}
+
+/// The help calls `H`, which lists what can be given a key, "Hotkeys", and lists the keys given to
+/// features under that heading too.
+#[test]
+fn the_help_calls_the_hotkeys_hotkeys() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+    ctx.resize(&mut app, &[super::HELP_FITS]);
+    ctx.update(&mut app, keys("?"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(
+        buffer
+            .lines()
+            .any(|row| row.trim_start().starts_with("H ") && row.contains("Hotkeys")),
+        "{buffer}"
+    );
+    let heading = buffer.lines().position(|row| {
+        row.trim_end_matches(['|', ' ']).ends_with("Hotkeys") && !row.trim_start().starts_with("H ")
+    });
+    assert!(heading.is_some(), "{buffer}");
+    assert!(!buffer.contains("Features"), "{buffer}");
+}
+
+/// The help lists each column's keys in order, so that a key is found where it would be in a
+/// dictionary.
+#[test]
+fn the_help_lists_each_columns_keys_in_order() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("?"));
+    let buffer = ctx.redact_buffer();
+
+    // The first column's keys: the first word of each row under the "Commands" heading.
+    let keys: Vec<String> = buffer
+        .lines()
+        .skip_while(|row| !row.trim_start().starts_with("Commands"))
+        .skip(1)
+        .filter_map(|row| row.split_whitespace().next().map(String::from))
+        .filter(|key| key != "|" && !key.starts_with("styles_hash"))
+        .collect();
+    let mut sorted = keys.clone();
+    sorted.sort_by_key(|key| (key.to_lowercase(), key.chars().any(char::is_uppercase)));
+    assert_eq!(keys, sorted, "{buffer}");
+}
+
+/// A help taller than the terminal wraps its columns, so that all of it fits a wide enough one.
+#[test]
+fn the_help_wraps_its_columns_to_fit_the_terminal() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+    ctx.resize(&mut app, &[(150, 24)]);
+    ctx.update(&mut app, keys("?"));
+
+    let buffer = ctx.redact_buffer();
+    for label in ["Files", "Fold all", "Show Refs", "Stash", "S side-by-side"] {
+        assert!(buffer.contains(label), "{label}:\n{buffer}");
+    }
+    assert!(!buffer.contains("more:"), "{buffer}");
+}
+
+/// A help that does not fit even wrapped says how much is cut, rather than dropping it silently.
+#[test]
+fn the_help_says_how_much_is_cut_when_it_does_not_fit() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("?"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains(" more: make the window larger"), "{buffer}");
 }

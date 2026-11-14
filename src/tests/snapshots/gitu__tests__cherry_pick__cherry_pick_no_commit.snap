@@ -1,15 +1,15 @@
 ---
 source: src/tests/cherry_pick.rs
+assertion_line: 46
 expression: ctx.redact_buffer()
 ---
-▌b66a0bf main origin/main add initial-file                       Author Name __ |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
+▌commit b66a0bf82020d6a386e94d0fceedec1f817d20c7                                |
+▌Author: Author Name <author@email.com>                                         |
+▌Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+▌                                                                               |
+▌    add initial-file                                                           |
+▌                                                                               |
+▌    Commit body goes here                                                      |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -21,5 +21,6 @@ expression: ctx.redact_buffer()
 ────────────────────────────────────────────────────────────────────────────────|
 $ git cherry-pick --no-commit Aother-branch                                     |
 fatal: bad revision 'Aother-branch'                                             |
-! 'git cherry-pick--no-commitAother-branch' exited with code: 128               |
-styles_hash: 3519610333b8eb28
+! git cherry-pick --no-commit Aother-branch                                     |
+  exit code: 128                                                                |
+styles_hash: 9df37654b499dca5

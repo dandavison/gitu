@@ -1,0 +1,25 @@
+---
+source: src/tests/rebase.rs
+expression: ctx.redact_buffer()
+---
+▌       ▸ 132f122 add third-file                                                |
+        ▸ bc73029 add second-file                                               |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: fd361eadad4094c9

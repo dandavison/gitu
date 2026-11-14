@@ -1,24 +1,29 @@
 pub mod app;
 mod bindings;
+mod calling_process;
+mod capped_input;
 pub mod cli;
 mod cmd_log;
 pub mod config;
+mod config_edit;
+mod config_git;
+mod diff_renderer;
 pub mod error;
 mod file_watcher;
 mod git;
-pub mod gitu_diff;
-mod highlight;
+mod gitu_diff;
 mod item_data;
 mod items;
 mod key_parser;
 mod menu;
 mod ops;
-pub mod picker;
+mod picker;
 mod prompt;
+mod rebase_todo;
 mod screen;
 mod search;
-pub mod style;
-mod syntax_parser;
+mod stream;
+mod style;
 pub mod term;
 #[cfg(test)]
 mod tests;
@@ -32,15 +37,19 @@ use git2::Repository;
 use items::Item;
 use ops::Action;
 use std::{
-    path::{Path, PathBuf},
-    process::Command,
+    env,
+    io::{self, IsTerminal},
+    path::Path,
     rc::Rc,
     sync::Arc,
     time::Duration,
 };
 use term::Term;
 
+use crate::calling_process::GitCommand;
+use crate::capped_input::Capped;
 use crate::config::Config;
+use crate::screen::pager::Paged;
 
 pub const LOG_FILE_NAME: &str = "gitu.log";
 
@@ -50,7 +59,7 @@ pub const LOG_FILE_NAME: &str = "gitu.log";
 //                  │
 //                  ▼
 //                 ┌──────────────────────────────────────────────────────────────────┐
-//        Item───┬─► On branch master                                                 │
+//        Item───┬─► Branch: master                                                   │
 //        Item   └─► Your branch is up to date with 'origin/master'.                  │
 //        ...      │                                                                  │
 //                 │ Untracked files                                                  │
@@ -83,18 +92,63 @@ pub const LOG_FILE_NAME: &str = "gitu.log";
 
 pub type Res<T> = Result<T, Error>;
 
-pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<()> {
-    let dir = find_git_dir()?;
-    let repo = open_repo(&dir)?;
+/// Run gitu, returning the status to exit with.
+pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
+    needs_terminal(io::stdout().is_terminal())?;
+    // Before anything slower, and before reading the input: the git process on
+    // the other end of a pipe exits as soon as its output fits in the pipe, and
+    // cannot be found once it has. Reading to EOF is always too late — EOF is
+    // git closing the pipe.
+    let paging = pages(args, io::stdin().is_terminal());
+    let git_argv = paging.then(calling_process::paging_for).flatten();
+    log::debug!("Paging the output of {git_argv:?}");
+
+    log::debug!("Opening repo");
+    let repo = open_repo_from_env()?;
+
+    let piped = paging
+        .then(|| read_piped_input(git_argv, repo.workdir(), config.general.max_input_bytes))
+        .transpose()?;
 
     let mut app = app::App::create(
         Rc::new(repo),
         term.size().map_err(Error::Term)?,
         args,
-        config,
+        Arc::clone(&config),
         true,
+        piped,
     )?;
 
+    if args.quit_if_one_screen && paging && app.print_if_one_screen(term)? {
+        return Ok(app.state.exit_code);
+    }
+
+    if args.print {
+        return run_app(&mut app, args, term);
+    }
+
+    term.setup_term(&config).map_err(Error::Term)?;
+    let result = run_app(&mut app, args, term);
+    term.reset_term(&config).map_err(Error::Term)?;
+    result
+}
+
+/// gitu draws on its output, which must be a terminal.
+pub(crate) fn needs_terminal(stdout_is_terminal: bool) -> Res<()> {
+    if stdout_is_terminal {
+        Ok(())
+    } else {
+        Err(Error::NotATerminal)
+    }
+}
+
+/// Whether gitu browses a patch on stdin, as git's pager, rather than opening
+/// the status view or a subcommand's screen.
+pub(crate) fn pages(args: &cli::Args, stdin_is_terminal: bool) -> bool {
+    args.command.is_none() && !stdin_is_terminal
+}
+
+fn run_app(app: &mut app::App, args: &cli::Args, term: &mut Term) -> Res<i32> {
     if let Some(keys_string) = &args.keys {
         let ("", keys) = key_parser::parse_keys(keys_string).expect("Couldn't parse keys") else {
             panic!("Couldn't parse keys");
@@ -108,12 +162,69 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<()> {
     app.redraw_now(term)?;
 
     if args.print {
-        return Ok(());
+        return Ok(app.state.exit_code);
     }
 
     app.run(term, Duration::from_millis(100))?;
 
-    Ok(())
+    Ok(app.state.exit_code)
+}
+
+/// What git piped to us as its pager, alongside the command already found to
+/// have produced it.
+fn read_piped_input(
+    git_argv: Option<Vec<String>>,
+    workdir: Option<&Path>,
+    limit: u64,
+) -> Res<Paged> {
+    paged(io::stdin(), git_argv, workdir, limit)
+}
+
+/// What git piped, unless gitu found the command that produced it: then gitu
+/// asks git again itself (see [`screen::pager`]), and reading the output would
+/// only wait for git to write what is discarded. git, left blocked on a full
+/// pipe, ends with SIGPIPE when gitu exits, as it does when less quits early.
+fn paged(
+    input: impl io::Read,
+    git_argv: Option<Vec<String>>,
+    workdir: Option<&Path>,
+    limit: u64,
+) -> Res<Paged> {
+    if git_argv.clone().and_then(GitCommand::of).is_some() {
+        return Ok(Paged {
+            text: String::new(),
+            truncated: false,
+            git_argv,
+            prefix: command_prefix(workdir),
+        });
+    }
+
+    let input = Capped::read(input, limit).map_err(Error::ReadPipedInput)?;
+    Ok(Paged {
+        text: input.text,
+        truncated: input.truncated,
+        git_argv,
+        prefix: String::new(),
+    })
+}
+
+/// Where git ran the command it is paging (see [`GitCommand::prefix`]). git
+/// runs its pager from the repository's root and says in `GIT_PREFIX` where it
+/// was run; in a shell pipeline, gitu runs where git did, in `workdir`.
+fn command_prefix(workdir: Option<&Path>) -> String {
+    if let Ok(prefix) = env::var("GIT_PREFIX") {
+        return prefix;
+    }
+
+    let relative = || {
+        let dir = env::current_dir().ok()?.canonicalize().ok()?;
+        let root = workdir?.canonicalize().ok()?;
+        Some(dir.strip_prefix(root).ok()?.to_str()?.to_owned())
+    };
+    match relative() {
+        Some(dir) if !dir.is_empty() => format!("{dir}/"),
+        _ => String::new(),
+    }
 }
 
 fn open_repo(dir: &Path) -> Res<Repository> {
@@ -121,22 +232,6 @@ fn open_repo(dir: &Path) -> Res<Repository> {
     let repo = open_repo_from_env()?;
     repo.set_workdir(dir, false).map_err(Error::OpenRepo)?;
     Ok(repo)
-}
-
-fn find_git_dir() -> Res<PathBuf> {
-    log::debug!("Finding git dir");
-    let dir = PathBuf::from(
-        String::from_utf8(
-            Command::new("git")
-                .args(["rev-parse", "--show-toplevel"])
-                .output()
-                .map_err(Error::FindGitDir)?
-                .stdout,
-        )
-        .map_err(Error::GitDirUtf8)?
-        .trim_end(),
-    );
-    Ok(dir)
 }
 
 fn open_repo_from_env() -> Res<Repository> {

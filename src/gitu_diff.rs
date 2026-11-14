@@ -195,23 +195,18 @@ impl<'a> Parser<'a> {
     /// Parses a diff file and returns a vector of Diff structures.
     ///
     /// The returned ranges refer to the original input bytes.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// let input = "diff --git a/file1.txt b/file2.txt\n\
-    /// index 0000000..1111111 100644\n\
-    /// --- a/file1.txt\n\
-    /// +++ b/file2.txt\n\
-    /// @@ -1,2 +1,2 @@\n\
-    /// -foo\n\
-    /// +bar\n";
-    ///
-    /// let diff = gitu::gitu_diff::Parser::new(input).parse_diff().unwrap();
-    /// assert_eq!(diff[0].header.range, 0..97);
-    /// ```
     pub fn parse_diff<'b>(&'b mut self) -> Result<'b, Vec<FileDiff>> {
-        log::trace!("Parser::parse_diff\n{:?}", self);
+        self.parse(false)
+    }
+
+    /// Parses a log of patches (`git log -p`): diffs that commits' messages
+    /// separate, and may follow. What is not a diff is skipped.
+    pub fn parse_patches<'b>(&'b mut self) -> Result<'b, Vec<FileDiff>> {
+        self.parse(true)
+    }
+
+    fn parse<'b>(&'b mut self, between_diffs: bool) -> Result<'b, Vec<FileDiff>> {
+        log::trace!("Parser::parse\n{:?}", self);
         let mut diffs = vec![];
 
         if self.input.is_empty() {
@@ -232,6 +227,12 @@ impl<'a> Parser<'a> {
                 errors,
                 parser: self.clone(),
             })?);
+            if between_diffs {
+                self.skip_until_diff_header().map_err(|errors| ParseError {
+                    errors,
+                    parser: self.clone(),
+                })?;
+            }
         }
 
         self.eof().map_err(|errors| ParseError {
@@ -807,6 +808,19 @@ mod tests {
         let mut parser = Parser::new("");
         let diffs = parser.parse_diff().unwrap();
         assert!(diffs.is_empty(), "Expected empty vector for empty input");
+    }
+
+    #[test]
+    fn the_file_header_range_ends_where_its_first_hunk_begins() {
+        let input = "diff --git a/file1.txt b/file2.txt\n\
+            index 0000000..1111111 100644\n\
+            --- a/file1.txt\n\
+            +++ b/file2.txt\n\
+            @@ -1,2 +1,2 @@\n\
+            -foo\n\
+            +bar\n";
+        let diff = Parser::new(input).parse_diff().unwrap();
+        assert_eq!(diff[0].header.range, 0..97);
     }
 
     #[test]

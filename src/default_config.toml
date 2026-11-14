@@ -1,6 +1,11 @@
 # This file contains Gitu's default configuration.
 # It is possible to override settings with an equivalent file at:
 # `~/.config/gitu/config.toml`
+# and to override both in git config's `delta-tui` section, e.g.
+#   [delta-tui]
+#       start-folded = true
+#   [delta-tui "style"]
+#       hunk-header = bold blue
 
 [general]
 always_show_help.enabled = false
@@ -14,6 +19,122 @@ recent_commits_limit = 10
 log_author_width = 15
 mouse_support = false
 mouse_scroll_lines = 3
+
+# The most input Gitu will read, whether piped to it as a pager or produced by
+# a command it puts again. Input is read in one pass before the first frame, so
+# without a limit an accidental `git log -p` over a whole history shows nothing
+# until all of it has been read and rendered.
+max_input_bytes = 2_000_000
+
+# The branch section is 'Branch: {name}' over a line placing the branch
+# relative to its upstream. Off, it is the branch name alone.
+verbose_branch_status = true
+
+# Files to drop from a paged view (gitu as git's pager), as if the patch never had
+# them. The wildcards are git's: `*.pb.go` matches at any depth, and naming a
+# directory hides its subtree. `&` says which files to show while reading, and
+# `:` shows the pathspecs these became. e.g.:
+#   hide = ["*.pb.go", "*_test.go", "vendor"]
+hide = []
+
+# Stop the cursor on a diff's unchanged lines too, as reading a patch line by
+# line wants. Nothing can be staged there; off, the cursor skips them.
+visit_context_lines = true
+
+# Open the status screen on the first unstaged file, or the first staged one
+# when nothing is unstaged; off, it opens at the top.
+status_cursor_on_changes = true
+
+# Renderer features that `renderer_features` offers, to turn on and off while
+# viewing a diff. They are passed to the renderer as DELTA_FEATURES=+<names>,
+# which delta adds to the features your own git config already sets: your
+# configuration stays the base and this is only an overlay on it, held for the
+# session and never written to disk.
+#
+# Any feature you have defined in git config as `[delta "name"]` can be named
+# here alongside delta's built-in ones, singly or by a pattern: `*` matches any
+# run of characters and `?` any one, so "*" offers every feature defined in git
+# config, including any themes included there. A pattern matches only those,
+# not delta's built-in features. A feature is free to restructure the diff
+# however it likes: Gitu maps each rendered row back to its patch line from the
+# metadata the renderer emits, not from how the row looks.
+diff_renderer.features = ["side-by-side", "line-numbers", "plus-minus-markers", "*"]
+
+# Top-level keys that toggle features, run commands or open views (`commands`
+# and `views` below), by name. A key already bound at the top level is refused. Feature keys in your
+# config replace these, rather than adding to them. In the `renderer_features`
+# list, a letter sets the selected feature's or command's key, the same letter
+# again unsets it, and Gitu writes them all here.
+diff_renderer.feature_keys = { side-by-side = "S", line-numbers = "L" }
+
+# The theme overlaid on your delta configuration, after the features above, as
+# `renderer_themes` sets it. A theme is a feature defined in git config that
+# sets `dark` or `light`, as delta defines one. `renderer_themes` writes your
+# choice to git config's delta-tui section, not here.
+# diff_renderer.theme = "my-theme"
+# delta's builtin features to offer as themes too, after those in git config,
+# e.g. ["diff-so-fancy"].
+diff_renderer.builtin_themes = []
+
+# Arguments given to the `git log` Gitu runs for the log view (`l l`, `l o`),
+# e.g. a pretty format of your own:
+#   log_args = ["--stat", "--pretty=commit-format"]
+# A commit is one cursor stop only where the renderer marks it, as delta does
+# for rows matching its `commit-regex`. `git log` typed at the command line
+# takes git's own config instead (`format.pretty`).
+log_args = []
+
+# Arguments given to the `git show` Gitu runs for a commit it opens (enter on a
+# commit, `gitu show`), e.g. a pretty format of your own:
+#   show_args = ["--pretty=commit-format-full"]
+# `git show` typed at the command line takes git's own config instead
+# (`format.pretty`).
+show_args = []
+
+# What heads each file of a patch, folded or not: the renderer's file header
+# ("delta"), or the file's line of a diffstat ("stat"). Gitu counts the stat from the patch rather than asking
+# git for one, which would delay the first screen of a large diff. Its columns
+# are laid out to fit the files drawn so far, so they can shift once the rest of
+# a long diff has arrived.
+file_header = "delta"
+
+# Run no command that changes the repository (stage, discard, apply, commit,
+# rebase, fetch, ...), and hide them, and save nothing chosen in-session (a
+# theme, feature keys, prompt history). "auto" is read-only in a repository jj
+# also manages, one with a `.jj` directory, where a git command can contradict
+# jj's own state; otherwise true or false.
+read_only = "auto"
+
+# Whether a patch starts with its files folded, in every view of one: `git
+# diff`, `git show`, `git log -p`, and a commit opened from the log.
+start_folded = false
+
+# Shell commands, by name, that a key from `diff_renderer.feature_keys` runs,
+# as `renderer_features` lists them. `{commit}`, `{file}` and `{branch}` are
+# filled in, quoted for the shell, from what is under the cursor, and
+# `{command}` with the git command the screen is showing, as `:` shows it; a
+# command using one that is not there is not run. `COLUMNS` and
+# `DELTA_FEATURES` are set as gitu sets them for the delta it draws with, so
+# that `{command} --color=always | delta` draws as delta draws the screen, but
+# without what gitu adds: folds, counted stat rows, hidden files. It runs in
+# the repository's root, while gitu stays usable, as a fetch does, and the
+# screens are rebuilt when it exits. Its output is not shown; one that fails
+# says so, with its exit code.
+# In git config:
+#   [delta-tui "general.commands"]
+#       open-pr = gh pr view --web {commit}
+commands = {}
+
+# git commands, by name, that a key from `diff_renderer.feature_keys` opens as
+# a screen on top of the one it is pressed on, as enter opens a commit; q goes
+# back. Filled in as commands are, but not run by a shell: a view is a `git
+# diff`, `git show` or `git log`, run again after each change as `:` runs an
+# edited command. `{command}` is a word of its own, standing for the words of
+# the git command shown, so that a view can change it. In git config:
+#   [delta-tui "general.views"]
+#       diff-since = git diff {commit}...
+#       word-diff = {command} --word-diff
+views = {}
 
 # When to prompt for discard confirmation. Options:
 # "line"  - always prompt even for individual lines (default),
@@ -53,36 +174,6 @@ section_header = { fg = "yellow" }
 file_header = { fg = "magenta" }
 hunk_header = { fg = "blue" }
 
-diff_highlight.tag_old = { fg = "red", mods = "BOLD" }
-diff_highlight.tag_new = { fg = "green", mods = "BOLD" }
-diff_highlight.unchanged_old = { mods = "DIM" }
-diff_highlight.unchanged_new = { mods = "DIM" }
-diff_highlight.changed_old = { fg = "red" }
-diff_highlight.changed_new = { fg = "green" }
-
-syntax_highlight.enabled = true
-syntax_highlight.attribute = { fg = "yellow" }
-syntax_highlight.comment = { fg = "gray" }
-syntax_highlight.constant_builtin = {}
-syntax_highlight.constant = {}
-syntax_highlight.constructor = {}
-syntax_highlight.embedded = {}
-syntax_highlight.function_builtin = { fg = "cyan" }
-syntax_highlight.function = { fg = "blue" }
-syntax_highlight.keyword = { fg = "magenta" }
-syntax_highlight.number = {}
-syntax_highlight.module = { fg = "cyan" }
-syntax_highlight.property = {}
-syntax_highlight.operator = {}
-syntax_highlight.punctuation_bracket = {}
-syntax_highlight.punctuation_delimiter = {}
-syntax_highlight.string_special = { fg = "yellow" }
-syntax_highlight.string = { fg = "yellow" }
-syntax_highlight.tag = {}
-syntax_highlight.type = { fg = "yellow" }
-syntax_highlight.type_builtin = { fg = "yellow" }
-syntax_highlight.variable_builtin = {}
-syntax_highlight.variable_parameter = {}
 
 picker.prompt = { fg = "cyan" }
 picker.info = { mods = "DIM" }
@@ -99,6 +190,15 @@ selection_line = { mods = "BOLD" }
 selection_area = {}
 
 hash = { fg = "yellow" }
+
+# What the interactive rebase will do with each commit, where that isn't just
+# picking it.
+rebase_todo.reword = { fg = "blue", mods = "BOLD" }
+rebase_todo.edit = { fg = "magenta", mods = "BOLD" }
+rebase_todo.squash = { fg = "cyan", mods = "BOLD" }
+rebase_todo.fixup = { fg = "yellow", mods = "BOLD" }
+rebase_todo.drop = { fg = "red", mods = "BOLD" }
+
 branch = { fg = "green" }
 remote = { fg = "red" }
 tag = { fg = "yellow" }
@@ -110,17 +210,45 @@ blame.code_line = { mods = "DIM" }
 
 [bindings]
 root.quit = ["q", "esc"]
+# Fold the file or hunk unfolded on this screen that the cursor is on or in.
+# Otherwise like quit, but on the first screen it does nothing rather than leave
+# gitu.
+root.fold_or_back = ["left"]
 root.refresh = ["g+r"]
+root.suspend = ["ctrl+z"]
+# Go to the status screen, leaving the screen gitu was started on underneath.
+root.status = ["g+s"]
 root.toggle_section = ["tab"]
-root.move_up = ["k", "up"]
-root.move_down = ["j", "down"]
-root.move_up_line = ["ctrl+k", "ctrl+up"]
-root.move_down_line = ["ctrl+j", "ctrl+down"]
+root.toggle_all_sections = ["shift+tab"]
+root.diff_context = ["U"]
+# Widen or narrow the context by a power of two: from git's 3, to 4, 8, 16, ...
+root.wider_diff_context = ["+"]
+root.narrower_diff_context = ["-"]
+# Edit the git command the view is the output of, and ask it again.
+root.edit_git_command = [":"]
+# Drop the file whose header is under the cursor from the view, or say which
+# files to show at all: `src !*_test.go` limits the view to src and hides its
+# tests.
+root.hide_file = ["d"]
+root.file_patterns = ["&"]
+# As in less, j, k and the arrow keys move a line at a time, through a diff's
+# lines too. With ctrl they skip over a diff's lines.
+root.move_up_line = ["k", "up"]
+root.move_down_line = ["j", "down"]
+root.move_up = ["ctrl+k", "ctrl+up"]
+root.move_down = ["ctrl+j", "ctrl+down"]
+# Reach the selection over a run of diff lines, to stage / unstage / discard /
+# reverse them together. It stays within one hunk, which is as far as a single
+# patch reaches. Any other movement drops the selection.
+root.extend_selection_up = ["shift+up"]
+root.extend_selection_down = ["shift+down"]
 root.move_prev_section = ["alt+k", "alt+up"]
 root.move_next_section = ["alt+j", "alt+down"]
 root.move_parent_section = ["alt+h", "alt+left"]
 root.half_page_up = ["ctrl+u"]
 root.half_page_down = ["ctrl+d"]
+root.full_page_up = ["pageup", "backspace"]
+root.full_page_down = ["pagedown", "space"]
 root.move_top = ["g+g"]
 root.move_bottom = ["G"]
 root.scroll_view_up = ["ctrl+y"]
@@ -130,7 +258,10 @@ root.search_backward = []
 root.search_next = ["n"]
 root.search_previous = ["N"]
 root.show_refs = ["Y"]
+# Enter opens a file or hunk in the editor; right stays in gitu, unfolding a
+# folded file or hunk instead.
 root.show = ["enter"]
+root.show_or_unfold = ["right"]
 root.discard = ["K"]
 root.stage = ["s"]
 root.unstage = ["u"]
@@ -138,11 +269,26 @@ root.apply = ["a"]
 root.reverse = ["v"]
 root.copy_hash = ["y"]
 root.blame = ["B"]
+# Enable or disable a renderer feature (side-by-side, line numbers, ...) in place.
+# In the list, space enables or disables the selected feature and keeps the list
+# open, enter does so and closes it, and a letter sets its key.
+root.renderer_features = ["H"]
+# Move through delta's themes for the mode it renders in, light or dark,
+# rendering the screen with each. A digit switches to the theme of that number,
+# 0 being none, so that two can be compared; a theme after the ninth has no
+# digit. The list (`picker.toggle_list`) has them all.
+root.renderer_themes = ["T"]
 
 picker.next = ["down", "ctrl+n", "tab"]
-picker.previous = ["up", "ctrl+p", "backtab"]
+picker.previous = ["up", "ctrl+p", "shift+tab"]
 picker.done = ["enter"]
 picker.cancel = ["esc", "ctrl+c"]
+# In theme mode, switch between the one row showing the theme on screen and the
+# list of every theme, where typing searches them.
+picker.toggle_list = ["ctrl+l"]
+# Cancel in theme mode's one row, where letters are not typed, and in the
+# `renderer_features` list, where a letter sets a key.
+picker.quit = ["q"]
 
 root.help_menu = ["h", "?"]
 help_menu.quit = ["q", "h", "?", "esc"]
@@ -153,7 +299,7 @@ branch_menu.checkout_new_branch = ["c"]
 branch_menu.spinoff = ["s"]
 branch_menu.rename = ["m"]
 branch_menu.delete = ["K"]
-branch_menu.quit = ["q", "esc"]
+branch_menu.quit = ["q", "esc", "left"]
 
 root.commit_menu = ["c"]
 commit_menu.--all = ["-a"]
@@ -167,13 +313,30 @@ commit_menu.commit_amend = ["a"]
 commit_menu.commit_extend = ["e"]
 commit_menu.commit_fixup = ["f"]
 commit_menu.commit_instant_fixup = ["F"]
-commit_menu.quit = ["q", "esc"]
+commit_menu.quit = ["q", "esc", "left"]
+
+# The log view opened to choose a commit (by `commit_menu.commit_fixup` and
+# `commit_menu.commit_instant_fixup`). Navigation is as in the log view.
+commit_picker.select_commit = ["enter"]
+commit_picker.move_up = ["k", "up"]
+commit_picker.move_down = ["j", "down"]
+commit_picker.move_prev_section = ["alt+k", "alt+up"]
+commit_picker.move_next_section = ["alt+j", "alt+down"]
+commit_picker.move_top = ["g+g"]
+commit_picker.move_bottom = ["G"]
+commit_picker.half_page_up = ["ctrl+u"]
+commit_picker.half_page_down = ["ctrl+d"]
+commit_picker.scroll_view_up = ["ctrl+y"]
+commit_picker.scroll_view_down = ["ctrl+e"]
+commit_picker.toggle_section = ["tab"]
+commit_picker.toggle_menu = ["h", "?"]
+commit_picker.quit = ["q", "esc"]
 
 root.fetch_menu = ["f"]
 fetch_menu.--prune = ["-p"]
 fetch_menu.--tags = ["-t"]
 fetch_menu.fetch_all = ["a"]
-fetch_menu.quit = ["q", "esc"]
+fetch_menu.quit = ["q", "esc", "left"]
 fetch_menu.fetch_elsewhere = ["e"]
 fetch_menu.fetch_push_remote = ["p"]
 fetch_menu.fetch_upstream = ["u"]
@@ -181,7 +344,7 @@ fetch_menu.fetch_upstream = ["u"]
 root.log_menu = ["l"]
 log_menu.log_current = ["l"]
 log_menu.log_other = ["o"]
-log_menu.quit = ["q", "esc"]
+log_menu.quit = ["q", "esc", "left"]
 log_menu.-n = ["-n"]
 log_menu.--grep = ["-F"]
 
@@ -191,14 +354,14 @@ merge_menu.--no-ff = ["-n"]
 merge_menu.merge_abort = ["a"]
 merge_menu.merge_continue = ["c"]
 merge_menu.merge = ["m"]
-merge_menu.quit = ["q", "<esc>"]
+merge_menu.quit = ["q", "<esc>", "left"]
 
 root.pull_menu = ["F"]
 pull_menu.--rebase = ["-r"]
 pull_menu.pull_from_push_remote = ["p"]
 pull_menu.pull_from_upstream = ["u"]
 pull_menu.pull_from_elsewhere = ["e"]
-pull_menu.quit = ["q", "esc"]
+pull_menu.quit = ["q", "esc", "left"]
 
 root.push_menu = ["P"]
 push_menu.--force-with-lease = ["-f"]
@@ -208,7 +371,7 @@ push_menu.--dry-run = ["-n"]
 push_menu.push_to_push_remote = ["p"]
 push_menu.push_to_upstream = ["u"]
 push_menu.push_to_elsewhere = ["e"]
-push_menu.quit = ["q", "esc"]
+push_menu.quit = ["q", "esc", "left"]
 
 root.rebase_menu = ["r"]
 rebase_menu.--keep-empty = ["-k"]
@@ -223,19 +386,45 @@ rebase_menu.rebase_abort = ["a"]
 rebase_menu.rebase_continue = ["c"]
 rebase_menu.rebase_elsewhere = ["e"]
 rebase_menu.rebase_autosquash = ["f"]
-rebase_menu.quit = ["q", "esc"]
+rebase_menu.quit = ["q", "esc", "left"]
+
+# The interactive rebase todo screen (opened by `rebase_menu.rebase_interactive`).
+# It has its own keymap: single keys re-mark the selected commit and alt+up /
+# alt+down reorder it. Nothing runs until `rebase_todo_start`.
+rebase_todo.rebase_todo_pick = ["p"]
+rebase_todo.rebase_todo_reword = ["r"]
+rebase_todo.rebase_todo_edit = ["e"]
+rebase_todo.rebase_todo_squash = ["s"]
+rebase_todo.rebase_todo_fixup = ["f"]
+rebase_todo.rebase_todo_drop = ["d"]
+rebase_todo.rebase_todo_move_up = ["alt+k", "alt+up"]
+rebase_todo.rebase_todo_move_down = ["alt+j", "alt+down"]
+rebase_todo.rebase_todo_start = ["enter"]
+rebase_todo.move_up = ["k", "up"]
+rebase_todo.move_down = ["j", "down"]
+rebase_todo.move_top = ["g+g"]
+rebase_todo.move_bottom = ["G"]
+rebase_todo.half_page_up = ["ctrl+u"]
+rebase_todo.half_page_down = ["ctrl+d"]
+rebase_todo.scroll_view_up = ["ctrl+y"]
+rebase_todo.scroll_view_down = ["ctrl+e"]
+rebase_todo.toggle_section = ["tab"]
+rebase_todo.toggle_menu = ["h", "?"]
+# When git is waiting on gitu as its sequence editor, leaving calls
+# the rebase off.
+rebase_todo.quit = ["q", "esc"]
 
 root.remote_menu=["M"]
 remote_menu.add_remote=["a"]
 remote_menu.remove_remote=["K"]
 remote_menu.rename_remote=["r"]
-remote_menu.quit = ["q", "esc"]
+remote_menu.quit = ["q", "esc", "left"]
 
 root.reset_menu = ["X"]
 reset_menu.reset_soft = ["s"]
 reset_menu.reset_mixed = ["m"]
 reset_menu.reset_hard = ["h"]
-reset_menu.quit = ["q", "esc"]
+reset_menu.quit = ["q", "esc", "left"]
 
 root.revert_menu = ["V"]
 revert_menu.--edit = ["-e"]
@@ -244,7 +433,7 @@ revert_menu.--signoff = ["-s"]
 revert_menu.revert_abort = ["a"]
 revert_menu.revert_continue = ["c"]
 revert_menu.revert_commit = ["V"]
-revert_menu.quit = ["q", "esc"]
+revert_menu.quit = ["q", "esc", "left"]
 
 root.cherry_pick_menu = ["A"]
 cherry_pick_menu.--no-commit = ["-n"]
@@ -253,7 +442,7 @@ cherry_pick_menu.--edit = ["-e"]
 cherry_pick_menu.cherry_pick_abort = ["a"]
 cherry_pick_menu.cherry_pick_continue = ["c"]
 cherry_pick_menu.cherry_pick = ["A"]
-cherry_pick_menu.quit = ["q", "esc"]
+cherry_pick_menu.quit = ["q", "esc", "left"]
 
 root.stash_menu = ["z"]
 stash_menu.--all = ["-a"]
@@ -265,4 +454,4 @@ stash_menu.stash_keep_index = ["x"]
 stash_menu.stash_pop = ["p"]
 stash_menu.stash_apply = ["a"]
 stash_menu.stash_drop = ["k"]
-stash_menu.quit = ["q", "esc"]
+stash_menu.quit = ["q", "esc", "left"]

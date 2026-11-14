@@ -26,9 +26,8 @@ impl TryFrom<BTreeMap<Menu, BTreeMap<Op, Vec<String>>>> for Bindings {
                     if let Some(binding) = Binding::parse(menu, &keys, op.clone()) {
                         bindings.push(binding);
                     } else {
-                        // Format bad key bindings like " - {menu}.{op} = {keys}"
                         bad_bindings.push(format!(
-                            "- {}.{} = {}",
+                            "- {}.{} = {} (not a key)",
                             menu.as_ref(),
                             op.as_ref(),
                             keys
@@ -59,6 +58,14 @@ impl Bindings {
             .iter()
             .filter(move |binding| &binding.menu == pending)
             .filter(|binding| binding.keys.starts_with(events))
+    }
+
+    /// Whether `key` does something at the top level, alone or as the first of
+    /// several keys.
+    pub(crate) fn binds_at_top_level(&self, key: char) -> bool {
+        self.match_bindings(&Menu::Root, &[(KeyModifiers::NONE, KeyCode::Char(key))])
+            .next()
+            .is_some()
     }
 
     pub(crate) fn list<'a>(&'a self, pending: &Menu) -> impl Iterator<Item = &'a Binding> {

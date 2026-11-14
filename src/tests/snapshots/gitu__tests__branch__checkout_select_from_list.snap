@@ -2,7 +2,7 @@
 source: src/tests/branch.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch feature-a                                                            |
+▌Branch: feature-a                                                              |
                                                                                 |
  Recent commits                                                                 |
  3b23a7d feature-a add feature-a commit                          Author Name __ |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
 ────────────────────────────────────────────────────────────────────────────────|
 $ git checkout feature-a                                                        |
 Switched to branch 'feature-a'                                                  |
-styles_hash: 9ca73e6aebfb5b3
+styles_hash: b04b726aa2b7e399

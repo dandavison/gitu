@@ -2,7 +2,7 @@
 source: src/tests/rebase.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch other-branch                                                         |
+▌Branch: other-branch                                                           |
                                                                                 |
  Recent commits                                                                 |
  46c81ca main other-branch add new-file                          Author Name __ |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
 ────────────────────────────────────────────────────────────────────────────────|
 $ git rebase --autostash main                                                   |
 Successfully rebased and updated refs/heads/other-branch.                       |
-styles_hash: c7f6f763e3f91901
+styles_hash: d4838d7cd420f86d

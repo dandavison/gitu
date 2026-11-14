@@ -7,6 +7,71 @@ fn setup(ctx: TestContext) -> TestContext {
     ctx
 }
 
+/// As in less and vim, the search prompt is `/` and the line typed on.
+#[test]
+fn the_search_prompt_is_a_slash() {
+    let mut ctx = setup_clone!();
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("/"));
+    assert_eq!(ctx.prompt_line(), "/|");
+}
+
+/// As in less, up and down at the search prompt bring back earlier searches,
+/// also those of an earlier run.
+#[test]
+fn up_brings_back_earlier_searches() {
+    let mut ctx = setup(setup_clone!());
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("/first<enter>/second<enter>"));
+    drop(app);
+
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("/<up>"));
+    assert_eq!(ctx.prompt_line(), "/second|");
+    ctx.update(&mut app, keys("/<up><up>"));
+    assert_eq!(ctx.prompt_line(), "/first|");
+}
+
+/// As in neovim, the cursor moves to the first match while the query is being
+/// typed, and back to where it was if the search is called off.
+#[test]
+fn the_cursor_moves_to_a_match_while_typing() {
+    let mut ctx = setup(setup_clone!());
+    let mut app = ctx.init_app();
+    let start = cursor_row(&ctx);
+
+    ctx.update(&mut app, keys("/second"));
+    assert!(
+        cursor_row(&ctx).contains("add secondfile"),
+        "{}",
+        ctx.redact_buffer()
+    );
+
+    ctx.update(&mut app, keys("/second<esc>"));
+    assert_eq!(cursor_row(&ctx), start);
+}
+
+/// ... and enter leaves it on that match, rather than going on to the next.
+#[test]
+fn enter_keeps_the_match_found_while_typing() {
+    let mut ctx = setup(setup_clone!());
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("/file<enter>"));
+    assert!(
+        cursor_row(&ctx).contains("add thirdfile"),
+        "{}",
+        ctx.redact_buffer()
+    );
+}
+
+fn cursor_row(ctx: &TestContext) -> String {
+    ctx.redact_buffer()
+        .lines()
+        .find(|row| row.starts_with('▌'))
+        .unwrap_or_default()
+        .to_string()
+}
+
 #[test]
 fn search_prompt() {
     snapshot!(setup(setup_clone!()), "/");

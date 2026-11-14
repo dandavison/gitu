@@ -41,7 +41,7 @@ pub(crate) fn reverse_unstaged_hunk() {
 pub(crate) fn reverse_unstaged_line() {
     let ctx = setup(setup_clone!());
     let snapshot_name = function_name!().rsplit("::").next().unwrap();
-    snapshot_with_file(snapshot_name, ctx, "file-one", "jj<tab>j<ctrl+j>v");
+    snapshot_with_file(snapshot_name, ctx, "file-one", "jj<tab>jjv");
 }
 
 #[test]
@@ -62,7 +62,7 @@ pub(crate) fn reverse_staged_hunk() {
 pub(crate) fn reverse_staged_line() {
     let ctx = setup_staged(setup_clone!());
     let snapshot_name = function_name!().rsplit("::").next().unwrap();
-    snapshot_with_file(snapshot_name, ctx, "file-one", "jj<tab>j<ctrl+j>v");
+    snapshot_with_file(snapshot_name, ctx, "file-one", "jj<tab>jjv");
 }
 
 fn setup_staged(ctx: TestContext) -> TestContext {

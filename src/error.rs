@@ -5,13 +5,17 @@ pub enum Error {
     StashList(git2::Error),
     ReadLog(git2::Error),
     OpenRepo(git2::Error),
-    FindGitDir(io::Error),
     Term(io::Error),
-    GitDirUtf8(string::FromUtf8Error),
     Config(Box<figment::Error>),
-    Bindings { bad_key_bindings: Vec<String> },
+    EditConfig(String),
+    Bindings {
+        bad_key_bindings: Vec<String>,
+    },
     FileWatcher(notify::Error),
     ReadRebaseStatusFile(io::Error),
+    ReadRebaseTodo(io::Error),
+    ReadPipedInput(io::Error),
+    WriteRebaseTodo(io::Error),
     ReadBranchName(io::Error),
     BranchNameUtf8(Utf8Error),
     GitDiff(io::Error),
@@ -46,11 +50,15 @@ pub enum Error {
     CouldntAwaitCmd(io::Error),
     NoRepoWorkdir,
     SpawnCmd(io::Error),
-    CmdBadExit(String, Option<i32>),
+    /// A command that failed: as it would be typed in a shell, its exit code
+    /// (none if a signal ended it), and what it wrote to stderr.
+    CmdBadExit(String, Option<i32>, String),
     CouldntReadCmdOutput(io::Error),
     ListGitReferences(git2::Error),
     OpenLogFile(io::Error),
     PromptAborted,
+    ReadPromptHistory(io::Error),
+    WritePromptHistory(io::Error),
     NoMoreEvents,
     CannotSpinoffCurrentBranch,
     SpinoffBranchExists(String),
@@ -62,6 +70,11 @@ pub enum Error {
     NoSearchMatch(String),
     NoPreviousSearch,
     InvalidSearchRegex(regex::Error),
+    EditedCommandQuotes,
+    EditedCommandFixed,
+    EditedCommandWrites(String),
+    GitRefusedTheCommand(String),
+    NotATerminal,
 }
 
 impl std::error::Error for Error {}
@@ -71,16 +84,30 @@ impl Display for Error {
         match self {
             Error::StashList(e) => f.write_fmt(format_args!("Couldn't list stash: {e}")),
             Error::ReadLog(e) => f.write_fmt(format_args!("Couldn't read log: {e}")),
+            Error::ReadPipedInput(e) => {
+                f.write_fmt(format_args!("Couldn't read the piped input: {e}"))
+            }
+            Error::ReadRebaseTodo(e) => {
+                f.write_fmt(format_args!("Couldn't read the rebase todo list: {e}"))
+            }
+            Error::WriteRebaseTodo(e) => {
+                f.write_fmt(format_args!("Couldn't write the rebase todo list: {e}"))
+            }
             Error::OpenRepo(e) => match e.code() {
-                git2::ErrorCode::NotFound => f.write_str("No .git found in the current directory"),
+                git2::ErrorCode::NotFound => {
+                    f.write_str("Not in a git repository: run delta --tui inside one")
+                }
                 _ => f.write_fmt(format_args!("Couldn't open repo: {e:?}")),
             },
-            Error::FindGitDir(e) => f.write_fmt(format_args!("Couldn't find git directory: {}", e)),
             Error::Term(e) => f.write_fmt(format_args!("Terminal error: {}", e)),
-            Error::GitDirUtf8(_e) => f.write_str("Git directory not valid UTF-8"),
             Error::Config(e) => f.write_fmt(format_args!("Configuration error: {e}")),
+            Error::EditConfig(e) => {
+                f.write_fmt(format_args!("Couldn't save to the config file: {e}"))
+            }
             Error::Bindings { bad_key_bindings } => {
-                let mut error_string = String::from("Errors while parsing key bindings:");
+                let mut error_string = String::from(
+                    "Fix these key bindings in git config's delta-tui section or gitu's config file:",
+                );
                 for item in bad_key_bindings {
                     error_string.push_str(&format!("\n{item}"));
                 }
@@ -141,12 +168,19 @@ impl Display for Error {
             Error::CouldntAwaitCmd(e) => f.write_fmt(format_args!("Couldn't await command: {e}")),
             Error::NoRepoWorkdir => f.write_str("No repository working directory"),
             Error::SpawnCmd(e) => f.write_fmt(format_args!("Failed to spawn command: {e}")),
-            Error::CmdBadExit(args, code) => f.write_fmt(format_args!(
-                "'{}' exited with code: {}",
-                args,
-                code.map(|c| c.to_string())
-                    .unwrap_or_else(|| "".to_string())
-            )),
+            // The command on a line of its own, so that it can be copied whole.
+            Error::CmdBadExit(command, code, stderr) => {
+                writeln!(f, "{command}")?;
+                match code {
+                    Some(code) => write!(f, "exit code: {code}")?,
+                    None => write!(f, "ended by a signal")?,
+                }
+                let stderr = stderr.trim_end();
+                if !stderr.is_empty() {
+                    write!(f, "\nstderr:\n{stderr}")?;
+                }
+                Ok(())
+            }
             Error::CouldntReadCmdOutput(e) => {
                 f.write_fmt(format_args!("Couldn't read command output: {e}"))
             }
@@ -155,6 +189,12 @@ impl Display for Error {
             }
             Error::OpenLogFile(e) => f.write_fmt(format_args!("Couldn't open log file: {e}")),
             Error::PromptAborted => f.write_str("Aborted"),
+            Error::ReadPromptHistory(e) => {
+                f.write_fmt(format_args!("Couldn't read prompt history: {e}"))
+            }
+            Error::WritePromptHistory(e) => {
+                f.write_fmt(format_args!("Couldn't write prompt history: {e}"))
+            }
             Error::NoMoreEvents => unimplemented!(),
             Error::CannotSpinoffCurrentBranch => f.write_str("Cannot spin-off current branch"),
             Error::SpinoffBranchExists(new_branch_name) => f.write_fmt(format_args!(
@@ -172,6 +212,18 @@ impl Display for Error {
             Error::NoSearchMatch(query) => f.write_fmt(format_args!("No match: {query}")),
             Error::NoPreviousSearch => f.write_str("No previous search"),
             Error::InvalidSearchRegex(e) => f.write_fmt(format_args!("Invalid search: {e}")),
+            Error::EditedCommandQuotes => f.write_str("Unbalanced quotes"),
+            Error::EditedCommandFixed => f.write_str(
+                "Only git's arguments can be edited, not the program or git's own options",
+            ),
+            Error::EditedCommandWrites(subcommand) => f.write_fmt(format_args!(
+                "gitu re-runs this command on every refresh, so it must only report: {subcommand}"
+            )),
+            Error::GitRefusedTheCommand(stderr) => f.write_str(stderr),
+            Error::NotATerminal => f.write_str(
+                "delta --tui needs a terminal to draw in. \
+                 To write a diff to a file or a pipe, use delta without --tui",
+            ),
         }
     }
 }

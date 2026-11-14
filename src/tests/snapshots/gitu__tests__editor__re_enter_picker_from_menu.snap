@@ -2,7 +2,7 @@
 source: src/tests/editor.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
+ Branch: main                                                                   |
  Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Recent commits                                                                 |
@@ -11,7 +11,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- 2/2   Checkout › █                                                             |
+ 2/2  Checkout: █                                                               |
 ▌origin/HEAD                                                                    |
  origin/main                                                                    |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 68d8822de3a377e7
+styles_hash: 9d0064daffc50b05

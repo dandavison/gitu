@@ -9,7 +9,7 @@ expression: out
      On main: apply-stash                                                       |
                                                                                 |
  Unstaged changes (2)                                                           |
-▌modified   file1.txt                                                           |
+▌file1.txt                                                                      |
 ▌@@ -1,5 +1,7 @@                                                                |
 ▌ one                                                                           |
 ▌ two                                                                           |
@@ -22,7 +22,7 @@ expression: out
 ▌ seven                                                                         |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git apply                                                                     |
-styles_hash: f6bd41566dbaa80c
+styles_hash: 59a517f7623d6699
 
 [files before]
 --- file1.txt ---

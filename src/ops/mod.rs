@@ -5,6 +5,7 @@ use crate::{
     app::{App, State},
     item_data::{ItemData, Rev},
     menu::Menu,
+    rebase_todo::TodoAction,
     term::Term,
 };
 use std::{fmt::Display, rc::Rc};
@@ -13,6 +14,7 @@ pub(crate) mod apply;
 pub(crate) mod blame;
 pub(crate) mod branch;
 pub(crate) mod cherry_pick;
+pub(crate) mod command;
 pub(crate) mod commit;
 pub(crate) mod copy_hash;
 pub(crate) mod discard;
@@ -23,6 +25,7 @@ pub(crate) mod merge;
 pub(crate) mod pull;
 pub(crate) mod push;
 pub(crate) mod rebase;
+pub(crate) mod rebase_todo;
 pub(crate) mod remote;
 pub(crate) mod reset;
 pub(crate) mod reverse;
@@ -32,6 +35,7 @@ pub(crate) mod show;
 pub(crate) mod show_refs;
 pub(crate) mod stage;
 pub(crate) mod stash;
+pub(crate) mod status;
 pub(crate) mod unstage;
 
 pub(crate) type Action = Rc<dyn FnMut(&mut App, &mut Term) -> Res<()>>;
@@ -80,6 +84,7 @@ pub(crate) enum Op {
     Rename,
     RenameRemote,
     ShowRefs,
+    Status,
     Stash,
     StashApply,
     StashIndex,
@@ -92,6 +97,19 @@ pub(crate) enum Op {
     LogOther,
     RebaseAutosquash,
     RebaseInteractive,
+    RebaseTodoMoveUp,
+    RebaseTodoMoveDown,
+    RebaseTodoPick,
+    RebaseTodoReword,
+    RebaseTodoEdit,
+    RebaseTodoSquash,
+    RebaseTodoFixup,
+    RebaseTodoDrop,
+    RebaseTodoStart,
+    RendererFeatures,
+    RendererThemes,
+    SelectCommit,
+    ToggleMenu,
     ResetSoft,
     ResetMixed,
     ResetHard,
@@ -108,6 +126,7 @@ pub(crate) enum Op {
     Stage,
     Unstage,
     Show,
+    ShowOrUnfold,
     Discard,
     Apply,
     Reverse,
@@ -115,10 +134,19 @@ pub(crate) enum Op {
     Blame,
 
     ToggleSection,
-    MoveUp,
-    MoveDown,
+    ToggleAllSections,
+    DiffContext,
+    WiderDiffContext,
+    NarrowerDiffContext,
+    EditGitCommand,
+    FilePatterns,
+    HideFile,
     MoveUpLine,
     MoveDownLine,
+    MoveUp,
+    MoveDown,
+    ExtendSelectionUp,
+    ExtendSelectionDown,
     MovePrevSection,
     MoveNextSection,
     MoveParentSection,
@@ -126,6 +154,8 @@ pub(crate) enum Op {
     MoveBottom,
     HalfPageUp,
     HalfPageDown,
+    FullPageUp,
+    FullPageDown,
     ScrollViewUp,
     ScrollViewDown,
 
@@ -135,7 +165,9 @@ pub(crate) enum Op {
     SearchPrevious,
 
     Refresh,
+    Suspend,
     Quit,
+    FoldOrBack,
 
     #[serde(untagged)]
     OpenMenu(Menu),
@@ -146,23 +178,100 @@ pub(crate) enum Op {
 }
 
 impl Op {
+    /// Whether the op changes the repository: its refs, index, worktree,
+    /// remotes or stash. A menu whose ops all do counts as one.
+    pub(crate) fn writes(&self) -> bool {
+        match self {
+            Op::OpenMenu(menu) => !matches!(
+                menu,
+                Menu::Root | Menu::Help | Menu::Log | Menu::CommitPicker | Menu::RebaseTodo
+            ),
+            Op::AddRemote
+            | Op::Checkout
+            | Op::CheckoutNewBranch
+            | Op::Spinoff
+            | Op::Delete
+            | Op::Commit
+            | Op::CommitAmend
+            | Op::CommitExtend
+            | Op::CommitFixup
+            | Op::CommitInstantFixup
+            | Op::FetchAll
+            | Op::FetchPushRemote
+            | Op::FetchUpstream
+            | Op::FetchElsewhere
+            | Op::PullFromPushRemote
+            | Op::PullFromUpstream
+            | Op::PullFromElsewhere
+            | Op::PushToPushRemote
+            | Op::PushToUpstream
+            | Op::PushToElsewhere
+            | Op::RebaseAbort
+            | Op::RebaseContinue
+            | Op::RebaseElsewhere
+            | Op::RebaseAutosquash
+            | Op::RebaseInteractive
+            | Op::RemoveRemote
+            | Op::Rename
+            | Op::RenameRemote
+            | Op::Stash
+            | Op::StashApply
+            | Op::StashIndex
+            | Op::StashWorktree
+            | Op::StashKeepIndex
+            | Op::StashPop
+            | Op::StashDrop
+            | Op::ResetSoft
+            | Op::ResetMixed
+            | Op::ResetHard
+            | Op::RevertAbort
+            | Op::RevertContinue
+            | Op::RevertCommit
+            | Op::CherryPickAbort
+            | Op::CherryPickContinue
+            | Op::CherryPick
+            | Op::Merge
+            | Op::MergeAbort
+            | Op::MergeContinue
+            | Op::Stage
+            | Op::Unstage
+            | Op::Discard
+            | Op::Apply
+            | Op::Reverse => true,
+            _ => false,
+        }
+    }
+
     pub fn implementation(self) -> Box<dyn OpTrait> {
         match self {
             Op::Quit => Box::new(editor::Quit),
+            Op::FoldOrBack => Box::new(editor::FoldOrBack),
             Op::OpenMenu(menu) => Box::new(editor::OpenMenu(menu)),
             Op::Refresh => Box::new(editor::Refresh),
+            Op::Suspend => Box::new(editor::Suspend),
             Op::ToggleArg(name) => Box::new(editor::ToggleArg(name)),
             Op::ToggleSection => Box::new(editor::ToggleSection),
+            Op::ToggleAllSections => Box::new(editor::ToggleAllSections),
+            Op::DiffContext => Box::new(editor::DiffContext),
+            Op::WiderDiffContext => Box::new(editor::StepDiffContext(true)),
+            Op::NarrowerDiffContext => Box::new(editor::StepDiffContext(false)),
+            Op::EditGitCommand => Box::new(editor::EditGitCommand),
+            Op::FilePatterns => Box::new(editor::FilePatterns),
+            Op::HideFile => Box::new(editor::HideFile),
             Op::MoveDown => Box::new(editor::MoveDown),
             Op::MoveUp => Box::new(editor::MoveUp),
             Op::MoveDownLine => Box::new(editor::MoveDownLine),
             Op::MoveUpLine => Box::new(editor::MoveUpLine),
+            Op::ExtendSelectionUp => Box::new(editor::ExtendSelection(false)),
+            Op::ExtendSelectionDown => Box::new(editor::ExtendSelection(true)),
             Op::MoveToScreenLine(screen_line) => Box::new(editor::MoveToScreenLine(screen_line)),
             Op::MoveNextSection => Box::new(editor::MoveNextSection),
             Op::MovePrevSection => Box::new(editor::MovePrevSection),
             Op::MoveParentSection => Box::new(editor::MoveParentSection),
             Op::HalfPageUp => Box::new(editor::HalfPageUp),
             Op::HalfPageDown => Box::new(editor::HalfPageDown),
+            Op::FullPageUp => Box::new(editor::FullPageUp),
+            Op::FullPageDown => Box::new(editor::FullPageDown),
             Op::MoveTop => Box::new(editor::MoveTop),
             Op::MoveBottom => Box::new(editor::MoveBottom),
             Op::ScrollViewUp => Box::new(editor::ScrollViewUp),
@@ -194,6 +303,7 @@ impl Op {
             Op::RebaseContinue => Box::new(rebase::RebaseContinue),
             Op::RebaseElsewhere => Box::new(rebase::RebaseElsewhere),
             Op::ShowRefs => Box::new(show_refs::ShowRefs),
+            Op::Status => Box::new(status::Status),
             Op::Stash => Box::new(stash::Stash),
             Op::StashApply => Box::new(stash::StashApply),
             Op::StashIndex => Box::new(stash::StashIndex),
@@ -208,6 +318,19 @@ impl Op {
             Op::LogOther => Box::new(log::LogOther),
             Op::RebaseAutosquash => Box::new(rebase::RebaseAutosquash),
             Op::RebaseInteractive => Box::new(rebase::RebaseInteractive),
+            Op::RebaseTodoMoveUp => Box::new(rebase_todo::MoveEntry(-1)),
+            Op::RebaseTodoMoveDown => Box::new(rebase_todo::MoveEntry(1)),
+            Op::RebaseTodoPick => Box::new(rebase_todo::SetAction(TodoAction::Pick)),
+            Op::RebaseTodoReword => Box::new(rebase_todo::SetAction(TodoAction::Reword)),
+            Op::RebaseTodoEdit => Box::new(rebase_todo::SetAction(TodoAction::Edit)),
+            Op::RebaseTodoSquash => Box::new(rebase_todo::SetAction(TodoAction::Squash)),
+            Op::RebaseTodoFixup => Box::new(rebase_todo::SetAction(TodoAction::Fixup)),
+            Op::RebaseTodoDrop => Box::new(rebase_todo::SetAction(TodoAction::Drop)),
+            Op::RebaseTodoStart => Box::new(rebase_todo::Start),
+            Op::RendererFeatures => Box::new(editor::RendererFeatures),
+            Op::RendererThemes => Box::new(editor::RendererThemes),
+            Op::SelectCommit => Box::new(editor::SelectCommit),
+            Op::ToggleMenu => Box::new(editor::ToggleMenu),
             Op::ResetSoft => Box::new(reset::ResetSoft),
             Op::ResetMixed => Box::new(reset::ResetMixed),
             Op::ResetHard => Box::new(reset::ResetHard),
@@ -218,6 +341,7 @@ impl Op {
             Op::CherryPickContinue => Box::new(cherry_pick::CherryPickContinue),
             Op::CherryPick => Box::new(cherry_pick::CherryPick),
             Op::Show => Box::new(show::Show),
+            Op::ShowOrUnfold => Box::new(show::ShowOrUnfold),
             Op::Stage => Box::new(stage::Stage),
             Op::Unstage => Box::new(unstage::Unstage),
             Op::Apply => Box::new(apply::Apply),
@@ -242,6 +366,7 @@ impl Display for Menu {
             Menu::Root => "Root",
             Menu::Branch => "Branch",
             Menu::Commit => "Commit",
+            Menu::CommitPicker => "Select commit",
             Menu::Fetch => "Fetch",
             Menu::Help => "Help",
             Menu::Log => "Log",
@@ -250,6 +375,7 @@ impl Display for Menu {
             Menu::Pull => "Pull",
             Menu::Push => "Push",
             Menu::Rebase => "Rebase",
+            Menu::RebaseTodo => "Rebase todo",
             Menu::Reset => "Reset",
             Menu::Revert => "Revert",
             Menu::CherryPick => "Cherry-pick",

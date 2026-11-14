@@ -14,9 +14,10 @@ impl CmdLog {
         Self { entries: vec![] }
     }
 
-    pub fn push_cmd(&mut self, cmd: &Command) -> Arc<RwLock<CmdLogEntry>> {
+    /// A command, `shown` as it would be typed in a shell, that is running.
+    pub fn push_cmd(&mut self, shown: Cow<'static, str>) -> Arc<RwLock<CmdLogEntry>> {
         let value = Arc::new(RwLock::new(CmdLogEntry::Cmd {
-            args: command_args(cmd),
+            args: shown,
             out: None,
         }));
 
@@ -51,9 +52,11 @@ impl CmdLog {
     }
 }
 
+/// `cmd` as it would be typed in a shell, each word quoted as it needs to be.
 pub(crate) fn command_args(cmd: &Command) -> Cow<'static, str> {
     iter::once(cmd.get_program().to_string_lossy())
         .chain(cmd.get_args().map(|arg| arg.to_string_lossy()))
+        .map(|word| shell_words::quote(&word).into_owned())
         .join(" ")
         .into()
 }

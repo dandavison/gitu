@@ -2,7 +2,10 @@ use super::OpTrait;
 use crate::{
     Action,
     app::{App, State},
-    git::{self, diff::PatchMode},
+    git::{
+        self,
+        diff::{DiffType, PatchMode},
+    },
     gitu_diff::Status,
     item_data::ItemData,
     term::Term,
@@ -13,6 +16,14 @@ pub(crate) struct Unstage;
 impl OpTrait for Unstage {
     fn get_action(&self, target: &ItemData) -> Option<Action> {
         let action = match target {
+            // Only what the index holds can be taken back out of it.
+            ItemData::Delta { diff, .. }
+            | ItemData::Hunk { diff, .. }
+            | ItemData::HunkLine { diff, .. }
+                if !matches!(diff.diff_type, DiffType::IndexToTree) =>
+            {
+                return None;
+            }
             ItemData::AllStaged(_) => unstage_staged(),
             ItemData::Delta { diff, file_i, .. } => {
                 let diff_header = &diff.file_diffs[*file_i].header;
@@ -32,16 +43,11 @@ impl OpTrait for Unstage {
                 diff,
                 file_i,
                 hunk_i,
-                line_i,
+                line_indices,
                 ..
             } => unstage_line(
-                diff.format_line_patch(
-                    *file_i,
-                    *hunk_i,
-                    *line_i..(*line_i + 1),
-                    PatchMode::Reverse,
-                )
-                .into_bytes(),
+                diff.format_lines_patch(*file_i, *hunk_i, line_indices, PatchMode::Reverse)
+                    .into_bytes(),
             ),
             _ => return None,
         };

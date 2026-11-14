@@ -2,7 +2,13 @@
 source: src/tests/log.rs
 expression: ctx.redact_buffer()
 ---
-▌6c08cf7 add second commit                                       Author Name __ |
+▌commit 6c08cf78a4544ae4dda8e6161a61070867c60246                                |
+▌Author: Author Name <author@email.com>                                         |
+▌Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+▌                                                                               |
+▌    add second commit                                                          |
+▌                                                                               |
+▌    Commit body goes here                                                      |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -16,10 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-                                                                                |
-styles_hash: d7069ddaa611c83d
+styles_hash: e4dfc8915ecd6fac

@@ -153,11 +153,12 @@ fn branch_name_lossy(dir: &Path, hash: &str) -> Res<Option<String>> {
         .map(|line| line.split(' ').nth(1).unwrap().to_string()))
 }
 
-pub(crate) fn diff_unstaged(repo: &Repository) -> Res<Diff> {
+pub(crate) fn diff_unstaged(repo: &Repository, context: Option<&str>) -> Res<Diff> {
     let text = String::from_utf8_lossy(
         &Command::new("git")
             .current_dir(repo.workdir().expect("Bare repos unhandled"))
             .args(["diff", "--no-ext-diff"])
+            .args(context)
             .output()
             .map_err(Error::GitDiff)?
             .stdout,
@@ -172,11 +173,12 @@ pub(crate) fn diff_unstaged(repo: &Repository) -> Res<Diff> {
     })
 }
 
-pub(crate) fn diff_staged(repo: &Repository) -> Res<Diff> {
+pub(crate) fn diff_staged(repo: &Repository, context: Option<&str>) -> Res<Diff> {
     let text = String::from_utf8_lossy(
         &Command::new("git")
             .current_dir(repo.workdir().expect("Bare repos unhandled"))
             .args(["diff", "--no-ext-diff", "--staged"])
+            .args(context)
             .output()
             .map_err(Error::GitDiff)?
             .stdout,
@@ -203,25 +205,6 @@ pub(crate) fn status(dir: &Path) -> Res<status::Status> {
     .into_owned();
 
     Ok(status::Status::from_str(&text).unwrap())
-}
-
-pub(crate) fn show(repo: &Repository, reference: &str) -> Res<Diff> {
-    let text = String::from_utf8_lossy(
-        &Command::new("git")
-            .current_dir(repo.workdir().expect("Bare repos unhandled"))
-            .args(["show", reference])
-            .output()
-            .map_err(Error::GitShow)?
-            .stdout,
-    )
-    .into_owned();
-
-    Ok(Diff {
-        file_diffs: gitu_diff::Parser::new(&text).parse_diff().unwrap(),
-        diff_type: DiffType::TreeToTree,
-        text,
-        commit: Some(reference.to_string()),
-    })
 }
 
 #[derive(Debug, Clone)]
@@ -468,11 +451,35 @@ pub(crate) fn blame(
         .map_err(Error::GitBlame)?;
 
     if !output.status.success() {
-        return Ok(vec![]);
+        let said = String::from_utf8_lossy(&output.stderr);
+        return Err(Error::GitRefusedTheCommand(
+            said.lines().next().unwrap_or_default().to_owned(),
+        ));
     }
 
     let text = String::from_utf8_lossy(&output.stdout).into_owned();
     Ok(parse_blame_porcelain(&text))
+}
+
+/// git blame's own output for `file_path`, one line per line of the file, as
+/// delta draws it; `None` if git fails.
+pub(crate) fn blame_text(
+    repo: &Repository,
+    file_path: &str,
+    commit: Option<&str>,
+) -> Option<String> {
+    let dir = repo.workdir().expect("Bare repos unhandled");
+    let output = Command::new("git")
+        .current_dir(dir)
+        .arg("blame")
+        .args(commit)
+        .args(["--", file_path])
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 fn parse_blame_porcelain(text: &str) -> Vec<BlameLine> {

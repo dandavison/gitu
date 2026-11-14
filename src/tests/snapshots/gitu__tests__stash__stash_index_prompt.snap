@@ -2,14 +2,14 @@
 source: src/tests/stash.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Untracked files                                                                |
  file-two                                                                       |
                                                                                 |
  Staged changes (1)                                                             |
- added      file-one…                                                           |
+ added: file-one…                                                               |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                       Author Name __ |
@@ -21,5 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
-? Stash message: › █                                                            |
-styles_hash: 4eeaf5493a814da2
+Stash message: █                                                                |
+styles_hash: 9f0df59b94853999

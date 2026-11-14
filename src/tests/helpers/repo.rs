@@ -2,7 +2,10 @@ use std::{
     env, fs,
     path::{Path, PathBuf},
     process::Command,
+    sync::Once,
 };
+
+use git2::ConfigLevel;
 
 use temp_dir::TempDir;
 use url::Url;
@@ -93,7 +96,20 @@ pub fn set_env_vars() {
         env::set_var("GIT_COMMITTER_EMAIL", "committer@email.com");
         env::set_var("GIT_COMMITTER_DATE", "Sun Feb 18 14:00 2024 +0100");
         env::set_var("LC_ALL", "C");
+        // Opening the editor runs a command that does nothing, rather than the
+        // editor of whoever runs the tests.
+        env::set_var("GITU_SHOW_EDITOR", "true");
     }
+
+    // libgit2 finds the global config by its own search path and reads none of
+    // the variables above, so it has to be emptied separately or the machine's
+    // own git config reaches the tests.
+    static EMPTY_SEARCH_PATH: Once = Once::new();
+    EMPTY_SEARCH_PATH.call_once(|| {
+        for level in [ConfigLevel::System, ConfigLevel::Global, ConfigLevel::XDG] {
+            unsafe { git2::opts::set_search_path(level, "") }.unwrap();
+        }
+    });
 }
 
 pub fn run_ignore_status(dir: &Path, cmd: &[&str]) -> String {

@@ -17,19 +17,37 @@ pub(crate) fn layout_picker<'a>(
     config: &Config,
     width: usize,
 ) {
+    if state.is_one_row() {
+        layout_one_row(layout, state, config);
+        return;
+    }
+
     // Separator line
     let separator_style = Style::from(&config.style.separator);
     repeat_chars(layout, width, DASHES, separator_style);
 
+    if state.grid().is_some() {
+        layout_grid(layout, state, config);
+        return;
+    }
+
     let prompt_style: Style = (&config.style.picker.prompt).into();
     let info_style: Style = (&config.style.picker.info).into();
     layout.row(opts(), |layout| {
-        let status_text = format!(" {}/{}   ", state.filtered_count(), state.total_items());
+        // A list that is not searched has no search to show.
+        if state.assigns_keys() {
+            let heading = format!(" {}", state.prompt_text);
+            layout_span(layout, (heading.into(), prompt_style));
+            return;
+        }
+
+        let status_text = format!(" {}/{}  ", state.filtered_count(), state.total_items());
         layout_span(layout, (status_text.into(), info_style));
 
-        // Prompt with separator (like regular prompt)
-        layout_span(layout, (state.prompt_text.as_ref().into(), prompt_style));
-        layout_span(layout, (" › ".into(), prompt_style));
+        layout_span(
+            layout,
+            (format!("{}: ", state.prompt_text).into(), prompt_style),
+        );
         let (before, at_cursor, after) = state.input_state.split_at_cursor();
         layout_span(layout, (before.into(), Style::new()));
         layout_cursor(layout, at_cursor);
@@ -83,6 +101,101 @@ pub(crate) fn layout_picker<'a>(
             layout_span(layout, (" ".into(), Style::new()));
         });
     }
+}
+
+/// The items in their columns side by side, each under its heading, leaving out
+/// columns with none. The columns scroll together, to keep the cursor in view.
+fn layout_grid<'a>(layout: &mut UiTree<'a>, state: &'a PickerState, config: &Config) {
+    let Some(grid) = state.grid() else {
+        return;
+    };
+    let heading_style: Style = (&config.style.picker.prompt).into();
+    let columns: Vec<(usize, Vec<usize>)> = (0..grid.headings.len())
+        .map(|column| (column, state.column_positions(column)))
+        .filter(|(_, positions)| !positions.is_empty())
+        .collect();
+    let longest = columns
+        .iter()
+        .map(|(_, positions)| positions.len())
+        .max()
+        .unwrap_or(0);
+    let cursor_row = columns
+        .iter()
+        .find_map(|(_, positions)| positions.iter().position(|&p| p == state.cursor()))
+        .unwrap_or(0);
+    let start = calculate_visible_range(cursor_row, longest, MAX_ITEMS_DISPLAY);
+    let items: Vec<_> = state.filtered_items().map(|(_, item)| item).collect();
+
+    layout.row(opts().gap(3), |layout| {
+        for (column, positions) in &columns {
+            layout.col(opts(), |layout| {
+                layout.row(opts(), |layout| {
+                    let heading = format!(" {}", grid.headings[*column]);
+                    layout_span(layout, (heading.into(), heading_style));
+                });
+                for row in start..start + MAX_ITEMS_DISPLAY {
+                    layout.row(opts(), |layout| match positions.get(row) {
+                        Some(&position) => {
+                            layout_item(layout, items[position], position == state.cursor(), config)
+                        }
+                        None => layout_span(layout, (" ".into(), Style::new())),
+                    });
+                }
+            });
+        }
+    });
+}
+
+/// An item's row: the cursor's bar if it is selected, then its text.
+fn layout_item<'a>(
+    layout: &mut UiTree<'a>,
+    item: &'a crate::picker::PickerItem,
+    is_selected: bool,
+    config: &Config,
+) {
+    if is_selected {
+        let cursor_style: Style = (&config.style.cursor).into();
+        let indicator = format!("{}", config.style.cursor.symbol);
+        layout_span(layout, (indicator.into(), cursor_style));
+        layout_span(
+            layout,
+            (
+                item.display.as_ref().into(),
+                (&config.style.picker.selection_line).into(),
+            ),
+        );
+    } else {
+        layout_span(layout, (" ".into(), Style::new()));
+        layout_span(layout, (item.display.as_ref().into(), Style::new()));
+    }
+}
+
+/// The selected item alone, its number, and any search typed in the list: no
+/// more than that, so that the screen above stays in view. The number is the
+/// digit that selects the item, so the first is 0; an item one row passes
+/// over has none.
+fn layout_one_row<'a>(layout: &mut UiTree<'a>, state: &'a PickerState, config: &Config) {
+    let prompt_style: Style = (&config.style.picker.prompt).into();
+    let info_style: Style = (&config.style.picker.info).into();
+    let selection_style: Style = (&config.style.picker.selection_line).into();
+    layout.row(opts(), |layout| {
+        let (number, last) = state.one_row_number();
+        let number = number.map_or("-".to_owned(), |n| n.to_string());
+        layout_span(layout, (format!(" {number}/{last}  ").into(), info_style));
+        layout_span(
+            layout,
+            (format!("{}: ", state.prompt_text).into(), prompt_style),
+        );
+        if let Some(item) = state.selected() {
+            layout_span(layout, (item.display.as_ref().into(), selection_style));
+        }
+        if !state.pattern().is_empty() {
+            layout_span(
+                layout,
+                (format!("   filter: {}", state.pattern()).into(), info_style),
+            );
+        }
+    });
 }
 
 /// Calculate the visible range start for scrolling based on cursor position

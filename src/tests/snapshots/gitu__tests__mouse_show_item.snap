@@ -4,13 +4,13 @@ expression: ctx.redact_buffer()
 ---
  commit cd4d2d1f83bf459ce16bd9dbc873ebceac849283                                |
  Author: Author Name <author@email.com>                                         |
- Date:   Fri, 16 Feb 2024 11:11:00 +0100                                        |
+ Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
                                                                                 |
      add testfile                                                               |
                                                                                 |
      Commit body goes here                                                      |
                                                                                 |
- added      testfile                                                            |
+ added: testfile                                                                |
 ▌@@ -0,0 +1,2 @@                                                                |
 ▌+testing                                                                       |
 ▌+testtest                                                                      |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 1d4ae1b59e628f73
+styles_hash: 8f05a48c89a2ab34

@@ -23,9 +23,22 @@ pub(crate) fn parse_keys(input: &str) -> IResult<&str, Vec<(KeyModifiers, KeyCod
 /// intended to be used only when parsing the key bindings in a config file.
 pub(crate) fn parse_config_keys(input: &str) -> IResult<&str, Vec<(KeyModifiers, KeyCode)>> {
     map(parse_key_combo, |(modifiers, keys)| {
-        keys.into_iter().map(|key| (modifiers, key)).collect()
+        keys.into_iter()
+            .map(|key| as_received(modifiers, key))
+            .collect()
     })
     .parse(input)
+}
+
+/// The key a terminal sends for `key` pressed with `modifiers`: shift+tab
+/// arrives as backtab.
+fn as_received(modifiers: KeyModifiers, key: KeyCode) -> (KeyModifiers, KeyCode) {
+    match key {
+        KeyCode::Tab if modifiers.contains(KeyModifiers::SHIFT) => {
+            (modifiers.difference(KeyModifiers::SHIFT), KeyCode::BackTab)
+        }
+        _ => (modifiers, key),
+    }
 }
 
 /// Parse a string of keys that lack '+' delimiters into [`KeyModifiers`] and
@@ -278,6 +291,16 @@ mod tests {
                     (KeyModifiers::NONE, KeyCode::Char('A'))
                 ]
             ))
+        );
+    }
+
+    /// A terminal sends shift+tab as backtab, so a binding written as the keys
+    /// pressed is the key received.
+    #[test]
+    fn shift_tab_is_backtab() {
+        assert_eq!(
+            parse_config_keys("shift+tab"),
+            Ok(("", vec![(KeyModifiers::NONE, BackTab)]))
         );
     }
 }

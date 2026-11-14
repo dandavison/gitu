@@ -12,30 +12,41 @@
 use std::fs;
 
 #[macro_use]
-mod helpers;
+pub(crate) mod helpers;
 mod arg;
+mod back;
 mod blame;
 mod branch;
 mod cherry_pick;
+mod command;
 mod commit;
-mod completion;
 mod discard;
 mod editor;
 mod fetch;
 mod keys;
 mod log;
 mod merge;
+mod pager;
+mod paging;
+mod prompt;
 mod pull;
 mod push;
 mod quit;
+mod read_only;
 mod rebase;
 mod remote;
 mod reset;
+mod resize;
 mod reverse;
+mod right;
 mod search;
+mod show;
 mod stage;
 mod stash;
+mod status;
+mod theme;
 mod unstage;
+mod view;
 
 pub use keys::*;
 
@@ -46,11 +57,16 @@ use url::Url;
 
 use crate::tests::helpers::run_ignore_status;
 
+/// A terminal the whole help fits in, wrapped, for tests of what the help lists rather than of how
+/// it fits a small terminal.
+pub(crate) const HELP_FITS: (u16, u16) = (150, 30);
+
 #[test]
 fn help_menu() {
     let mut ctx = setup_clone!();
 
     let mut app = ctx.init_app();
+    ctx.resize(&mut app, &[HELP_FITS]);
     ctx.update(&mut app, keys(HELP));
     insta::assert_snapshot!(ctx.redact_buffer());
 }
@@ -130,6 +146,28 @@ fn collapsed_sections_config() {
     snapshot!(ctx, "");
 }
 
+/// The branch's position relative to its upstream, which the terse header omits.
+#[test]
+fn branch_status_shows_upstream() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "new-file", "testing\n");
+
+    ctx.init_app();
+    assert!(
+        ctx.redact_buffer()
+            .contains("Your branch is ahead of 'origin/main' by 1 commit(s).")
+    );
+}
+
+/// Off, the branch section is the branch name alone.
+#[test]
+fn terse_branch_status() {
+    let mut ctx = setup_clone!();
+    ctx.config().general.verbose_branch_status = false;
+    commit(&ctx.dir, "new-file", "testing\n");
+    snapshot!(ctx, "");
+}
+
 #[test]
 fn stash_list_with_limit() {
     let mut ctx = setup_clone!();
@@ -155,6 +193,15 @@ fn recent_commits_with_limit() {
     commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     commit(&ctx.dir, "secondfile", "testing\ntesttest\n");
     commit(&ctx.dir, "thirdfile", "testing\ntesttest\n");
+    snapshot!(ctx, "");
+}
+
+/// A limit of none means the section itself is not wanted, not an empty one.
+#[test]
+fn recent_commits_with_no_limit() {
+    let mut ctx = setup_clone!();
+    ctx.config().general.recent_commits_limit = 0;
+    commit(&ctx.dir, "firstfile", "testing\ntesttest\n");
     snapshot!(ctx, "");
 }
 
@@ -205,6 +252,34 @@ fn show_stash() {
     );
 
     snapshot!(ctx, "jj<enter>");
+}
+
+/// A renderer that fails to draw a stash's diffs says why.
+#[test]
+fn a_renderer_that_fails_to_draw_a_stash_says_why() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "unstaged.txt", "");
+    fs::write(ctx.dir.join("unstaged.txt"), "unstaged\n").unwrap();
+    run(
+        &ctx.dir,
+        &["git", "stash", "push", "--message", "firststash"],
+    );
+    ctx.config().general.diff_renderer.command = [
+        "sh",
+        "-c",
+        "[ -z \"$(cat)\" ] || { echo 'Invalid color or style attribute: line' >&2; exit 2; }",
+    ]
+    .map(String::from)
+    .to_vec();
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("jj<enter>"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("firststash"), "{buffer}");
+    assert!(
+        buffer.contains("Invalid color or style attribute: line"),
+        "{buffer}"
+    );
 }
 
 #[test]
@@ -419,23 +494,6 @@ fn inside_submodule() {
 }
 
 #[test]
-fn syntax_highlighted() {
-    let ctx = setup_clone!();
-    commit(
-        &ctx.dir,
-        "syntax-highlighted.rs",
-        "fn main() {\n    println!(\"Hey\");\n}\n",
-    );
-    fs::write(
-        ctx.dir.join("syntax-highlighted.rs"),
-        "fn main() {\n    println!(\"Bye\");\n}\n",
-    )
-    .unwrap();
-
-    snapshot!(ctx, "jj<tab>");
-}
-
-#[test]
 fn crlf_diff() {
     let mut ctx = setup_clone!();
     let mut app = ctx.init_app();
@@ -449,6 +507,7 @@ fn crlf_diff() {
     commit(&ctx.dir, "crlf.txt", "unchanged\r\nunchanged\r\n");
     fs::write(ctx.dir.join("crlf.txt"), "unchanged\r\nchanged\r\n").unwrap();
     ctx.update(&mut app, keys(REFRESH));
+    ctx.update(&mut app, keys("jj<tab>gg"));
 
     insta::assert_snapshot!(ctx.redact_buffer());
 }
@@ -461,6 +520,7 @@ fn tab_diff() {
     commit(&ctx.dir, "tab.txt", "this has no tab prefixed\n");
     fs::write(ctx.dir.join("tab.txt"), "\tthis has a tab prefixed\n").unwrap();
     ctx.update(&mut app, keys(REFRESH));
+    ctx.update(&mut app, keys("jj<tab>gg"));
 
     insta::assert_snapshot!(ctx.redact_buffer());
 }
@@ -477,6 +537,7 @@ fn non_utf8_diff() {
     )
     .unwrap();
     ctx.update(&mut app, keys(REFRESH));
+    ctx.update(&mut app, keys("jj<tab>gg"));
 
     insta::assert_snapshot!(ctx.redact_buffer());
 }
@@ -492,6 +553,7 @@ fn ext_diff() {
     run(&ctx.dir, &["git", "add", "staged.txt"]);
     run(&ctx.dir, &["git", "config", "diff.external", "/dev/null"]);
     ctx.update(&mut app, keys(REFRESH));
+    ctx.update(&mut app, keys("jj<tab><ctrl+j><ctrl+j><ctrl+j><tab>gg"));
 
     insta::assert_snapshot!(ctx.redact_buffer());
 }
@@ -711,4 +773,32 @@ fn mouse_wheel_scroll_down() {
         ],
     );
     insta::assert_snapshot!(ctx.redact_buffer());
+}
+
+/// Run outside a repository, gitu says so and where to run it.
+#[test]
+fn outside_a_repository_says_where_to_run() {
+    let error = crate::error::Error::OpenRepo(git2::Error::new(
+        git2::ErrorCode::NotFound,
+        git2::ErrorClass::Repository,
+        "could not find repository",
+    ));
+
+    assert_eq!(
+        error.to_string(),
+        "Not in a git repository: run delta --tui inside one"
+    );
+}
+
+/// With its output not a terminal (`delta --tui > file`), there is nowhere to
+/// draw, and gitu says what to use instead.
+#[test]
+fn output_that_is_not_a_terminal_says_what_to_use() {
+    let error = crate::needs_terminal(false).unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "delta --tui needs a terminal to draw in. To write a diff to a file or a pipe, use delta without --tui"
+    );
+    assert!(crate::needs_terminal(true).is_ok());
 }

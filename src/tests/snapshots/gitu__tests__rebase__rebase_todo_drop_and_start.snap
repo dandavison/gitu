@@ -1,0 +1,25 @@
+---
+source: src/tests/rebase.rs
+expression: ctx.redact_buffer()
+---
+▌▸ 645b5e4 add third-file                                                       |
+ ▸ f5149db add first-file                                                       |
+ ▸ b66a0bf add initial-file                                                     |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: fd361eadad4094c9

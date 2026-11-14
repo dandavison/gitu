@@ -2,19 +2,17 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
+ Branch: main                                                                   |
  Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Untracked files                                                                |
-▌a                                                                              |
+ a                                                                              |
                                                                                 |
  Staged changes (1)                                                             |
- added      b                                                                   |
- @@ -0,0 +1 @@                                                                  |
- +test                                                                          |
+ added: b…                                                                      |
                                                                                 |
- Recent commits                                                                 |
- b66a0bf main origin/main add initial-file                       Author Name __ |
+▌Recent commits                                                                 |
+▌b66a0bf main origin/main add initial-file                       Author Name __ |
                                                                                 |
                                                                                 |
                                                                                 |
@@ -22,4 +20,6 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: ca57e8c71067697a
+                                                                                |
+                                                                                |
+styles_hash: a973dad562dd8e3d

@@ -82,7 +82,7 @@ impl OpTrait for RemoveRemote {
                 },
             )?;
 
-            app.confirm(term, "Really delete remote (y or n)")?;
+            app.confirm(term, "Really delete remote? [y/n]")?;
             remove_remote(app, term, &remote_name)?;
 
             Ok(())

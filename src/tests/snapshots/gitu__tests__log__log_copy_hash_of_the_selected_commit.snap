@@ -1,0 +1,25 @@
+---
+source: src/tests/log.rs
+expression: ctx.redact_buffer()
+---
+ commit 8bb5532ff2d4f9af2c4bce47c8bed9a8160dbc29                                |
+ Author: Author Name <author@email.com>                                         |
+ Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+                                                                                |
+     add first commit                                                           |
+                                                                                |
+     Commit body goes here                                                      |
+                                                                                |
+▌commit 6c08cf78a4544ae4dda8e6161a61070867c60246                                |
+▌Author: Author Name <author@email.com>                                         |
+▌Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+▌                                                                               |
+▌    add second commit                                                          |
+▌                                                                               |
+▌    Commit body goes here                                                      |
+▌                                                                               |
+ commit 79e63f10fe07aa2068d63a582b51b0394901a3f7                                |
+ Author: Author Name <author@email.com>                                         |
+────────────────────────────────────────────────────────────────────────────────|
+> Commit hash copied to clipboard                                               |
+styles_hash: e7f9f9c9d50d4440

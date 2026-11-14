@@ -1,0 +1,25 @@
+---
+source: src/tests/rebase.rs
+expression: ctx.redact_buffer()
+---
+        ▸ 132f122 Author Name 2024-02-16 (HEAD -> main)                         |
+     add third-file                                                             |
+                                                                                |
+ squash ▸ bc73029 Author Name 2024-02-16                                        |
+     add second-file                                                            |
+                                                                                |
+▌       ▸ f5149db Author Name 2024-02-16                                        |
+▌    add first-file                                                             |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: 85cd9ecd80444fa1

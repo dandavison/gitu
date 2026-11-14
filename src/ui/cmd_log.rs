@@ -12,8 +12,15 @@ pub(crate) fn layout_cmd_log<'a>(
     log: &CmdLog,
     config: &Config,
     width: usize,
+    debug: bool,
 ) {
-    if log.is_empty() {
+    if log.is_empty()
+        || (!debug
+            && log
+                .entries
+                .iter()
+                .all(|entry| matches!(&*entry.read().unwrap(), CmdLogEntry::Cmd { .. })))
+    {
         return;
     }
 
@@ -21,6 +28,9 @@ pub(crate) fn layout_cmd_log<'a>(
 
     layout.col(opts(), |layout| {
         for entry in &log.entries {
+            if !debug && matches!(&*entry.read().unwrap(), CmdLogEntry::Cmd { .. }) {
+                continue;
+            }
             layout_entry(layout, entry, config);
         }
     });
@@ -48,11 +58,18 @@ fn layout_entry<'a>(layout: &mut UiTree<'a>, entry: &Arc<RwLock<CmdLogEntry>>, c
                 layout_line(layout, line.to_string().into(), Style::new());
             }
         }
-        CmdLogEntry::Error(err) => layout_line(
-            layout,
-            format!("! {err}").into(),
-            Style::from(&config.style.error_msg),
-        ),
+        // An error's lines after the first, such as a command's stderr, are
+        // indented under it.
+        CmdLogEntry::Error(err) => {
+            for (i, line) in err.lines().enumerate() {
+                let prefix = if i == 0 { "! " } else { "  " };
+                layout_line(
+                    layout,
+                    format!("{prefix}{line}").into(),
+                    Style::from(&config.style.error_msg),
+                );
+            }
+        }
         CmdLogEntry::Info(msg) => layout_line(
             layout,
             format!("> {msg}").into(),

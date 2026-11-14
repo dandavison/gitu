@@ -4,9 +4,9 @@ use crate::style::Style;
 
 use crate::config::Config;
 use crate::gitu_diff::Status;
-use crate::highlight;
 use crate::item_data::{ItemData, Ref, SectionHeader};
-use crate::items::Item;
+use crate::items::{Item, RenderedRow};
+use crate::rebase_todo::TodoEntry;
 use crate::ui::layout::opts;
 use crate::ui::{UiTree, layout_span};
 use unicode_segmentation::UnicodeSegmentation;
@@ -17,6 +17,9 @@ use unicode_width::UnicodeWidthStr;
 ///
 /// Every span is patched onto `base`, letting the caller supply a background
 /// style such as the selection highlight.
+///
+/// An item a renderer drew is laid out as the renderer drew it; the rest are
+/// laid out from their data.
 pub(crate) fn layout_item<'a>(
     layout: &mut UiTree<'a>,
     item: &'a Item,
@@ -24,6 +27,11 @@ pub(crate) fn layout_item<'a>(
     base: Style,
 ) {
     let style = &config.style;
+
+    if let Some(rendered) = &item.rendered {
+        layout_rendered(layout, rendered, base);
+        return;
+    }
 
     match &item.data {
         ItemData::Raw(content) => {
@@ -149,29 +157,8 @@ pub(crate) fn layout_item<'a>(
                 (content.into(), base.patch(Style::from(&style.hunk_header))),
             );
         }
-        ItemData::HunkLine {
-            diff,
-            file_i,
-            hunk_i,
-            line_range,
-            line_i,
-        } => {
-            let hunk_highlights =
-                highlight::highlight_hunk(item.id, config, diff, *file_i, *hunk_i);
-            let hunk_line = &diff.hunk_content(*file_i, *hunk_i)[line_range.clone()];
-
-            for (highlight_range, highlight_style) in hunk_highlights.get_line_highlights(*line_i) {
-                layout_span(
-                    layout,
-                    (
-                        hunk_line[highlight_range.clone()]
-                            .replace('\t', "    ")
-                            .into(),
-                        base.patch(*highlight_style),
-                    ),
-                );
-            }
-        }
+        // The renderer draws every diff line.
+        ItemData::HunkLine { .. } => {}
         ItemData::Stash { message, id, .. } => {
             layout_span(
                 layout,
@@ -182,20 +169,35 @@ pub(crate) fn layout_item<'a>(
             );
             layout_span(layout, (format!(" {message}").into(), base));
         }
+        ItemData::RebaseTodo { todo, index } => {
+            // Only reached without pre-rendered rows, e.g. an emptied list.
+            let content = match todo.borrow().entries.get(*index) {
+                Some(TodoEntry::Commit { action, oid }) => format!("{} {oid}", action.keyword()),
+                Some(TodoEntry::Other(instruction)) => instruction.clone(),
+                None => String::new(),
+            };
+
+            layout_span(layout, (content.into(), base));
+        }
         ItemData::Header(header) => {
             let content: Cow<str> = match header {
                 SectionHeader::Remote(remote) => format!("Remote {remote}").into(),
                 SectionHeader::Tags => "Tags".into(),
                 SectionHeader::Branches => "Branches".into(),
                 SectionHeader::NoBranch => "No branch".into(),
-                SectionHeader::OnBranch(branch) => format!("On branch {branch}").into(),
+                SectionHeader::OnBranch(branch) => {
+                    if config.general.verbose_branch_status {
+                        format!("Branch: {branch}").into()
+                    } else {
+                        branch.as_str().into()
+                    }
+                }
                 SectionHeader::Rebase(head, onto) => format!("Rebasing {head} onto {onto}").into(),
                 SectionHeader::Merge(head) => format!("Merging {head}").into(),
                 SectionHeader::Revert(head) => format!("Reverting {head}").into(),
                 SectionHeader::CherryPick(head) => format!("Cherry-picking {head}").into(),
                 SectionHeader::Stashes => "Stashes".into(),
                 SectionHeader::RecentCommits => "Recent commits".into(),
-                SectionHeader::Commit(oid) => format!("commit {oid}").into(),
                 SectionHeader::StashRef(stash_ref) => stash_ref.as_str().into(),
                 SectionHeader::StagedChanges(count) => format!("Staged changes ({count})").into(),
                 SectionHeader::UnstagedChanges(count) => {
@@ -219,7 +221,7 @@ pub(crate) fn layout_item<'a>(
                 format!("Your branch is behind '{upstream}' by {behind} commit(s).")
             } else {
                 format!(
-                    "Your branch and '{upstream}' have diverged,\nand have {ahead} and {behind} different commits each, respectively."
+                    "Your branch and '{upstream}' have diverged, and have {ahead} and {behind} different commits each, respectively."
                 )
             };
 
@@ -244,11 +246,7 @@ pub(crate) fn layout_item<'a>(
             layout_span(layout, (summary.as_str().into(), base));
         }
         ItemData::BlameCodeLine {
-            blame_file,
-            line_i,
-            line_num,
-            content,
-            ..
+            line_num, content, ..
         } => {
             let base = base.patch(Style::from(&style.blame.code_line));
 
@@ -260,18 +258,15 @@ pub(crate) fn layout_item<'a>(
                 ),
             );
 
-            for (range, highlight_style) in blame_file.highlights.get_line_highlights(*line_i) {
-                if !range.is_empty() && range.end <= content.len() {
-                    layout_span(
-                        layout,
-                        (
-                            content[range.clone()].replace('\t', "    ").into(),
-                            base.patch(*highlight_style),
-                        ),
-                    );
-                }
-            }
+            layout_span(layout, (content.replace('\t', "    ").into(), base));
         }
+    }
+}
+
+/// Lays out a row a renderer drew, each span patched onto `base`.
+pub(crate) fn layout_rendered<'a>(layout: &mut UiTree<'a>, row: &'a RenderedRow, base: Style) {
+    for (text, span_style) in row.iter() {
+        layout_span(layout, (text.as_str().into(), base.patch(*span_style)));
     }
 }
 

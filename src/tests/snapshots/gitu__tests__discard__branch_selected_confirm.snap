@@ -21,5 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
-? Really discard? (y or n) › █                                                  |
-styles_hash: 7ee167ab1e7e41ed
+Really discard? [y/n] █                                                         |
+styles_hash: ac09deb227cdeba9

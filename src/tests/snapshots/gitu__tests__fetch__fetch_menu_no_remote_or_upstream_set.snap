@@ -2,7 +2,7 @@
 source: src/tests/fetch.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                       Author Name __ |
@@ -16,10 +16,10 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- Fetch                                 Arguments                                |
- a     from all remotes                -p Prune deleted branches (--prune)      |
- p     from pushRemote, setting that   -t Fetch all tags (--tags)               |
- u     from upstream, setting that                                              |
- e     from elsewhere                                                           |
- q/esc Quit/Close                                                               |
-styles_hash: c6fa14e930b4b5cb
+ Fetch                                      Arguments                           |
+ a          from all remotes                -p Prune deleted branches (--prune) |
+ p          from pushRemote, setting that   -t Fetch all tags (--tags)          |
+ u          from upstream, setting that                                         |
+ e          from elsewhere                                                      |
+ q/esc/left Quit/Close                                                          |
+styles_hash: c50806f8657a74c0

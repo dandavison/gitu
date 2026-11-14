@@ -42,15 +42,11 @@ impl OpTrait for Discard {
                 diff,
                 file_i,
                 hunk_i,
-                line_i,
+                line_indices,
                 ..
             } => {
-                let patch = diff.format_line_patch(
-                    *file_i,
-                    *hunk_i,
-                    *line_i..(line_i + 1),
-                    PatchMode::Reverse,
-                );
+                let patch =
+                    diff.format_lines_patch(*file_i, *hunk_i, line_indices, PatchMode::Reverse);
 
                 match diff.diff_type {
                     DiffType::WorkdirToIndex => reverse_worktree(patch),
@@ -75,7 +71,7 @@ impl OpTrait for Discard {
 
 fn discard_branch(branch: String) -> Action {
     Rc::new(move |app, term| {
-        confirm(app, term, "Really discard? (y or n)")?;
+        confirm(app, term, "Really discard? [y/n]")?;
         super::branch::delete(app, term, &branch)
     })
 }
@@ -118,7 +114,7 @@ fn reverse_index_and_worktree(patch: String) -> Action {
 
 fn confirm_discard(app: &mut App, term: &mut Term) -> Res<()> {
     if app.state.config.general.confirm_discard <= ConfirmDiscardOption::File {
-        confirm(app, term, "Really discard? (y or n)")?;
+        confirm(app, term, "Really discard? [y/n]")?;
     }
     Ok(())
 }

@@ -1,0 +1,25 @@
+---
+source: src/tests/editor.rs
+expression: ctx.redact_buffer()
+---
+ Branch: main                                                                   |
+ Your branch is up to date with 'origin/main'.                                  |
+                                                                                |
+ Recent commits                                                                 |
+ b66a0bf main origin/main add initial-file                       Author Name __ |
+                                                                                |
+                                                                                |
+                                                                                |
+────────────────────────────────────────────────────────────────────────────────|
+ Features                                                                       |
+▌    side-by-side                                                               |
+   x line-numbers                                                               |
+     plus-minus-markers                                                         |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+                                                                                |
+styles_hash: 17b478c46f9ad389

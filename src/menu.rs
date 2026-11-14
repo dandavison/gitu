@@ -22,6 +22,9 @@ pub(crate) enum Menu {
     #[serde(rename = "commit_menu")]
     #[strum(serialize = "commit_menu")]
     Commit,
+    #[serde(rename = "commit_picker")]
+    #[strum(serialize = "commit_picker")]
+    CommitPicker,
     #[serde(rename = "fetch_menu")]
     #[strum(serialize = "fetch_menu")]
     Fetch,
@@ -45,6 +48,9 @@ pub(crate) enum Menu {
     #[serde(rename = "rebase_menu")]
     #[strum(serialize = "rebase_menu")]
     Rebase,
+    #[serde(rename = "rebase_todo")]
+    #[strum(serialize = "rebase_todo")]
+    RebaseTodo,
     #[serde(rename = "reset_menu")]
     #[strum(serialize = "reset_menu")]
     Reset,
@@ -74,6 +80,7 @@ impl PendingMenu {
                 Menu::Root => vec![],
                 Menu::Branch => ops::branch::init_args(),
                 Menu::Commit => ops::commit::init_args(),
+                Menu::CommitPicker => vec![],
                 Menu::Fetch => ops::fetch::init_args(),
                 Menu::Help => vec![],
                 Menu::Log => ops::log::init_args(),
@@ -81,6 +88,7 @@ impl PendingMenu {
                 Menu::Pull => ops::pull::init_args(),
                 Menu::Push => ops::push::init_args(),
                 Menu::Rebase => ops::rebase::init_args(),
+                Menu::RebaseTodo => vec![],
                 Menu::Remote => vec![],
                 Menu::Reset => ops::reset::init_args(),
                 Menu::Revert => ops::revert::init_args(),

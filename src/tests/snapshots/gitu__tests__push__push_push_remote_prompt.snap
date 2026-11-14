@@ -2,7 +2,7 @@
 source: src/tests/push.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is ahead of 'origin/main' by 1 commit(s).                          |
                                                                                 |
  Recent commits                                                                 |
@@ -21,5 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
-? Set pushRemote then push: › █                                                 |
-styles_hash: a3bf954f04d712a5
+Set pushRemote then push: █                                                     |
+styles_hash: 971b6506516e7d4c

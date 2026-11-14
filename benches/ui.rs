@@ -28,7 +28,7 @@ fn bench_redraw(c: &mut Criterion, name: &str, size: (u16, u16)) {
 
         let config = Arc::new(config::init_config(args.config.clone()).unwrap());
         let repo = Rc::new(Repository::open_from_env().unwrap());
-        let mut app = App::create(repo, size, &args, config, false).unwrap();
+        let mut app = App::create(repo, size, &args, config, false, None).unwrap();
 
         b.iter(|| app.redraw_now(&mut term).unwrap());
     });

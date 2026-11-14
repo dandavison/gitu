@@ -1,5 +1,4 @@
 use crate::gitu_diff::FileDiff;
-use std::ops::Range;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Diff {
@@ -9,7 +8,7 @@ pub(crate) struct Diff {
     pub commit: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DiffType {
     WorkdirToIndex, // i.e. Unstaged
     IndexToTree,    // i.e. Staged
@@ -23,16 +22,6 @@ pub(crate) enum PatchMode {
 }
 
 impl Diff {
-    pub(crate) fn mask_old_hunk(&self, file_i: usize, hunk_i: usize) -> String {
-        let content = &self.text[self.file_diffs[file_i].hunks[hunk_i].content.range.clone()];
-        mask_hunk_content(content, '-', '+')
-    }
-
-    pub(crate) fn mask_new_hunk(&self, file_i: usize, hunk_i: usize) -> String {
-        let content = &self.text[self.file_diffs[file_i].hunks[hunk_i].content.range.clone()];
-        mask_hunk_content(content, '+', '-')
-    }
-
     pub(crate) fn format_file_patch(&self, file_i: usize) -> String {
         let mut patch = String::new();
         patch.push_str(self.file_diff_header(file_i));
@@ -64,11 +53,15 @@ impl Diff {
             .clone()]
     }
 
-    pub(crate) fn format_line_patch(
+    /// Build a patch that stages/reverses exactly the given content lines of a
+    /// hunk. `line_indices` need not be contiguous: a side-by-side row that fuses
+    /// an in-place change maps to a deletion and its (possibly non-adjacent)
+    /// replacement, and both are staged together.
+    pub(crate) fn format_lines_patch(
         &self,
         file_i: usize,
         hunk_i: usize,
-        line_range: Range<usize>,
+        line_indices: &[usize],
         mode: PatchMode,
     ) -> String {
         let hunk = &self.file_diffs[file_i].hunks[hunk_i];
@@ -90,7 +83,7 @@ impl Diff {
                     PatchMode::Reverse => '+',
                 };
 
-                if line_range.contains(&i) {
+                if line_indices.contains(&i) {
                     Some(line.to_string())
                 } else if line.starts_with(add) {
                     None
@@ -147,31 +140,4 @@ impl Diff {
         }
         line
     }
-}
-
-fn mask_hunk_content(content: &str, keep: char, mask: char) -> String {
-    let mut result = String::new();
-
-    content.split_inclusive('\n').for_each(|line| {
-        if line.starts_with(mask) {
-            if line.ends_with("\r\n") {
-                for _ in 0..(line.len() - 2) {
-                    result.push(' ');
-                }
-                result.push_str("\r\n");
-            } else if line.ends_with('\n') {
-                for _ in 0..(line.len() - 1) {
-                    result.push(' ');
-                }
-                result.push('\n');
-            }
-        } else if line.starts_with(keep) {
-            result.push(' ');
-            result.push_str(&line[1..]);
-        } else if !line.starts_with('\\') {
-            result.push_str(line);
-        }
-    });
-
-    result
 }

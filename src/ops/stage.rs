@@ -2,7 +2,7 @@ use super::OpTrait;
 use crate::{
     Action,
     app::{App, State},
-    git::diff::{Diff, PatchMode},
+    git::diff::{Diff, DiffType, PatchMode},
     gitu_diff::Status,
     item_data::ItemData,
     term::Term,
@@ -13,6 +13,15 @@ pub(crate) struct Stage;
 impl OpTrait for Stage {
     fn get_action(&self, target: &ItemData) -> Option<Action> {
         let action = match target {
+            // Staging part of a patch git never took from the working tree is
+            // either a no-op or a cherry-pick, so it is not on offer.
+            ItemData::Delta { diff, .. }
+            | ItemData::Hunk { diff, .. }
+            | ItemData::HunkLine { diff, .. }
+                if !matches!(diff.diff_type, DiffType::WorkdirToIndex) =>
+            {
+                return None;
+            }
             ItemData::AllUnstaged(_) => stage_unstaged(),
             ItemData::AllUntracked(untracked) => stage_untracked(untracked.clone()),
             ItemData::Untracked(u) => stage_file(u.into()),
@@ -33,9 +42,9 @@ impl OpTrait for Stage {
                 diff,
                 file_i,
                 hunk_i,
-                line_i,
+                line_indices,
                 ..
-            } => stage_line(Rc::clone(diff), *file_i, *hunk_i, *line_i),
+            } => stage_line(Rc::clone(diff), *file_i, *hunk_i, line_indices.clone()),
             _ => return None,
         };
 
@@ -92,13 +101,13 @@ fn stage_patch(diff: Rc<Diff>, file_i: usize, hunk_i: usize) -> Action {
     })
 }
 
-fn stage_line(diff: Rc<Diff>, file_i: usize, hunk_i: usize, line_i: usize) -> Action {
+fn stage_line(diff: Rc<Diff>, file_i: usize, hunk_i: usize, line_indices: Vec<usize>) -> Action {
     Rc::new(move |app, term| {
         let mut cmd = Command::new("git");
         cmd.args(["apply", "--cached", "--recount"]);
 
         let input = diff
-            .format_line_patch(file_i, hunk_i, line_i..(line_i + 1), PatchMode::Normal)
+            .format_lines_patch(file_i, hunk_i, &line_indices, PatchMode::Normal)
             .into_bytes();
 
         app.run_cmd(term, &input, cmd)

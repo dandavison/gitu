@@ -2,7 +2,7 @@
 source: src/tests/discard.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
+ Branch: main                                                                   |
  Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Recent commits                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git apply --reverse --index --recount                                         |
-styles_hash: 57c221f81aa06fc5
+styles_hash: 66d42bff73adf674

@@ -2,7 +2,7 @@
 source: src/tests/pull.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                                                         |
+▌Branch: main                                                                                                           |
 ▌Your branch is up to date with 'origin/main'.                                                                          |
                                                                                                                         |
  Recent commits                                                                                                         |
@@ -22,4 +22,4 @@ Fast-forward                                                                    
  remote-file | 1 +                                                                                                      |
  1 file changed, 1 insertion(+)                                                                                         |
  create mode 100644 remote-file                                                                                         |
-styles_hash: 777dffb6900c18bd
+styles_hash: 908c66e9bc0d18e4

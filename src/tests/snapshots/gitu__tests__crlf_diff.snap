@@ -2,11 +2,11 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is ahead of 'origin/main' by 1 commit(s).                          |
                                                                                 |
  Unstaged changes (1)                                                           |
- modified   crlf.txt                                                            |
+ crlf.txt                                                                       |
  @@ -1,2 +1,2 @@                                                                |
   unchanged                                                                     |
  -unchanged                                                                     |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: a4404453dbbfb78e
+styles_hash: 522e17f015cc5f24

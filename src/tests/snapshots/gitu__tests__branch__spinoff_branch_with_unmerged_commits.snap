@@ -1,8 +1,9 @@
 ---
 source: src/tests/branch.rs
+assertion_line: 123
 expression: ctx.redact_buffer()
 ---
-▌On branch new                                                                  |
+▌Branch: new                                                                    |
                                                                                 |
  Recent commits                                                                 |
  c84f226 new add first commit                                    Author Name __ |
@@ -19,7 +20,7 @@ expression: ctx.redact_buffer()
 ────────────────────────────────────────────────────────────────────────────────|
 $ git checkout -b new                                                           |
 Switched to a new branch 'new'                                                  |
-$ git update-ref -m "reset: moving to b66a0bf82020d6a386e94d0fceedec1f817d20c7" |
-refs/heads/main b66a0bf82020d6a386e94d0fceedec1f817d20c7                        |
+$ git update-ref -m '"reset: moving to b66a0bf82020d6a386e94d0fceedec1f817d20c7"|
+' refs/heads/main b66a0bf82020d6a386e94d0fceedec1f817d20c7                      |
 > Branch main was reset to b66a0bf82020d6a386e94d0fceedec1f817d20c7             |
-styles_hash: ad7dfdd7bbbb1b66
+styles_hash: d826282d8c780e69

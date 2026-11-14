@@ -1,0 +1,152 @@
+#!/usr/bin/env -S uv run --script
+#
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
+"""Run bench-startup against each non-test commit of the fork, caching results by commit.
+
+A commit with the example `gitu` is benched as that example; a later one as
+`delta --gitu`, built from the delta checkout given against the commit. That
+checkout may not build against every commit; a commit it does not build against
+is recorded as a build error.
+
+A commit is skipped as a test commit if its subject starts with "Test" or it
+changes only tests and snapshots. Results already in the cache are not re-run.
+"""
+
+import argparse
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
+WORK = ROOT / "target" / "bench-startup"
+WORKTREE = WORK / "worktree"
+CARGO_TARGET = WORK / "cargo-target"
+FORK_POINT = "53edd1c35ee8aa83669afe3300f1a28e0e938b66"
+TEST_PATH = re.compile(r"^src/tests/|/snapshots/|\.snap$")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--range", default=f"{FORK_POINT}..HEAD", help="commits after the fork point"
+    )
+    parser.add_argument("--results", type=Path, default=HERE / "results")
+    parser.add_argument("--runs", type=int, default=10)
+    parser.add_argument("--force", action="store_true", help="re-run cached commits")
+    parser.add_argument(
+        "--delta",
+        type=Path,
+        required=True,
+        help="a checkout of delta's gitu branch, to build `delta --gitu` from",
+    )
+    args = parser.parse_args()
+
+    start = git("rev-parse", args.range.split("..")[0]).strip()
+    commits = [start] + git("rev-list", "--reverse", args.range).split()
+    for i, sha in enumerate(commits):
+        out = args.results / f"{sha}.json"
+        if is_test_commit(sha) or (out.exists() and not args.force):
+            continue
+        print(
+            f"[{i + 1}/{len(commits)}] {git('log', '-1', '--format=%h %s', sha).strip()}",
+            file=sys.stderr,
+        )
+        bench(sha, out, args.runs, args.delta.resolve())
+    subprocess.run([str(HERE / "chart"), "--results", str(args.results)], check=True)
+
+
+def bench(sha: str, out: Path, runs: int, delta: Path) -> None:
+    gitu = build(sha, delta)
+    if isinstance(gitu, str):
+        result = {"build_error": gitu}
+    else:
+        subprocess.run(
+            [
+                str(HERE / "bench-startup"),
+                "--gitu",
+                shlex.join(gitu),
+                "--out",
+                str(out),
+                "--runs",
+                str(runs),
+            ],
+            check=True,
+        )
+        result = json.loads(out.read_text())
+    meta = git("log", "-1", "--format=%cI%x00%s", sha).strip().split("\0")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(
+            {"commit": sha, "date": meta[0], "subject": meta[1]} | result, indent=2
+        )
+        + "\n"
+    )
+
+
+def build(sha: str, delta: Path) -> list[str] | str:
+    """The command that runs gitu built at sha, or the build's error output."""
+    if not WORKTREE.exists():
+        git("worktree", "add", "--detach", str(WORKTREE), sha)
+    subprocess.run(
+        ["git", "-C", str(WORKTREE), "checkout", "-q", "--detach", sha], check=True
+    )
+    # gitu became an example rather than a binary when the crate became a library,
+    # and for one commit before that was a binary behind the feature "bin". Since
+    # the example was removed, gitu runs only as `delta --gitu`.
+    example = (WORKTREE / "examples" / "gitu.rs").exists()
+    if not example and not (WORKTREE / "src" / "main.rs").exists():
+        return build_delta(delta)
+    target = ["--example", "gitu"] if example else ["--bin", "gitu"]
+    if 'required-features = ["bin"]' in (WORKTREE / "Cargo.toml").read_text():
+        target += ["--features", "bin"]
+    p = subprocess.run(
+        ["cargo", "build", "--release", *target],
+        check=False,
+        cwd=WORKTREE,
+        env={**os.environ, "CARGO_TARGET_DIR": str(CARGO_TARGET)},
+        capture_output=True,
+        text=True,
+    )
+    if p.returncode != 0:
+        return p.stderr[-2000:]
+    return [str(CARGO_TARGET / "release" / ("examples/gitu" if example else "gitu"))]
+
+
+def build_delta(delta: Path) -> list[str] | str:
+    """`delta --gitu` built from the delta checkout against the worktree's commit."""
+    patch = f'patch.crates-io.delta-gitu.path="{WORKTREE}"'
+    p = subprocess.run(
+        ["cargo", "build", "--release", "--config", patch],
+        check=False,
+        cwd=delta,
+        env={**os.environ, "CARGO_TARGET_DIR": str(CARGO_TARGET)},
+        capture_output=True,
+        text=True,
+    )
+    if p.returncode != 0:
+        return p.stderr[-2000:]
+    return [str(CARGO_TARGET / "release" / "delta"), "--gitu"]
+
+
+def is_test_commit(sha: str) -> bool:
+    subject = git("log", "-1", "--format=%s", sha)
+    paths = git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).split()
+    return subject.startswith("Test") or all(TEST_PATH.search(p) for p in paths)
+
+
+def git(*args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(ROOT), *args], capture_output=True, text=True, check=True
+    ).stdout
+
+
+if __name__ == "__main__":
+    main()

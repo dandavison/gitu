@@ -2,7 +2,7 @@
 source: src/tests/merge.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
+ Branch: main                                                                   |
  Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Recent commits                                                                 |
@@ -11,7 +11,7 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- 0/7   Merge › HEAD~2█                                                          |
+ 0/7  Merge: HEAD~2█                                                            |
 ▌HEAD~2                                                                         |
                                                                                 |
                                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: a1dd364da2824096
+styles_hash: 40d3c253ec38ce36

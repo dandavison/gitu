@@ -2,7 +2,7 @@
 source: src/tests/branch.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Recent commits                                                                 |
@@ -21,5 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
-? Branch is not fully merged. Really delete? (y or n) › █                       |
-styles_hash: dd00d7ffeafd6b61
+Branch is not fully merged. Really delete? [y/n] █                              |
+styles_hash: 5af8a8f91c9afae8

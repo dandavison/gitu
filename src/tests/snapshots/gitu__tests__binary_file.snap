@@ -2,11 +2,11 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
+ Branch: main                                                                   |
  Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Staged changes (1)                                                             |
-▌added      binary-file                                                         |
+▌added: binary-file (binary file)                                               |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                       Author Name __ |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: a4136f2f4fbe0a68
+styles_hash: 94f8a6780ef91e73

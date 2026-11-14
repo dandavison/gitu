@@ -2,7 +2,7 @@
 source: src/tests/push.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
                                                                                 |
  Recent commits                                                                 |
  b66a0bf main origin/main add initial-file                       Author Name __ |
@@ -21,5 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
-? Set upstream then push: › █                                                   |
-styles_hash: bfdc161893306f4e
+Set upstream then push: █                                                       |
+styles_hash: 84dc99aa834cf518

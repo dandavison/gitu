@@ -58,18 +58,40 @@ impl OpTrait for SearchPrevious {
 }
 
 fn prompt_search(app: &mut App, term: &mut Term, direction: SearchDirection) -> Res<()> {
+    // As in less and vim.
     let prompt = match direction {
-        SearchDirection::Forward => "Search",
-        SearchDirection::Backward => "Search backward",
+        SearchDirection::Forward => "/",
+        SearchDirection::Backward => "?",
     };
 
-    let query = match app.prompt(
+    // As in neovim, the cursor goes to the first match as the query is typed,
+    // each time from where the search began, and back there if it is called
+    // off.
+    let start = app.screen().place();
+    let from_start = start.clone();
+    let answer = app.prompt(
         term,
         &PromptParams {
             prompt,
+            bare: true,
+            history: Some(crate::prompt::HistoryKind::Search),
+            on_edit: Some(Box::new(move |app, query| {
+                let screen = app.screen_mut();
+                screen.go_back_to(from_start.clone());
+                if query.is_empty() {
+                    screen.clear_search();
+                } else {
+                    // A query part-typed may not match yet, or not be a regex
+                    // yet; enter is when that is said.
+                    let _ = screen.search(query, direction);
+                }
+            })),
             ..Default::default()
         },
-    ) {
+    );
+    app.screen_mut().go_back_to(start);
+
+    let query = match answer {
         Ok(query) if query.is_empty() => {
             app.screen_mut().clear_search();
             return Ok(());

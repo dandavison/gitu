@@ -37,6 +37,7 @@ impl OpTrait for Blame {
                 hunk_i,
                 line_i,
                 line_range,
+                ..
             } => {
                 let hunk_content = diff.hunk_content(*file_i, *hunk_i);
                 let line_content = &hunk_content[line_range.clone()];
@@ -92,7 +93,7 @@ fn open_blame(
             screen::blame::create(
                 Arc::clone(&app.state.config),
                 Rc::clone(&app.state.repo),
-                term.size().map_err(Error::Term)?,
+                app.render_params(term.size().map_err(Error::Term)?),
                 file_path.clone(),
                 commit.clone(),
                 target_line,

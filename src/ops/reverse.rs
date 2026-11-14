@@ -22,9 +22,9 @@ impl OpTrait for Reverse {
                 diff,
                 file_i,
                 hunk_i,
-                line_i,
+                line_indices,
                 ..
-            } => reverse_line(diff, *file_i, *hunk_i, *line_i),
+            } => reverse_line(diff, *file_i, *hunk_i, line_indices),
             _ => return None,
         };
 
@@ -50,9 +50,9 @@ fn reverse_patch(patch: String) -> Action {
     })
 }
 
-fn reverse_line(diff: &Rc<Diff>, file_i: usize, hunk_i: usize, line_i: usize) -> Action {
+fn reverse_line(diff: &Rc<Diff>, file_i: usize, hunk_i: usize, line_indices: &[usize]) -> Action {
     let patch = diff
-        .format_line_patch(file_i, hunk_i, line_i..(line_i + 1), PatchMode::Reverse)
+        .format_lines_patch(file_i, hunk_i, line_indices, PatchMode::Reverse)
         .into_bytes();
 
     Rc::new(move |app: &mut App, term: &mut Term| {

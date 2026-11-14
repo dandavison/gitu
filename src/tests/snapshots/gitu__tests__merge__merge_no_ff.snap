@@ -2,7 +2,7 @@
 source: src/tests/merge.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is ahead of 'origin/main' by 2 commit(s).                          |
                                                                                 |
  Recent commits                                                                 |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
 $ git merge --no-ff other-branch                                                |
-styles_hash: fd9978137bbcc376
+styles_hash: cc092c9b15e1159c

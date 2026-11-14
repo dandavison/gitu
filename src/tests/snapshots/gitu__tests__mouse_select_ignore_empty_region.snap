@@ -2,11 +2,11 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
- On branch main                                                                 |
+ Branch: main                                                                   |
  Your branch is ahead of 'origin/main' by 1 commit(s).                          |
                                                                                 |
  Unstaged changes (1)                                                           |
-▌modified   testfile…                                                           |
+▌testfile…                                                                      |
                                                                                 |
  Recent commits                                                                 |
  cd4d2d1 main add testfile                                       Author Name __ |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
                                                                                 |
-styles_hash: 22cf030000def3cb
+styles_hash: bc70fa54417b976e

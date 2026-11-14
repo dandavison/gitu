@@ -2,24 +2,34 @@
 source: src/tests/mod.rs
 expression: ctx.redact_buffer()
 ---
-────────────────────────────────────────────────────────────────────────────────|
- Help                                     Submenu           On branch main      |
- Y                Show Refs               b   Branch        tab Fold            |
- k/up             Up                      c   Commit                            |
- j/down           Down                    f   Fetch                             |
- ctrl+k/ctrl+up   Up line                 h/? Help                              |
- ctrl+j/ctrl+down Down line               l   Log                               |
- alt+k/alt+up     Prev section            m   Merge                             |
- alt+j/alt+down   Next section            M   Remote                            |
- alt+h/alt+left   Parent section          F   Pull                              |
- g+g              Top                     P   Push                              |
- G                Bottom                  r   Rebase                            |
- ctrl+u           Scroll half page up     X   Reset                             |
- ctrl+d           Scroll half page down   V   Revert                            |
- ctrl+y           Scroll view up          A   Cherry-pick                       |
- ctrl+e           Scroll view down        z   Stash                             |
- /                Search                                                        |
- n                Next match                                                    |
- N                Previous match                                                |
- g+r              Refresh                                                       |
-styles_hash: 8e4b0994d480981d
+▌Branch: main                                                                                                                                         |
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────|
+ Commands                                                           Submenus          Section                                                         |
+ &                Files                   q/esc      Quit/Close     A   Cherry-pick   right Unfold                                                    |
+ +                Wider context           shift+down Select down    b   Branch        tab   Fold                                                      |
+ -                Narrower context        shift+tab  Fold all       c   Commit                                                                        |
+ /                Search                  shift+up   Select up      f   Fetch                                                                         |
+ :                Edit git command        T          Themes         F   Pull                                                                          |
+ alt+h/alt+left   Parent section          U          Diff context   h/? Help                                                                          |
+ alt+j/alt+down   Next section            Y          Show Refs      l   Log                                                                           |
+ alt+k/alt+up     Prev section                                      m   Merge                                                                         |
+ ctrl+d           Scroll half page down                             M   Remote                                                                        |
+ ctrl+e           Scroll view down                                  P   Push                                                                          |
+ ctrl+j/ctrl+down Down                                              r   Rebase                                                                        |
+ ctrl+k/ctrl+up   Up                                                V   Revert                                                                        |
+ ctrl+u           Scroll half page up                               X   Reset                                                                         |
+ ctrl+y           Scroll view up                                    z   Stash                                                                         |
+ ctrl+z           Suspend                                                                                                                             |
+ G                Bottom                                            Hotkeys                                                                           |
+ g+g              Top                                               L line-numbers                                                                    |
+ g+r              Refresh                                           S side-by-side                                                                    |
+ g+s              Status                                                                                                                              |
+ H                Hotkeys                                                                                                                             |
+ j/down           Down line                                                                                                                           |
+ k/up             Up line                                                                                                                             |
+ left             Back                                                                                                                                |
+ n                Next match                                                                                                                          |
+ N                Previous match                                                                                                                      |
+ pagedown/space   Scroll page down                                                                                                                    |
+ pageup/backspace Scroll page up                                                                                                                      |
+styles_hash: f353d6d0e9398a84

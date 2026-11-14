@@ -2,7 +2,7 @@
 source: src/tests/quit.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Recent commits                                                                 |
@@ -21,5 +21,5 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
-? Really quit? (y or n) › █                                                     |
-styles_hash: 50d4d3b67a749d50
+Really quit? [y/n] █                                                            |
+styles_hash: ed43e816e0c97620

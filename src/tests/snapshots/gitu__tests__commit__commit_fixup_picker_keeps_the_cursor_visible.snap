@@ -1,0 +1,25 @@
+---
+source: src/tests/commit.rs
+expression: ctx.redact_buffer()
+---
+     Commit body goes here                                                      |
+                                                                                |
+ commit 1cc7f07fb1a54e502fc5751d90107b4732f72e11                                |
+ Author: Author Name <author@email.com>                                         |
+ Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+                                                                                |
+     add file-3                                                                 |
+                                                                                |
+     Commit body goes here                                                      |
+                                                                                |
+▌commit f67e3f06699426a6c6cc1317ae88b97889315a7c                                |
+▌Author: Author Name <author@email.com>                                         |
+▌Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+▌                                                                               |
+▌    add file-2                                                                 |
+▌                                                                               |
+▌    Commit body goes here                                                      |
+▌                                                                               |
+ commit ce87247076ce319b82488e370f9e8bdb3db9b306                                |
+ Author: Author Name <author@email.com>                                         |
+styles_hash: 43718c0e474f0ac4

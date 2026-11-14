@@ -4,7 +4,8 @@ use crate::{
     app::State,
     error::Error,
     item_data::{ItemData, Ref},
-    screen,
+    items::RenderParams,
+    screen::{self, Screen},
 };
 use core::str;
 use std::{path::Path, process::Command, rc::Rc, sync::Arc};
@@ -12,68 +13,7 @@ use std::{path::Path, process::Command, rc::Rc, sync::Arc};
 pub(crate) struct Show;
 impl OpTrait for Show {
     fn get_action(&self, target: &ItemData) -> Option<Action> {
-        match target {
-            ItemData::Commit { oid, .. }
-            | ItemData::Reference {
-                kind: Ref::Tag(oid),
-                ..
-            }
-            | ItemData::Reference {
-                kind: Ref::Head(oid),
-                ..
-            } => goto_show_screen(oid.clone(), None),
-            ItemData::BlameHeader {
-                commit_hash,
-                file_path,
-                line_num,
-                ..
-            } if !is_null_oid(commit_hash) => {
-                goto_show_screen(commit_hash.clone(), Some((file_path.clone(), *line_num)))
-            }
-            ItemData::BlameCodeLine {
-                commit_hash,
-                file_path,
-                orig_line_num,
-                ..
-            } if !is_null_oid(commit_hash) => goto_show_screen(
-                commit_hash.clone(),
-                Some((file_path.clone(), *orig_line_num)),
-            ),
-            ItemData::Untracked(u) => editor(u.as_path(), None),
-            ItemData::Delta { diff, file_i, .. } => {
-                let file_path = &diff.file_diffs[*file_i].header.new_file;
-                let path: &str = &file_path.fmt(&diff.text);
-                editor(Path::new(path), None)
-            }
-            ItemData::Hunk {
-                diff,
-                file_i,
-                hunk_i,
-            } => {
-                let file_path = &diff.file_diffs[*file_i].header.new_file;
-                let path: &str = &file_path.fmt(&diff.text);
-                editor(
-                    Path::new(path),
-                    Some(diff.file_line_of_first_diff(*file_i, *hunk_i) as u32),
-                )
-            }
-            ItemData::HunkLine {
-                diff,
-                file_i,
-                hunk_i,
-                line_i,
-                ..
-            } => {
-                let file_path = &diff.file_diffs[*file_i].header.new_file;
-                let path: &str = &file_path.fmt(&diff.text);
-                editor(
-                    Path::new(path),
-                    Some(diff.hunk_line_new_file_num(*file_i, *hunk_i, *line_i)),
-                )
-            }
-            ItemData::Stash { stash_ref, .. } => goto_show_stash_screen(stash_ref.clone()),
-            _ => None,
-        }
+        show_screen(target).or_else(|| show_in_editor(target))
     }
     fn is_target_op(&self) -> bool {
         true
@@ -84,20 +24,166 @@ impl OpTrait for Show {
     }
 }
 
+/// Show without leaving gitu: a commit, tag or stash opens on its own screen,
+/// and a folded file or hunk unfolds. Anything else, such as a file already
+/// unfolded, is left as it is.
+pub(crate) struct ShowOrUnfold;
+impl OpTrait for ShowOrUnfold {
+    fn get_action(&self, target: &ItemData) -> Option<Action> {
+        if let Some(action) = show_screen(target) {
+            return Some(action);
+        }
+        if !target.is_section() {
+            return None;
+        }
+        Some(Rc::new(|app, _term| {
+            let screen = app.screen_mut();
+            if screen.is_collapsed(screen.get_selected_item()) {
+                screen.toggle_section()?;
+            }
+            Ok(())
+        }))
+    }
+
+    fn is_target_op(&self) -> bool {
+        true
+    }
+
+    // The help lists this as Unfold on a section already unfolded, where it does
+    // nothing, since which ops are listed is decided without the fold state.
+    fn display(&self, state: &State) -> String {
+        let item = state.screens.last().unwrap().get_selected_item();
+        if show_screen(&item.data).is_some() {
+            "Show".into()
+        } else {
+            "Unfold".into()
+        }
+    }
+}
+
+fn show_screen(target: &ItemData) -> Option<Action> {
+    match target {
+        ItemData::Commit { oid, .. }
+        | ItemData::Reference {
+            kind: Ref::Tag(oid),
+            ..
+        }
+        | ItemData::Reference {
+            kind: Ref::Head(oid),
+            ..
+        } => goto_show_screen(oid.clone(), None),
+        ItemData::BlameHeader {
+            commit_hash,
+            file_path,
+            line_num,
+            ..
+        } if !is_null_oid(commit_hash) => {
+            goto_show_screen(commit_hash.clone(), Some((file_path.clone(), *line_num)))
+        }
+        ItemData::BlameCodeLine {
+            commit_hash,
+            file_path,
+            orig_line_num,
+            ..
+        } if !is_null_oid(commit_hash) => goto_show_screen(
+            commit_hash.clone(),
+            Some((file_path.clone(), *orig_line_num)),
+        ),
+        ItemData::Stash { stash_ref, .. } => goto_show_stash_screen(stash_ref.clone()),
+        _ => None,
+    }
+}
+
+fn show_in_editor(target: &ItemData) -> Option<Action> {
+    match target {
+        ItemData::Untracked(u) => editor(u.as_path(), None),
+        ItemData::Delta { diff, file_i, .. } => {
+            let file_path = &diff.file_diffs[*file_i].header.new_file;
+            let path: &str = &file_path.fmt(&diff.text);
+            editor(Path::new(path), None)
+        }
+        ItemData::Hunk {
+            diff,
+            file_i,
+            hunk_i,
+        } => {
+            let file_path = &diff.file_diffs[*file_i].header.new_file;
+            let path: &str = &file_path.fmt(&diff.text);
+            editor(
+                Path::new(path),
+                Some(diff.file_line_of_first_diff(*file_i, *hunk_i) as u32),
+            )
+        }
+        ItemData::HunkLine {
+            diff,
+            file_i,
+            hunk_i,
+            line_i,
+            ..
+        } => {
+            let file_path = &diff.file_diffs[*file_i].header.new_file;
+            let path: &str = &file_path.fmt(&diff.text);
+            editor(
+                Path::new(path),
+                Some(diff.hunk_line_new_file_num(*file_i, *hunk_i, *line_i)),
+            )
+        }
+        _ => None,
+    }
+}
+
 fn goto_show_screen(r: String, target: Option<(String, u32)>) -> Option<Action> {
     Some(Rc::new(move |app, term| {
-        app.state.screens.push(
-            screen::show::create(
-                Arc::clone(&app.state.config),
-                Rc::clone(&app.state.repo),
-                term.size().map_err(Error::Term)?,
-                r.clone(),
-                target.clone(),
-            )
-            .expect("Couldn't create screen"),
-        );
+        let params = app.render_params(term.size().map_err(Error::Term)?);
+        // A target has to be found among the rows, so they are all drawn first.
+        let params = RenderParams {
+            streaming: params.streaming && target.is_none(),
+            ..params
+        };
+        let mut screen = screen::pager::show(
+            Arc::clone(&app.state.config),
+            Rc::clone(&app.state.repo),
+            params,
+            &r,
+        )
+        .expect("Couldn't create screen");
+        if let Some((file, line_num)) = &target {
+            select_line(&mut screen, file, *line_num);
+        }
+        app.state.screens.push(screen);
         Ok(())
     }))
+}
+
+/// Put the cursor on `line_num` of `file` as the commit left it, or on the file
+/// when the commit did not touch that line.
+fn select_line(screen: &mut Screen, file: &str, line_num: u32) {
+    let found = screen.select_matching(|data| {
+        if let ItemData::HunkLine {
+            diff,
+            file_i,
+            hunk_i,
+            line_i,
+            line_range,
+            ..
+        } = data
+        {
+            if diff.file_diffs[*file_i].header.new_file.fmt(&diff.text) != file {
+                return false;
+            }
+            let line = &diff.hunk_content(*file_i, *hunk_i)[line_range.clone()];
+            !line.starts_with('-')
+                && diff.hunk_line_new_file_num(*file_i, *hunk_i, *line_i) == line_num
+        } else {
+            false
+        }
+    });
+    if !found {
+        screen.select_matching(|data| {
+            matches!(data, ItemData::Delta { diff, file_i, .. }
+                if diff.file_diffs[*file_i].header.new_file.fmt(&diff.text) == file)
+        });
+    }
 }
 
 fn goto_show_stash_screen(stash_ref: String) -> Option<Action> {
@@ -106,7 +192,7 @@ fn goto_show_stash_screen(stash_ref: String) -> Option<Action> {
             screen::show_stash::create(
                 Arc::clone(&app.state.config),
                 Rc::clone(&app.state.repo),
-                term.size().map_err(Error::Term)?,
+                app.render_params(term.size().map_err(Error::Term)?),
                 stash_ref.clone(),
             )
             .expect("Couldn't create stash screen"),

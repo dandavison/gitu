@@ -1,10 +1,11 @@
+> **This is a fork.** Upstream is [altsem/gitu](https://github.com/altsem/gitu) by altsem, MIT
+> licensed; it is published here as the `delta-gitu` crate, with altsem's agreement, so that
+> [delta](https://github.com/dandavison/delta) can embed it and offer the TUI as `delta --gitu`. The
+> fork adds delta as a diff renderer and the ability to act as git's pager. The crate has no binary
+> target: run it as `delta --gitu`.
+
 ## It's Gitu! - A Git porcelain *outside* of Emacs
-[![CI](https://github.com/altsem/gitu/actions/workflows/ci.yml/badge.svg)](https://github.com/altsem/gitu/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/altsem/gitu/graph/badge.svg?token=5YWPU7GWFW)](https://codecov.io/gh/altsem/gitu)
-
 A terminal user interface for Git. Inspired by Magit.
-
-<img style="width: 720px" src="vhs/rec.gif"/>
 
 ### Features
 Gitu aims to implement many of the core features of Magit over time.
@@ -26,9 +27,6 @@ Here's a list of so-far supported features:
 Keybinds try mimic Magit, while staying Vim-like.
 A help-menu can be shown by pressing the `h` key, or by configuring `general.always_show_help.enabled = true`
 
-
-<img style="width: 720px" src="vhs/help.png"/>
-
 ### Configuration
 The environment variables `VISUAL`, `EDITOR` or `GIT_EDITOR` (checked in this order) dictate which editor Gitu will open. This means that e. g. commit messages will be opened in the `GIT_EDITOR` by Git, but if the user wishes to do edits to the actual files in a different editor, `VISUAL` or `EDITOR` can be set accordingly.
 
@@ -38,14 +36,6 @@ Configuration is also loaded from:
 - Windows: `%USERPROFILE%\AppData\Roaming\gitu\config.toml`
 
 , refer to the [default configuration](src/default_config.toml).
-
-### Installing Gitu
-Follow the install instructions: [Installing Gitu](docs/installing.md)\
-Or install from your package manager:
-
-[![Packaging status](https://repology.org/badge/vertical-allrepos/gitu.svg)](https://repology.org/project/gitu/versions)
-
-Shell completions can be generated with `gitu completion <shell>`, see [Shell completions](docs/installing.md#shell-completions).
 
 ### Contributing
 PRs are welcome!

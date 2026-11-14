@@ -2,7 +2,7 @@
 source: src/tests/pull.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Recent commits                                                                 |
@@ -17,9 +17,9 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- Pull                     Arguments                                             |
- p     from origin        -r Rebase local commits (--rebase)                    |
- u     from origin/main                                                         |
- e     from elsewhere                                                           |
- q/esc Quit/Close                                                               |
-styles_hash: 9ec56ef74ead0a83
+ Pull                          Arguments                                        |
+ p          from origin        -r Rebase local commits (--rebase)               |
+ u          from origin/main                                                    |
+ e          from elsewhere                                                      |
+ q/esc/left Quit/Close                                                          |
+styles_hash: 1d04a477717ece9

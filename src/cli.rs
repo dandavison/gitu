@@ -1,8 +1,6 @@
-use std::io;
 use std::path::PathBuf;
 
-use clap::{CommandFactory, Parser, Subcommand};
-use clap_complete::Shell;
+use clap::{Parser, Subcommand};
 
 #[derive(Default, Debug, Parser)]
 #[command(name = "gitu")]
@@ -23,9 +21,18 @@ pub struct Args {
     #[clap(long, action)]
     pub print: bool,
 
+    /// Paging a patch piped to gitu, as git's pager, print it and exit if it
+    /// fits on one screen, as less's --quit-if-one-screen.
+    #[clap(long, action)]
+    pub quit_if_one_screen: bool,
+
     /// Enable logging to 'gitu.log'
     #[clap(long, action)]
     pub log: bool,
+
+    /// Show external command output in the message area.
+    #[clap(long, action)]
+    pub debug: bool,
 
     #[clap(long, action)]
     /// Print version
@@ -41,23 +48,19 @@ pub enum Commands {
     Show {
         reference: String,
     },
+    /// Interactively rebase onto <upstream>, editing the instruction list in Gitu.
+    Rebase {
+        upstream: String,
+    },
+    /// Edit a `git rebase -i` instruction list, for use as GIT_SEQUENCE_EDITOR:
+    ///     GIT_SEQUENCE_EDITOR='gitu sequence-editor' git rebase -i <upstream>
+    #[clap(verbatim_doc_comment)]
+    SequenceEditor {
+        file: PathBuf,
+    },
     Blame {
         file: String,
         #[clap(short, long)]
         rev: Option<String>,
     },
-    /// Print a shell completion script to stdout.
-    ///
-    /// Example (bash): `gitu completion bash > ~/.local/share/bash-completion/completions/gitu`
-    Completion {
-        /// The shell to generate a completion script for
-        shell: Shell,
-    },
-}
-
-/// Write a shell completion script for `gitu` to the given writer.
-pub fn completions(shell: Shell, out: &mut impl io::Write) {
-    let mut cmd = Args::command();
-    let bin_name = cmd.get_name().to_string();
-    clap_complete::generate(shell, &mut cmd, bin_name, out);
 }

@@ -1,4 +1,7 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+use std::ffi::OsStr;
 use std::io::Read;
 use std::io::Write;
 use std::ops::DerefMut;
@@ -8,7 +11,8 @@ use std::process::Stdio;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::time::Duration;
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use arboard::Clipboard;
 use crossterm::event;
@@ -27,14 +31,18 @@ use crate::config::Config;
 use crate::error::Error;
 use crate::file_watcher::FileWatcher;
 use crate::item_data::Rev;
+use crate::items::RenderParams;
 use crate::menu::Menu;
 use crate::menu::PendingMenu;
 use crate::ops::Op;
 use crate::picker::PickerData;
 use crate::picker::PickerState;
+use crate::picker::{Picked, PickerStatus};
 use crate::prompt;
+use crate::rebase_todo::RebaseTodo;
 use crate::screen;
 use crate::screen::Screen;
+use crate::screen::pager::Paged;
 use crate::term::Term;
 use crate::text_input;
 use crate::ui;
@@ -46,15 +54,39 @@ pub(crate) struct State {
     pub config: Arc<Config>,
     pub pending_keys: Vec<(KeyModifiers, KeyCode)>,
     pub quit: bool,
+    /// What gitu exits with. Non-zero only to tell git, which is waiting on
+    /// gitu as its sequence editor, to call the rebase off: it is until the
+    /// list is accepted.
+    pub exit_code: i32,
     pub screens: Vec<Screen>,
     pub pending_menu: Option<PendingMenu>,
-    pending_cmd: Option<(Child, Arc<RwLock<CmdLogEntry>>)>,
+    pending_cmd: Option<PendingCmd>,
     enable_async_cmds: bool,
+    pub debug: bool,
     pub current_cmd_log: CmdLog,
     pub prompt: prompt::Prompt,
     pub picker: Option<PickerState>,
+    /// The commit `select_commit` named, read by [`App::pick_commit`].
+    pub picked_commit: Option<String>,
+    /// Renderer features chosen in-session, overlaying the user's own
+    /// configuration. Never written to disk: quitting returns them to it.
+    pub features: Rc<[String]>,
+    /// The theme overlaid after `features`, as configured and as chosen since.
+    pub theme: Option<String>,
+    /// How much of a file to ask git for around each change (`-U8`, `-W`),
+    /// chosen in-session. `None` is git's own default.
+    pub context: Option<Rc<str>>,
+    /// The keys that toggle renderer features, as configured and as set since.
+    pub feature_keys: BTreeMap<String, char>,
     pub clipboard: Option<Clipboard>,
+    /// Whether ops that write are hidden and refused, and nothing chosen
+    /// in-session is saved ([`crate::config::ReadOnly`]).
+    pub read_only: bool,
     needs_redraw: bool,
+    /// The terminal's width as last seen, and since when it has been that width. Rows are
+    /// rendered again at a new width once it has held for [`RESIZE_RENDER_DELAY`], so that
+    /// dragging a window's edge runs the renderer once.
+    pub(crate) terminal_width: Option<(u16, Instant)>,
     file_watcher: Option<FileWatcher>,
     inhibit_close_menu: bool,
 }
@@ -70,64 +102,98 @@ impl App {
         args: &cli::Args,
         config: Arc<Config>,
         enable_async_cmds: bool,
+        piped: Option<Paged>,
     ) -> Res<Self> {
+        let params = RenderParams {
+            size,
+            features: overlay(&[], config.general.diff_renderer.theme.as_deref()),
+            context: None,
+            streaming: enable_async_cmds,
+        };
         let screens = match args.command {
-            Some(cli::Commands::Show { ref reference }) => {
-                vec![screen::show::create(
+            // A patch piped to gitu: git's output is already in hand, with the command it ran.
+            _ if let Some(paged) = piped => {
+                vec![screen::pager::create(
                     Arc::clone(&config),
                     Rc::clone(&repo),
-                    size,
-                    reference.clone(),
-                    None,
+                    params,
+                    paged,
+                )?]
+            }
+            Some(cli::Commands::Show { ref reference }) => {
+                vec![screen::pager::show(
+                    Arc::clone(&config),
+                    Rc::clone(&repo),
+                    params.clone(),
+                    reference,
                 )?]
             }
             Some(cli::Commands::Blame { ref rev, ref file }) => {
                 vec![screen::blame::create(
                     Arc::clone(&config),
                     Rc::clone(&repo),
-                    size,
+                    params.clone(),
                     file.clone(),
                     rev.clone(),
                     None,
                 )?]
             }
-            // `completion` prints its script and exits in `main`, before the app is ever built.
-            Some(cli::Commands::Completion { .. }) => {
-                unreachable!("completion is handled before the app starts")
+            Some(cli::Commands::Rebase { ref upstream }) => {
+                let todo = RebaseTodo::capture(&repo, OsStr::new(upstream), &[])?;
+                vec![rebase_todo_screen(&config, &repo, params.clone(), todo)?]
+            }
+            Some(cli::Commands::SequenceEditor { ref file }) => {
+                let todo = RebaseTodo::read(&repo, file)?;
+                vec![rebase_todo_screen(&config, &repo, params.clone(), todo)?]
             }
             None => vec![screen::status::create(
                 Arc::clone(&config),
                 Rc::clone(&repo),
-                size,
+                params,
             )?],
         };
-
-        let pending_menu = root_menu(&config).map(PendingMenu::init);
 
         let clipboard = Clipboard::new()
             .inspect_err(|e| log::warn!("Couldn't initialize clipboard: {e}"))
             .ok();
+        let read_only = config.general.read_only.is_on(&repo);
+        let prompt = prompt::Prompt::with_history(repo.path().join("gitu"), read_only);
 
         let mut app = Self {
             state: State {
                 repo,
+                feature_keys: config.general.diff_renderer.feature_keys.clone(),
+                theme: config.general.diff_renderer.theme.clone(),
                 config,
                 pending_keys: vec![],
                 enable_async_cmds,
+                debug: args.debug,
                 quit: false,
+                exit_code: match args.command {
+                    Some(cli::Commands::SequenceEditor { .. }) => 1,
+                    _ => 0,
+                },
                 screens,
                 pending_cmd: None,
-                pending_menu,
+                pending_menu: None,
                 current_cmd_log: CmdLog::new(),
-                prompt: prompt::Prompt::new(),
+                prompt,
                 picker: None,
+                picked_commit: None,
+                features: Rc::from([]),
+                context: None,
                 clipboard,
+                read_only,
                 file_watcher: None,
                 needs_redraw: true,
+                terminal_width: None,
                 inhibit_close_menu: false,
             },
         };
 
+        // The menu a screen imposes is in force from the first key on, not from
+        // the first key that closes a menu.
+        app.close_menu();
         app.state.file_watcher = app.init_file_watcher()?;
         Ok(app)
     }
@@ -163,8 +229,10 @@ impl App {
 
     pub fn run(&mut self, term: &mut Term, max_tick_delay: Duration) -> Res<()> {
         while !self.state.quit {
-            let event = if term.poll_event(max_tick_delay)? {
+            let event = if term.poll_event(self.poll_timeout(max_tick_delay, Instant::now()))? {
                 Some(term.read_event()?)
+            } else if term.hung_up() {
+                return Ok(());
             } else {
                 None
             };
@@ -180,11 +248,16 @@ impl App {
             self.handle_event(term, e)?;
         }
 
+        self.rerender_at_terminal_width(term)?;
+
         if let Some(file_watcher) = &mut self.state.file_watcher
             && file_watcher.pending_updates()
         {
             self.update_screens()?;
         }
+
+        let finished = self.finish_screens();
+        self.handle_result(finished)?;
 
         let handle_pending_cmd_result = self.handle_pending_cmd();
         self.handle_result(handle_pending_cmd_result)?;
@@ -196,9 +269,105 @@ impl App {
         Ok(())
     }
 
-    pub fn update_screens(&mut self) -> Res<()> {
+    /// Give each screen whose rows were still being drawn all of them, once
+    /// they are.
+    fn finish_screens(&mut self) -> Res<()> {
+        let mut finished = false;
         for screen in &mut self.state.screens {
-            screen.refresh()?;
+            finished |= screen.finish()?;
+        }
+        if finished {
+            self.stage_redraw();
+        }
+        Ok(())
+    }
+
+    /// How long the event loop waits for an event before it updates anyway: its tick, or less if
+    /// a render at the terminal's new width is due sooner.
+    pub(crate) fn poll_timeout(&self, max_tick_delay: Duration, now: Instant) -> Duration {
+        match self.resize_render_due() {
+            Some(due) => max_tick_delay.min(due.saturating_duration_since(now)),
+            None => max_tick_delay,
+        }
+    }
+
+    /// When the screens are due to be rendered again at the terminal's width, if any screen's rows
+    /// were rendered at another: once that width has held for [`RESIZE_RENDER_DELAY`]. Tests,
+    /// which have no async commands, render as soon as no event is waiting.
+    fn resize_render_due(&self) -> Option<Instant> {
+        let (width, since) = self.state.terminal_width?;
+        let stale = self
+            .state
+            .screens
+            .iter()
+            .any(|screen| screen.rendered_width != width);
+        let delay = if self.state.enable_async_cmds {
+            RESIZE_RENDER_DELAY
+        } else {
+            Duration::ZERO
+        };
+        stale.then_some(since + delay)
+    }
+
+    /// Render every screen again when the terminal's width is no longer the one its rows were
+    /// rendered at, once that width has held for [`RESIZE_RENDER_DELAY`] and no event is waiting.
+    /// The width is the terminal's own, not a resize's, which during a fast drag lags behind it.
+    fn rerender_at_terminal_width(&mut self, term: &mut Term) -> Res<()> {
+        let width = term.size().map_err(Error::Term)?.0;
+        let now = Instant::now();
+        if self
+            .state
+            .terminal_width
+            .is_none_or(|(seen, _)| seen != width)
+        {
+            self.state.terminal_width = Some((width, now));
+        }
+        match self.resize_render_due() {
+            Some(due) if now >= due && !term.has_pending_event()? => {}
+            _ => return Ok(()),
+        }
+
+        for screen in &mut self.state.screens {
+            let height = screen.size.1;
+            screen.resize(width, height)?;
+        }
+        self.rerender_screens()
+    }
+
+    pub fn update_screens(&mut self) -> Res<()> {
+        self.rebuild_screens(Screen::refresh)
+    }
+
+    /// Rebuild every screen, leaving each cursor where it was in the diff rather
+    /// than on the line number it happened to occupy. For a re-render of the
+    /// same content (a renderer feature turned on or off), the rows move but the
+    /// place in the patch does not.
+    pub fn rerender_screens(&mut self) -> Res<()> {
+        self.rebuild_screens(Screen::refresh_keeping_position)
+    }
+
+    /// [`App::rerender_screens`] for the screen in view only, as a preview: the
+    /// screens under it keep what they were rendered with.
+    pub(crate) fn rerender_screen(&mut self) -> Res<()> {
+        let features = self.overlay();
+        let screen = self.state.screens.last_mut().unwrap();
+        screen.features = features;
+        screen.refresh_keeping_position()?;
+        self.stage_redraw();
+        Ok(())
+    }
+
+    /// The features to render with: those chosen in-session, then the theme.
+    fn overlay(&self) -> Rc<[String]> {
+        overlay(&self.state.features, self.state.theme.as_deref())
+    }
+
+    fn rebuild_screens(&mut self, rebuild: impl Fn(&mut Screen) -> Res<()>) -> Res<()> {
+        let features = self.overlay();
+        for screen in &mut self.state.screens {
+            screen.features = Rc::clone(&features);
+            screen.context = self.state.context.clone();
+            rebuild(screen)?;
         }
 
         self.stage_redraw();
@@ -208,6 +377,9 @@ impl App {
     pub fn handle_event(&mut self, term: &mut Term, event: Event) -> Res<()> {
         match event {
             Event::Resize(w, h) => {
+                // The rows are fitted to the new size at once; they are rendered again at a new
+                // width by `rerender_at_terminal_width`, which reads the terminal's width itself,
+                // since a resize's may already be out of date.
                 for screen in self.state.screens.iter_mut() {
                     screen.resize(w, h)?;
                 }
@@ -232,14 +404,18 @@ impl App {
                     self.state.current_cmd_log.clear();
                 }
 
-                // The character received in the KeyEvent changes as shift is pressed,
-                // e.g. '/' becomes '?' on a US keyboard. So just ignore SHIFT.
-                key.modifiers = key.modifiers.difference(KeyModifiers::SHIFT);
+                // The key received changes as shift is pressed: '/' becomes '?'
+                // on a US keyboard, and tab becomes backtab. The modifier is
+                // redundant there, and on the other keys it is the only sign
+                // shift was held.
+                if matches!(key.code, KeyCode::Char(_) | KeyCode::BackTab) {
+                    key.modifiers = key.modifiers.difference(KeyModifiers::SHIFT);
+                }
 
                 if self.state.picker.is_some() {
-                    self.handle_picker_input(key);
+                    self.handle_picker_input(key)?;
                 } else if self.state.prompt.state.focused {
-                    self.state.prompt.state.handle_key_event(key);
+                    self.state.prompt.handle_key(key);
                 } else {
                     self.handle_key_input(term, key)?;
                 }
@@ -260,6 +436,29 @@ impl App {
         Ok(())
     }
 
+    /// Prints the screen, and says so, if it fits on the terminal with a row
+    /// to spare for the shell's prompt: less's `--quit-if-one-screen`. Waits
+    /// for the rest of a screen still being drawn while what there is fits.
+    pub fn print_if_one_screen(&mut self, term: &mut Term) -> Res<bool> {
+        let screen = self.state.screens.last_mut().unwrap();
+        let (_, rows) = term.size().map_err(Error::Term)?;
+        let rows = rows.saturating_sub(1).into();
+        loop {
+            if !screen.fits_in(rows) {
+                return Ok(false);
+            }
+            if !screen.is_drawing() {
+                break;
+            }
+            if !screen.finish()? {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+
+        screen::print_screen(term, screen)?;
+        Ok(true)
+    }
+
     pub fn stage_redraw(&mut self) {
         self.state.needs_redraw = true;
     }
@@ -270,7 +469,7 @@ impl App {
         }
 
         let menu = match &self.state.pending_menu {
-            None => Menu::Root,
+            None => self.base_menu().unwrap_or(Menu::Root),
             Some(menu) if menu.menu == Menu::Help => Menu::Root,
             Some(menu) => menu.menu,
         };
@@ -292,7 +491,24 @@ impl App {
                     self.handle_op(op, term)?;
                 }
             }
-            [] => self.state.pending_keys.clear(),
+            [] => {
+                let feature = match self.state.pending_keys[..] {
+                    [(KeyModifiers::NONE, KeyCode::Char(key))] if menu == Menu::Root => {
+                        self.feature_with_key(key)
+                    }
+                    _ => None,
+                };
+                self.state.pending_keys.clear();
+                if let Some(name) = feature {
+                    if self.state.config.general.commands.contains_key(&name) {
+                        crate::ops::command::run(self, term, &name)?;
+                    } else if self.state.config.general.views.contains_key(&name) {
+                        crate::ops::command::open_view(self, term, &name)?;
+                    } else {
+                        crate::ops::editor::toggle_feature(self, &name)?;
+                    }
+                }
+            }
             [_, ..] => (),
         }
 
@@ -345,17 +561,25 @@ impl App {
     }
 
     pub(crate) fn handle_op(&mut self, op: Op, term: &mut Term) -> Res<()> {
-        let screen_ref = self.screen();
-        let item_data = &screen_ref.get_selected_item().data;
+        if self.state.read_only && op.writes() {
+            return Ok(());
+        }
+        let item_data = self.screen().selected_target();
         let implementation = op.clone().implementation();
 
-        if let Some(mut action) = implementation.get_action(item_data) {
+        if let Some(mut action) = implementation.get_action(&item_data) {
             let result = Rc::get_mut(&mut action).unwrap()(self, term);
             self.handle_result(result)?;
             if !self.state.inhibit_close_menu {
                 self.close_menu();
             }
             self.state.inhibit_close_menu = false;
+        } else if matches!(op, Op::Show | Op::ShowOrUnfold) {
+            let hint = self.screen().unmarked_commits_hint();
+            self.display_error(match hint {
+                Some(hint) => format!("No commit to open: {hint}"),
+                None => "Nothing to open here".to_owned(),
+            });
         }
 
         Ok(())
@@ -376,8 +600,29 @@ impl App {
         }
     }
 
+    /// What a screen opened now should render with: the viewport it will get,
+    /// and the features currently selected.
+    pub(crate) fn render_params(&self, size: (u16, u16)) -> RenderParams {
+        RenderParams {
+            size,
+            features: self.overlay(),
+            context: self.state.context.clone(),
+            streaming: self.state.enable_async_cmds,
+        }
+    }
+
     pub fn close_menu(&mut self) {
-        self.state.pending_menu = root_menu(&self.state.config).map(PendingMenu::init)
+        let hide = self.screen().menu.is_some() && !self.screen().show_menu;
+        self.state.pending_menu = self.base_menu().map(|menu| PendingMenu {
+            is_hidden: hide,
+            ..PendingMenu::init(menu)
+        });
+    }
+
+    /// The menu to fall back to once a pending one closes: a screen with its own
+    /// keymap (the interactive rebase todo) imposes it for as long as it is up.
+    pub(crate) fn base_menu(&self) -> Option<Menu> {
+        self.screen().menu.or_else(|| root_menu(&self.state.config))
     }
 
     pub fn inhibit_close_menu(&mut self) {
@@ -417,7 +662,31 @@ impl App {
 
     /// Runs a `Command` and handles its output asynchronously (if async commands are enabled).
     /// Will return `Ok(())` if one is already running.
-    pub fn run_cmd_async(&mut self, term: &mut Term, input: &[u8], mut cmd: Command) -> Res<()> {
+    pub fn run_cmd_async(&mut self, term: &mut Term, input: &[u8], cmd: Command) -> Res<()> {
+        let shown = crate::cmd_log::command_args(&cmd);
+        self.run_cmd_async_shown(term, input, cmd, shown)
+    }
+
+    /// Run `command` with `sh -c` and `env` set, as [`Self::run_cmd_async`]
+    /// runs a command, shown as it is written rather than as `sh -c` and it.
+    pub(crate) fn run_shell_async(
+        &mut self,
+        term: &mut Term,
+        command: &str,
+        env: Vec<(&'static str, String)>,
+    ) -> Res<()> {
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", command]).envs(env);
+        self.run_cmd_async_shown(term, &[], cmd, command.to_owned().into())
+    }
+
+    fn run_cmd_async_shown(
+        &mut self,
+        term: &mut Term,
+        input: &[u8],
+        mut cmd: Command,
+        shown: Cow<'static, str>,
+    ) -> Res<()> {
         cmd.env("CLICOLOR_FORCE", "1"); // No guarantee, but modern tools seem to implement this
 
         if self.state.pending_cmd.is_some() {
@@ -430,21 +699,27 @@ impl App {
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
 
-        let log_entry = self.state.current_cmd_log.push_cmd(&cmd);
+        let log_entry = self.state.current_cmd_log.push_cmd(shown);
 
         ui::ui(term, &mut self.state)?;
 
         let mut child = cmd.spawn().map_err(Error::SpawnCmd)?;
 
-        use std::io::Write;
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(input)
-            .map_err(Error::Term)?;
+        // Its input is written and its output read while it runs, on threads of
+        // their own: a command that fills a pipe waits until there is room.
+        let mut stdin = child.stdin.take().unwrap();
+        let input = input.to_vec();
+        let stdin = std::thread::spawn(move || stdin.write_all(&input));
+        let stdout = read_to_end_on_thread(child.stdout.take().unwrap());
+        let stderr = read_to_end_on_thread(child.stderr.take().unwrap());
 
-        self.state.pending_cmd = Some((child, log_entry));
+        self.state.pending_cmd = Some(PendingCmd {
+            child,
+            log_entry,
+            stdin,
+            stdout,
+            stderr,
+        });
 
         if !self.state.enable_async_cmds {
             self.await_pending_cmd()?;
@@ -454,7 +729,7 @@ impl App {
     }
 
     fn await_pending_cmd(&mut self) -> Res<()> {
-        if let Some((child, _)) = &mut self.state.pending_cmd {
+        if let Some(PendingCmd { child, .. }) = &mut self.state.pending_cmd {
             child.wait().map_err(Error::CouldntAwaitCmd)?;
         }
         Ok(())
@@ -462,7 +737,7 @@ impl App {
 
     /// Handles any pending_cmd in State without blocking. Returns `true` if a cmd was handled.
     fn handle_pending_cmd(&mut self) -> Res<()> {
-        let Some((ref mut child, ref mut log_rwlock)) = self.state.pending_cmd else {
+        let Some(PendingCmd { ref mut child, .. }) = self.state.pending_cmd else {
             return Ok(());
         };
 
@@ -472,8 +747,8 @@ impl App {
 
         log::debug!("pending cmd finished with {status:?}");
 
-        let result = write_child_output_to_log(log_rwlock, child, status);
-        self.state.pending_cmd = None;
+        let pending = self.state.pending_cmd.take().unwrap();
+        let result = write_child_output_to_log(pending, status);
         self.update_screens()?;
         result?;
 
@@ -532,15 +807,11 @@ impl App {
         self.update_screens()?;
 
         if !status.success() {
+            // Its stderr went to the terminal.
             return Err(Error::CmdBadExit(
-                format!(
-                    "{} {}",
-                    cmd.get_program().to_string_lossy(),
-                    cmd.get_args()
-                        .map(|arg| arg.to_string_lossy())
-                        .collect::<String>()
-                ),
+                crate::cmd_log::command_args(&cmd).into_owned(),
                 status.code(),
+                String::new(),
             ));
         }
 
@@ -564,17 +835,36 @@ impl App {
     }
 
     pub(crate) fn prompt(&mut self, term: &mut Term, params: &PromptParams) -> Res<String> {
-        let prompt_text = if let Some(default) = (params.create_default_value)(self) {
-            format!("{} (default {}):", params.prompt, default).into()
-        } else {
-            format!("{}:", params.prompt).into()
+        let default = (params.create_default_value)(self);
+
+        // A prompt with nothing to say says nothing: the key that opened it
+        // already said what is being answered. Prefilled, the default is the
+        // answer being edited rather than the one an empty answer falls back
+        // to — it is on the line, so naming it again says nothing either.
+        let prompt_text = match (params.prompt, &default) {
+            ("", _) => Cow::Borrowed(""),
+            (prompt, _) if params.bare => Cow::Borrowed(prompt),
+            (prompt, Some(default)) if !params.prefill => format!("{prompt} ({default}):").into(),
+            (prompt, _) => format!("{prompt}:").into(),
         };
 
         if params.hide_menu {
             self.hide_menu();
         }
 
-        self.state.prompt.set(prompt::PromptData { prompt_text });
+        self.state.prompt.set(prompt::PromptData {
+            prompt_text,
+            bare: params.bare,
+        });
+
+        if params.prefill
+            && let Some(default) = default
+        {
+            self.state.prompt.state.value = default;
+            self.state.prompt.state.move_to(usize::MAX);
+        }
+        self.state.prompt.start_history(params.history)?;
+
         let result = self.handle_prompt(term, params);
 
         self.unhide_menu();
@@ -588,12 +878,23 @@ impl App {
 
         loop {
             let event = term.read_event()?;
+            let was = self.state.prompt.state.value.clone();
             self.handle_event(term, event)?;
 
             if self.state.prompt.state.status == text_input::Status::Done {
-                return get_prompt_result(params, self);
+                let value = get_prompt_result(params, self)?;
+                if let Some(kind) = params.history {
+                    self.state.prompt.remember(kind, &value)?;
+                }
+                return Ok(value);
             } else if self.state.prompt.state.status == text_input::Status::Aborted {
                 return Err(Error::PromptAborted);
+            }
+            if let Some(on_edit) = &params.on_edit
+                && self.state.prompt.state.value != was
+            {
+                let value = self.state.prompt.state.value.clone();
+                on_edit(self, &value);
             }
 
             self.redraw_now(term)?;
@@ -604,6 +905,7 @@ impl App {
         self.hide_menu();
         self.state.prompt.set(prompt::PromptData {
             prompt_text: prompt.into(),
+            bare: false,
         });
 
         let result = self.handle_confirm(term);
@@ -664,43 +966,197 @@ impl App {
     /// }
     /// ```
     pub fn pick(&mut self, term: &mut Term, picker_state: PickerState) -> Res<Option<PickerData>> {
+        Ok(self
+            .pick_or_set_key(term, picker_state)?
+            .map(|picked| match picked {
+                Picked::Item(data) => data,
+                Picked::KeySet(..) => unreachable!("only a picker assigning keys sets them"),
+            }))
+    }
+
+    /// [`App::pick`], for a picker whose items can be given keys.
+    pub(crate) fn pick_or_set_key(
+        &mut self,
+        term: &mut Term,
+        picker_state: PickerState,
+    ) -> Res<Option<Picked>> {
         self.state.picker = Some(picker_state);
-        let result = self.handle_picker(term);
+        let result = self.handle_picker(term, &mut |_, _| Ok(()));
 
         self.state.picker = None;
 
         result
     }
 
-    fn handle_picker(&mut self, term: &mut Term) -> Res<Option<PickerData>> {
+    /// [`App::pick`], calling `preview` with each item the cursor stops on.
+    pub(crate) fn pick_previewing(
+        &mut self,
+        term: &mut Term,
+        picker_state: PickerState,
+        preview: &mut dyn FnMut(&mut App, &PickerData) -> Res<()>,
+    ) -> Res<Option<PickerData>> {
+        self.state.picker = Some(picker_state);
+        let result = self.handle_picker(term, preview);
+
+        self.state.picker = None;
+
+        Ok(result?.map(|picked| match picked {
+            Picked::Item(data) => data,
+            Picked::KeySet(..) => unreachable!("only a picker assigning keys sets them"),
+        }))
+    }
+
+    /// Choose a commit by moving around a log view: the screen is pushed with
+    /// its own keymap, and the loop runs until `select_commit` names one or the
+    /// screen is closed.
+    pub fn pick_commit(&mut self, term: &mut Term) -> Res<Option<String>> {
+        let params = self.render_params(self.screen().size);
+        let selected = match &self.screen().get_selected_item().data {
+            crate::item_data::ItemData::Commit { oid, .. } => Some(oid.clone()),
+            _ => None,
+        };
+        // The selected commit has to be found among the rows, so they are all
+        // drawn first.
+        let params = RenderParams {
+            streaming: params.streaming && selected.is_none(),
+            ..params
+        };
+        self.state.screens.push(screen::pager::log(
+            Arc::clone(&self.state.config),
+            Rc::clone(&self.state.repo),
+            params,
+            COMMIT_PICK_LIMIT,
+            None,
+            None,
+        )?);
+        self.screen_mut().menu = Some(Menu::CommitPicker);
+        self.close_menu();
+
+        // Start on the commit that was already selected, if there was one.
+        if let Some(selected) = selected {
+            self.screen_mut().select_matching(|data| {
+                matches!(data, crate::item_data::ItemData::Commit { oid, .. } if *oid == selected)
+            });
+        }
+
+        let depth = self.state.screens.len();
         self.redraw_now(term)?;
 
         loop {
             let event = term.read_event()?;
             self.handle_event(term, event)?;
 
-            if let Some(ref picker) = self.state.picker {
-                if picker.is_done() {
-                    // User selected an item
-                    return Ok(picker.selected().map(|item| item.data.clone()));
-                } else if picker.is_cancelled() {
-                    // User cancelled - this is not an error
-                    return Ok(None);
-                }
+            if let Some(oid) = self.state.picked_commit.take() {
+                self.state.screens.truncate(depth - 1);
+                self.close_menu();
+                return Ok(Some(oid));
+            }
+            if self.state.screens.len() < depth {
+                return Ok(None); // The screen was closed: nothing picked.
             }
 
             self.redraw_now(term)?;
         }
     }
 
-    fn handle_picker_input(&mut self, key: event::KeyEvent) {
+    fn handle_picker(
+        &mut self,
+        term: &mut Term,
+        preview: &mut dyn FnMut(&mut App, &PickerData) -> Res<()>,
+    ) -> Res<Option<Picked>> {
+        self.redraw_now(term)?;
+        let selected = |app: &App| {
+            app.state
+                .picker
+                .as_ref()
+                .and_then(|picker| picker.selected())
+                .map(|item| item.data.clone())
+        };
+        let mut previewed = selected(self);
+
+        loop {
+            let event = term.read_event()?;
+            self.handle_event(term, event)?;
+
+            if let Some(ref picker) = self.state.picker {
+                let selected = || picker.selected().map(|item| item.data.clone());
+                match *picker.status() {
+                    PickerStatus::Done => return Ok(selected().map(Picked::Item)),
+                    PickerStatus::KeySet(key) => {
+                        return Ok(selected().map(|data| Picked::KeySet(key, data)));
+                    }
+                    // User cancelled - this is not an error
+                    PickerStatus::Cancelled => return Ok(None),
+                    PickerStatus::Active => (),
+                }
+            }
+
+            // Only once the keys that came together are handled, so that an
+            // arrow held down does not preview every item it passes.
+            let now = selected(self);
+            if now != previewed && !matches!(term.poll_event(Duration::ZERO), Ok(true)) {
+                if let Some(data) = &now {
+                    preview(self, data)?;
+                }
+                previewed = now;
+            }
+
+            self.redraw_now(term)?;
+        }
+    }
+
+    /// The feature that `key` toggles in the picker's one row, if any. A key
+    /// that runs a command or opens a view does nothing there.
+    fn feature_with_key_in_one_row(&self, key: event::KeyEvent) -> Option<String> {
+        let picker = self.state.picker.as_ref()?;
+        let quit = &self.state.config.picker_bindings.quit;
+        match (key.code, key.modifiers) {
+            (event::KeyCode::Char(c), event::KeyModifiers::NONE)
+                if picker.is_one_row()
+                    && !c.is_ascii_digit()
+                    && !quit.iter().any(|b| b == &vec![(key.modifiers, key.code)]) =>
+            {
+                self.feature_with_key(c).filter(|name| {
+                    let general = &self.state.config.general;
+                    !general.commands.contains_key(name) && !general.views.contains_key(name)
+                })
+            }
+            _ => None,
+        }
+    }
+
+    /// The feature that `key` toggles, the command that it runs or the view
+    /// that it opens, by name, if any.
+    fn feature_with_key(&self, key: char) -> Option<String> {
+        self.state
+            .feature_keys
+            .iter()
+            .find(|(_, held)| **held == key)
+            .map(|(feature, _)| feature.clone())
+    }
+
+    fn handle_picker_input(&mut self, key: event::KeyEvent) -> Res<()> {
         if key.kind != event::KeyEventKind::Press {
-            return;
+            return Ok(());
+        }
+
+        // Nothing is typed in theme mode's one row, so a feature key toggles its
+        // feature there as at the top level, and themes can be judged with it on
+        // and off. A digit there selects a theme, and `picker.quit` quits.
+        if let Some(feature) = self.feature_with_key_in_one_row(key) {
+            return crate::ops::editor::toggle_feature(self, &feature);
         }
 
         if let Some(ref mut picker) = self.state.picker {
             let bindings = &self.state.config.picker_bindings;
             let key_combo = vec![(key.modifiers, key.code)];
+            let typed = match (key.code, key.modifiers) {
+                (
+                    event::KeyCode::Char(c),
+                    event::KeyModifiers::NONE | event::KeyModifiers::SHIFT,
+                ) => Some(c),
+                _ => None,
+            };
 
             if bindings.next.iter().any(|b| b == &key_combo) {
                 picker.next();
@@ -710,17 +1166,55 @@ impl App {
                 picker.done();
             } else if bindings.cancel.iter().any(|b| b == &key_combo) {
                 picker.cancel();
+            } else if bindings.toggle_list.iter().any(|b| b == &key_combo) {
+                picker.toggle_one_row();
+            } else if picker.is_one_row() {
+                // Nothing is typed here, so a letter can quit and a digit select.
+                if bindings.quit.iter().any(|b| b == &key_combo) {
+                    picker.cancel();
+                } else if let Some(digit) = typed.and_then(|c| c.to_digit(10)) {
+                    picker.select_number(digit as usize);
+                }
+            } else if picker.assigns_keys() {
+                // A letter sets a key here, but not the quit letter, which is
+                // bound at the top level and so could not be set anyway. In
+                // columns, left and right move between them.
+                if picker.grid().is_some() && key.code == event::KeyCode::Left {
+                    picker.move_column(-1);
+                } else if picker.grid().is_some() && key.code == event::KeyCode::Right {
+                    picker.move_column(1);
+                } else if bindings.quit.iter().any(|b| b == &key_combo) {
+                    picker.cancel();
+                } else if let Some(c) = typed {
+                    picker.set_key(c);
+                }
             } else {
                 // Text input - delegate to text state
                 picker.input_state.handle_key_event(key);
                 picker.update_filter();
             }
         }
+        Ok(())
     }
+}
+
+/// `features`, then `theme`: last, so that it has its way over a feature that
+/// sets the same keys, as delta resolves a conflict between features in favour
+/// of the later one.
+fn overlay(features: &[String], theme: Option<&str>) -> Rc<[String]> {
+    features
+        .iter()
+        .cloned()
+        .chain(theme.map(str::to_owned))
+        .collect()
 }
 
 fn get_prompt_result(params: &PromptParams, app: &mut App) -> Res<String> {
     let input = app.state.prompt.state.value.as_str();
+    if params.prefill {
+        return Ok(input.to_owned());
+    }
+
     let default_value = (params.create_default_value)(app);
 
     let value = match (input, &default_value) {
@@ -754,6 +1248,28 @@ fn tee(maybe_input: Option<&mut impl Read>, outputs: &mut [&mut dyn Write]) -> s
     Ok(())
 }
 
+fn rebase_todo_screen(
+    config: &Arc<Config>,
+    repo: &Rc<Repository>,
+    params: RenderParams,
+    todo: RebaseTodo,
+) -> Res<Screen> {
+    screen::rebase_todo::create(
+        Arc::clone(config),
+        Rc::clone(repo),
+        params,
+        Rc::new(RefCell::new(todo)),
+    )
+}
+
+/// How far back [`App::pick_commit`] lists commits.
+const COMMIT_PICK_LIMIT: usize = 256;
+
+/// How long the terminal's width must hold before the screens are rendered again at it, so that
+/// a burst of resizes runs the renderer once. Terminals delay their own resize signals too: kitty
+/// by 100ms where the system does not report the end of a resize, Ghostty by 25ms.
+const RESIZE_RENDER_DELAY: Duration = Duration::from_millis(50);
+
 pub(crate) fn root_menu(config: &Config) -> Option<Menu> {
     if config.general.always_show_help.enabled {
         Some(Menu::Help)
@@ -762,52 +1278,77 @@ pub(crate) fn root_menu(config: &Config) -> Option<Menu> {
     }
 }
 
-fn write_child_output_to_log(
-    log_rwlock: &mut Arc<RwLock<CmdLogEntry>>,
-    child: &mut Child,
-    status: std::process::ExitStatus,
-) -> Res<()> {
-    let mut log = log_rwlock.write().unwrap();
+/// A command started by [`App::run_cmd_async`], with the threads writing its
+/// input and reading its output.
+struct PendingCmd {
+    child: Child,
+    log_entry: Arc<RwLock<CmdLogEntry>>,
+    stdin: JoinHandle<std::io::Result<()>>,
+    stdout: JoinHandle<std::io::Result<Vec<u8>>>,
+    stderr: JoinHandle<std::io::Result<Vec<u8>>>,
+}
+
+fn read_to_end_on_thread(
+    mut pipe: impl Read + Send + 'static,
+) -> JoinHandle<std::io::Result<Vec<u8>>> {
+    std::thread::spawn(move || {
+        let mut bytes = vec![];
+        pipe.read_to_end(&mut bytes)?;
+        Ok(bytes)
+    })
+}
+
+fn write_child_output_to_log(pending: PendingCmd, status: std::process::ExitStatus) -> Res<()> {
+    let mut log = pending.log_entry.write().unwrap();
 
     let CmdLogEntry::Cmd { args, out: out_log } = log.deref_mut() else {
         unreachable!("pending_cmd is always CmdLogEntry::Cmd variant");
     };
 
-    drop(child.stdin.take());
-
-    let mut out_bytes = vec![];
-    log::debug!("Reading stderr");
-
-    child
-        .stderr
-        .take()
-        .unwrap()
-        .read_to_end(&mut out_bytes)
-        .map_err(Error::CouldntReadCmdOutput)?;
-
-    child
-        .stdout
-        .take()
-        .unwrap()
-        .read_to_end(&mut out_bytes)
-        .map_err(Error::CouldntReadCmdOutput)?;
+    let join = |handle: JoinHandle<std::io::Result<Vec<u8>>>| {
+        handle
+            .join()
+            .expect("reading a command's output panicked")
+            .map_err(Error::CouldntReadCmdOutput)
+    };
+    let err_bytes = join(pending.stderr)?;
+    let mut out_bytes = err_bytes.clone();
+    out_bytes.extend(join(pending.stdout)?);
 
     let out_string = String::from_utf8_lossy(&out_bytes).to_string();
     *out_log = Some(out_string.into());
 
     if !status.success() {
-        return Err(Error::CmdBadExit(args.to_string(), status.code()));
+        return Err(Error::CmdBadExit(
+            args.to_string(),
+            status.code(),
+            String::from_utf8_lossy(&err_bytes).into_owned(),
+        ));
     }
 
-    Ok(())
+    pending
+        .stdin
+        .join()
+        .expect("writing a command's input panicked")
+        .map_err(Error::Term)
 }
 
 type DefaultFn = Box<dyn Fn(&App) -> Option<String>>;
+type EditFn = Box<dyn Fn(&mut App, &str)>;
 
 pub(crate) struct PromptParams {
     pub prompt: &'static str,
     pub create_default_value: DefaultFn,
     pub hide_menu: bool,
+    /// Put the default value in the prompt for the user to edit, rather than
+    /// keeping it as what an empty answer means.
+    pub prefill: bool,
+    pub history: Option<prompt::HistoryKind>,
+    /// Draw `prompt` alone in front of the line typed on, as less and vim draw
+    /// `/` for a search, rather than as a question.
+    pub bare: bool,
+    /// Called with the answer each time it is edited, before it is given.
+    pub on_edit: Option<EditFn>,
 }
 
 impl Default for PromptParams {
@@ -816,6 +1357,10 @@ impl Default for PromptParams {
             prompt: "",
             create_default_value: Box::new(|_| None),
             hide_menu: true,
+            prefill: false,
+            history: None,
+            bare: false,
+            on_edit: None,
         }
     }
 }

@@ -1,0 +1,220 @@
+#!/usr/bin/env -S uv run --script
+#
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
+"""Time to first screen draw of gitu, measured with hyperfine.
+
+gitu's --print draws the first frame and exits, so the time it takes is the time
+to the first draw. Each case runs gitu as git's pager (or alone, for status) in a
+pty, against a fixture clone of this repo whose commits are pinned below. The
+baseline is the same git command paged by delta and less, to less's first screen.
+"""
+
+import argparse
+import json
+import os
+import platform
+import shlex
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[2]
+WORK = ROOT / "target" / "bench-startup"
+FIXTURE = WORK / "fixture"
+FIXTURE_VERSION = "2"
+
+# Upstream commits, so the fixture is the same whichever fork commit is benched.
+DIFF_BASE = "fe1ac3347125d9672ef6be2c6d5758769aaca340"  # v0.20.0
+DIFF_TIP = "53edd1c35ee8aa83669afe3300f1a28e0e938b66"  # where the fork leaves upstream
+SHOW = "b8fbecd113c56cca3ea724698d358ced18bba543"  # largest commit before DIFF_TIP
+
+ROWS, COLS = 50, 160
+
+PAGED = {
+    "diff": "git diff",
+    "diff --stat": "git diff --stat",
+    "show": f"git show {SHOW}",
+    "log": f"git log {DIFF_TIP}",
+    "log -p": f"git log -p {DIFF_TIP}",
+}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--gitu",
+        required=True,
+        help="the command that runs gitu, e.g. '/path/to/delta --gitu'",
+    )
+    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--runs", type=int, default=10)
+    args = parser.parse_args()
+
+    ensure_fixture()
+    gitu = shlex.split(args.gitu)
+    gitu[0] = str(Path(gitu[0]).resolve())
+    result = {
+        "delta": run(["delta", "--version"]).strip(),
+        "git": run(["git", "--version"]).strip(),
+        "machine": f"{platform.system()} {platform.machine()} {platform.node()}",
+        "terminal": f"{COLS}x{ROWS}",
+        "cases": {
+            name: bench(name, cmd, args.runs) for name, cmd in cases(gitu).items()
+        },
+        "baseline": {
+            name: bench(name, cmd, args.runs) for name, cmd in baseline().items()
+        },
+    }
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(result, indent=2) + "\n")
+
+
+def cases(gitu: list[str]) -> dict[str, str | None]:
+    """Shell commands per case; None where this gitu cannot be git's pager."""
+    g = shlex.join(gitu)
+    usage = run([*gitu, "--help"])
+    # A gitu that pages what is piped to it has --quit-if-one-screen and no
+    # --pager; before that, --pager asked for paging; before that, it could not.
+    if "--pager" in usage:
+        pages, pager = True, shlex.quote(f"{g} --pager --print")
+    else:
+        pages, pager = "--quit-if-one-screen" in usage, shlex.quote(f"{g} --print")
+    return {"status": f"{g} --print"} | {
+        name: f"GIT_PAGER={pager} {cmd}" if pages else None
+        for name, cmd in PAGED.items()
+    }
+
+
+def baseline() -> dict[str, str]:
+    """git paged by delta and less. less quits on the q typed into the pty, which it
+    reads only once it has drawn its first screen. delta is told the terminal is dark
+    so that it does not wait on the pty to answer its query for the background colour:
+    run by gitu, its output is not a terminal and it does not ask."""
+    return {
+        name: f"GIT_PAGER='delta --dark' DELTA_PAGER='less -R' {cmd}"
+        for name, cmd in PAGED.items()
+    }
+
+
+def bench(name: str, cmd: str | None, runs: int) -> dict[str, Any] | None:
+    if cmd is None:
+        return None
+    in_pty = [
+        "script",
+        "-q",
+        "/dev/null",
+        "sh",
+        "-c",
+        f"stty rows {ROWS} cols {COLS}; {cmd}",
+    ]
+    if error := check(in_pty):
+        print(f"{name}: {error}", file=sys.stderr)
+        return {"error": error}
+    with tempfile.NamedTemporaryFile(suffix=".json") as export:
+        subprocess.run(
+            ["hyperfine", "--style", "basic", "-N", "-i", "--warmup", "2"]
+            + ["--input", str(typed_q()), "--runs", str(runs)]
+            + ["--export-json", export.name]
+            + ["--command-name", name, shlex.join(in_pty)],
+            cwd=FIXTURE / "repo",
+            env=fixture_env(),
+            stdin=subprocess.DEVNULL,
+            check=True,
+        )
+        r = json.loads(Path(export.name).read_text())["results"][0]
+    return {k: r[k] for k in ("mean", "stddev", "median", "min", "max", "times")}
+
+
+def check(in_pty: list[str]) -> str | None:
+    """Why a run failed to draw a frame, if it did."""
+    try:
+        p = subprocess.run(
+            in_pty,
+            check=False,
+            cwd=FIXTURE / "repo",
+            env=fixture_env(),
+            input=b"q",
+            capture_output=True,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        return "timed out after 60s"
+    out = p.stdout.decode(errors="replace")
+    if "panicked at" in out or len(out) < 1000:
+        return out[-500:] or f"no output, exit {p.returncode}"
+    return None
+
+
+def typed_q() -> Path:
+    path = WORK / "typed-q"
+    path.write_text("q")
+    return path
+
+
+def ensure_fixture() -> None:
+    """A clone whose worktree is DIFF_TIP over DIFF_BASE, part staged, part not."""
+    marker = FIXTURE / "version"
+    if marker.exists() and marker.read_text() == FIXTURE_VERSION:
+        return
+    subprocess.run(["rm", "-rf", str(FIXTURE)], check=True)
+    home = FIXTURE / "home"
+    (home / ".config" / "gitu").mkdir(parents=True)
+    # delta.dark stops `delta --gitu` asking the terminal its colours: nothing in
+    # the pty answers, and delta would wait 1s for an answer on every run.
+    (home / ".gitconfig").write_text(
+        "[user]\n\tname = bench\n\temail = bench@example.com\n"
+        "[delta]\n\tdark = true\n"
+    )
+    # diff_renderer.enabled is needed before d000ee4 and ignored after it.
+    (home / ".config" / "gitu" / "config.toml").write_text(
+        '[general]\ndiff_renderer.enabled = true\ndiff_renderer.command = ["delta"]\n'
+    )
+    source = run(
+        [
+            "git",
+            "-C",
+            str(ROOT),
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+        ]
+    )
+    repo = FIXTURE / "repo"
+    env = fixture_env()
+    for cmd in [
+        ["git", "clone", "-q", "--shared", source.strip(), str(repo)],
+        ["git", "-C", str(repo), "checkout", "-q", "--detach", DIFF_TIP],
+        ["git", "-C", str(repo), "reset", "-q", "--soft", DIFF_BASE],
+        ["git", "-C", str(repo), "reset", "-q"],
+        ["git", "-C", str(repo), "add", "-N", "."],
+        ["git", "-C", str(repo), "add", "src/ui"],
+    ]:
+        subprocess.run(cmd, env=env, check=True)
+    marker.write_text(FIXTURE_VERSION)
+
+
+def fixture_env() -> dict[str, str]:
+    home = FIXTURE / "home"
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith(("GIT_", "DELTA_", "OSC1717"))
+    }
+    return env | {
+        "HOME": str(home),
+        "XDG_CONFIG_HOME": str(home / ".config"),
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
+
+
+def run(cmd: list[str]) -> str:
+    return subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
+
+
+if __name__ == "__main__":
+    main()

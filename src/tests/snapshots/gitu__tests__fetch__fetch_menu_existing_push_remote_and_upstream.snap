@@ -2,7 +2,7 @@
 source: src/tests/fetch.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch main                                                                 |
+▌Branch: main                                                                   |
 ▌Your branch is up to date with 'origin/main'.                                  |
                                                                                 |
  Recent commits                                                                 |
@@ -16,10 +16,10 @@ expression: ctx.redact_buffer()
                                                                                 |
                                                                                 |
 ────────────────────────────────────────────────────────────────────────────────|
- Fetch                    Arguments                                             |
- a     from all remotes   -p Prune deleted branches (--prune)                   |
- p     from origin        -t Fetch all tags (--tags)                            |
- u     from origin                                                              |
- e     from elsewhere                                                           |
- q/esc Quit/Close                                                               |
-styles_hash: 3b2f116b54be63b2
+ Fetch                         Arguments                                        |
+ a          from all remotes   -p Prune deleted branches (--prune)              |
+ p          from origin        -t Fetch all tags (--tags)                       |
+ u          from origin                                                         |
+ e          from elsewhere                                                      |
+ q/esc/left Quit/Close                                                          |
+styles_hash: 5824fc648a732617

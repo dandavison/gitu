@@ -23,9 +23,9 @@ impl OpTrait for Apply {
                 diff,
                 file_i,
                 hunk_i,
-                line_i,
+                line_indices,
                 ..
-            } => apply_line(diff, *file_i, *hunk_i, *line_i),
+            } => apply_line(diff, *file_i, *hunk_i, line_indices),
             _ => return None,
         };
 
@@ -50,9 +50,9 @@ fn apply_stash(stash_ref: String) -> Action {
     })
 }
 
-fn apply_line(diff: &Rc<Diff>, file_i: usize, hunk_i: usize, line_i: usize) -> Action {
+fn apply_line(diff: &Rc<Diff>, file_i: usize, hunk_i: usize, line_indices: &[usize]) -> Action {
     let patch = diff
-        .format_line_patch(file_i, hunk_i, line_i..(line_i + 1), PatchMode::Normal)
+        .format_lines_patch(file_i, hunk_i, line_indices, PatchMode::Normal)
         .into_bytes();
 
     Rc::new(move |app: &mut App, term: &mut Term| {

@@ -1,6 +1,6 @@
-use std::{ops::Range, path::PathBuf, rc::Rc};
+use std::{cell::RefCell, ops::Range, path::PathBuf, rc::Rc};
 
-use crate::{Res, error::Error, git::diff::Diff, highlight::BlameHighlights};
+use crate::{Res, error::Error, git::diff::Diff, rebase_todo::RebaseTodo};
 
 #[derive(Clone, Debug)]
 pub(crate) enum ItemData {
@@ -37,13 +37,24 @@ pub(crate) enum ItemData {
         hunk_i: usize,
         line_i: usize,
         line_range: Range<usize>,
+        /// Content lines this row stages/reverses as a unit. Usually `[line_i]`;
+        /// a fused side-by-side change row also includes its replacement line.
+        line_indices: Vec<usize>,
     },
     Stash {
         message: String,
         stash_ref: String,
         id: usize,
     },
+    /// One entry of an interactive rebase's instruction list, as its position in
+    /// the shared list being edited.
+    RebaseTodo {
+        todo: Rc<RefCell<RebaseTodo>>,
+        index: usize,
+    },
     Header(SectionHeader),
+    /// The upstream of the current branch, and how far ahead of and behind it
+    /// the branch is.
     BranchStatus(String, u32, u32),
     Error(String),
     BlameHeader {
@@ -57,8 +68,6 @@ pub(crate) enum ItemData {
         blamed_line_num: u32, // line number in the blamed file (for blame-view nav)
     },
     BlameCodeLine {
-        blame_file: Rc<BlameFile>,
-        line_i: usize,
         line_num: u32,
         orig_line_num: u32,
         content: String,
@@ -67,12 +76,31 @@ pub(crate) enum ItemData {
     },
 }
 
-#[derive(Debug)]
-pub(crate) struct BlameFile {
-    pub highlights: BlameHighlights,
-}
-
 impl ItemData {
+    /// What kind of thing the row is, as a heading for the commands that act
+    /// on it.
+    pub(crate) fn kind(&self) -> &'static str {
+        match self {
+            ItemData::Raw(_) | ItemData::HunkLine { .. } | ItemData::BlameCodeLine { .. } => "Line",
+            ItemData::AllUnstaged(_) => "Unstaged changes",
+            ItemData::AllStaged(_) => "Staged changes",
+            ItemData::AllUntracked(_) => "Untracked files",
+            ItemData::Reference { kind, .. } => match kind {
+                Ref::Tag(_) => "Tag",
+                Ref::Head(_) | Ref::Remote(_) => "Branch",
+            },
+            ItemData::Commit { .. }
+            | ItemData::RebaseTodo { .. }
+            | ItemData::BlameHeader { .. } => "Commit",
+            ItemData::Untracked(_) | ItemData::Delta { .. } => "File",
+            ItemData::Hunk { .. } => "Hunk",
+            ItemData::Stash { .. } => "Stash",
+            ItemData::Header(_) => "Section",
+            ItemData::BranchStatus(..) => "Branch",
+            ItemData::Error(_) => "Error",
+        }
+    }
+
     pub(crate) fn is_section(&self) -> bool {
         matches!(
             self,
@@ -84,6 +112,11 @@ impl ItemData {
                 | ItemData::Hunk { .. }
                 | ItemData::Header(_)
                 | ItemData::BranchStatus(_, _, _)
+                // A commit (or rebase todo entry) is a section so that sibling
+                // navigation steps commit-to-commit and folding hides the extra
+                // rows a rendered log gives it.
+                | ItemData::Commit { .. }
+                | ItemData::RebaseTodo { .. }
         )
     }
 
@@ -181,7 +214,6 @@ pub(crate) enum SectionHeader {
     CherryPick(String),
     Stashes,
     RecentCommits,
-    Commit(String),
     StashRef(String),
     StagedChanges(usize),
     UnstagedChanges(usize),

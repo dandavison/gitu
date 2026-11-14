@@ -1,0 +1,25 @@
+---
+source: src/tests/commit.rs
+expression: ctx.redact_buffer()
+---
+▌commit 56e408897c47b1f9895000402c34a50f06e6d24e                                |
+▌Author: Author Name <author@email.com>                                         |
+▌Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+▌                                                                               |
+▌    add beta.txt                                                               |
+▌                                                                               |
+▌    Commit body goes here                                                      |
+▌                                                                               |
+ commit d5b0e9e4d77bd304a7dbbf857cf10f6647cc903d                                |
+ Author: Author Name <author@email.com>                                         |
+ Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+                                                                                |
+     add alpha.txt                                                              |
+                                                                                |
+     Commit body goes here                                                      |
+                                                                                |
+ commit b66a0bf82020d6a386e94d0fceedec1f817d20c7                                |
+ Author: Author Name <author@email.com>                                         |
+ Date:   Fri Feb 16 11:11:00 2024 +0100                                         |
+                                                                                |
+styles_hash: 35e4449e7d5ab2df

@@ -2,7 +2,7 @@
 source: src/tests/push.rs
 expression: ctx.redact_buffer()
 ---
-▌On branch new-branch                                                           |
+▌Branch: new-branch                                                             |
                                                                                 |
  Recent commits                                                                 |
  e7eb2bd new-branch add new-file                                 Author Name __ |
@@ -22,4 +22,4 @@ expression: ctx.redact_buffer()
 ────────────────────────────────────────────────────────────────────────────────|
 $ git branch --set-upstream-to new-branch                                       |
 warning: not setting branch 'new-branch' as its own upstream                    |
-styles_hash: a07ffe2495c4f50a
+styles_hash: f58b54cbba48047e
