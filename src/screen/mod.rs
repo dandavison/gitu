@@ -356,6 +356,21 @@ impl Screen {
         }
     }
 
+    /// What to set, on a log in which the renderer marked no commit: its rows
+    /// are then text, and nothing in it can be opened.
+    pub(crate) fn unmarked_commits_hint(&self) -> Option<&'static str> {
+        let is_log = self
+            .git_command
+            .as_ref()
+            .is_some_and(|command| command.borrow().subcommand() == "log");
+        (is_log
+            && !self
+                .items
+                .iter()
+                .any(|item| matches!(item.data, ItemData::Commit { .. })))
+        .then_some("set delta.commit-regex to match each commit's first line")
+    }
+
     fn find_first_hunk(&mut self) -> Option<usize> {
         self.find_item(|item| !item.unselectable && matches!(item.data, ItemData::Hunk { .. }))
     }

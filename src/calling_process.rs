@@ -283,7 +283,8 @@ impl GitCommand {
         words
     }
 
-    fn subcommand(&self) -> &str {
+    /// The git subcommand, such as `log`.
+    pub(crate) fn subcommand(&self) -> &str {
         &self.argv[self.subcommand]
     }
 

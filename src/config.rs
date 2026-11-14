@@ -480,7 +480,7 @@ fn parse_picker_keys(
             if let Ok(("", parsed)) = key_parser::parse_config_keys(keys) {
                 Some(parsed)
             } else {
-                bad_bindings.push(format!("- {} = {}", action_name, keys));
+                bad_bindings.push(format!("- {} = {} (not a key)", action_name, keys));
                 None
             }
         })
@@ -663,6 +663,16 @@ mod tests {
             Ok(_) => panic!("{gitconfig} was accepted"),
             Err(e) => e.to_string(),
         }
+    }
+
+    /// A binding that is not a key says so, and where to fix it.
+    #[test]
+    fn a_binding_that_is_not_a_key_says_so() {
+        assert_eq!(
+            config_error("[delta-tui \"bindings.root\"]\n\tquit = ctrl+\n"),
+            "Fix these key bindings in git config's delta-tui section or gitu's config file:\n\
+             - root.quit = ctrl+ (not a key)"
+        );
     }
 
     #[test]

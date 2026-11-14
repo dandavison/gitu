@@ -105,3 +105,45 @@ fn blame_lines_are_drawn_by_the_renderer() {
     assert!(rows[1].contains("SELECT-THIS-LINE"), "{screen}");
     assert!(!screen.contains("modify file"), "{screen}");
 }
+
+/// Blaming a file git does not have at the commit (a typo in `delta --tui blame
+/// <file>`) says what git said, rather than showing an empty blame.
+#[test]
+fn blaming_a_file_git_does_not_have_says_why() {
+    let ctx = setup(setup_clone!());
+    let repo = git2::Repository::open(&ctx.dir).unwrap();
+
+    let error = crate::git::blame(&repo, "no-such-file", None).unwrap_err();
+
+    assert!(
+        error.to_string().contains("no such path 'no-such-file'"),
+        "{error}"
+    );
+}
+
+/// A renderer that fails to draw the blame leaves gitu's own drawing of it,
+/// under what went wrong.
+#[test]
+fn a_renderer_that_fails_to_draw_blame_says_why() {
+    let mut ctx = setup(setup_clone!());
+    let awk = crate::tests::pager::annotating_renderer()[1].clone();
+    ctx.config().general.diff_renderer.command = vec![
+        "sh".into(),
+        "-c".into(),
+        "input=$(cat); case \"$input\" in *'(Author Name'*) \
+         echo 'Invalid color or style attribute: line' >&2; exit 2;; esac; \
+         printf '%s\\n' \"$input\" | awk \"$1\""
+            .into(),
+        "sh".into(),
+        awk,
+    ];
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("ll<enter>B"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(
+        buffer.contains("Invalid color or style attribute: line"),
+        "{buffer}"
+    );
+    assert!(buffer.contains("SELECT-THIS-LINE"), "{buffer}");
+}

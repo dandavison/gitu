@@ -393,3 +393,28 @@ fn rebase_interactive_quit_runs_nothing() {
     // Picked a commit, marked one to drop, then left: the log is as it was.
     snapshot!(setup_todo(setup_clone!()), "rij<enter>jdqll");
 }
+
+/// A renderer that fails to draw the todo's commits leaves gitu's own rows for
+/// them, under what went wrong.
+#[test]
+fn a_renderer_that_fails_to_draw_the_todo_says_why() {
+    let mut ctx = setup_todo(setup_clone!());
+    let todo = write_todo(&ctx, "HEAD~3..HEAD");
+    ctx.config().general.diff_renderer.command = [
+        "sh",
+        "-c",
+        "[ -z \"$(cat)\" ] || { echo 'Invalid color or style attribute: line' >&2; exit 2; }",
+    ]
+    .map(String::from)
+    .to_vec();
+
+    let mut app = ctx.init_app_with_args(ctx.dir.clone(), sequence_editor_args(&todo));
+    ctx.update(&mut app, keys(""));
+
+    let buffer = ctx.redact_buffer();
+    assert!(
+        buffer.contains("Invalid color or style attribute: line"),
+        "{buffer}"
+    );
+    assert!(buffer.contains("add third-file"), "{buffer}");
+}

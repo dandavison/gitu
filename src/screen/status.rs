@@ -232,7 +232,16 @@ fn status_items(
     snapshots: Vec<Snapshot>,
     tail: &[Item],
 ) -> Vec<Item> {
-    let mut items = head.to_vec();
+    // A renderer that failed leaves its files without their lines, under what
+    // went wrong.
+    let failed = snapshots
+        .iter()
+        .find_map(|snapshot| snapshot.renderer_failed.clone());
+    let mut items: Vec<Item> = failed
+        .map(|failed| items::error_row(config, failed))
+        .into_iter()
+        .chain(head.iter().cloned())
+        .collect();
     for ((section, diff), snapshot) in sections.iter().zip(snapshots) {
         items.extend(create_status_section_items(
             config, params, *section, diff, &snapshot,

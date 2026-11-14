@@ -94,6 +94,7 @@ pub type Res<T> = Result<T, Error>;
 
 /// Run gitu, returning the status to exit with.
 pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
+    needs_terminal(io::stdout().is_terminal())?;
     // Before anything slower, and before reading the input: the git process on
     // the other end of a pipe exits as soon as its output fits in the pipe, and
     // cannot be found once it has. Reading to EOF is always too late — EOF is
@@ -130,6 +131,15 @@ pub fn run(config: Arc<Config>, args: &cli::Args, term: &mut Term) -> Res<i32> {
     let result = run_app(&mut app, args, term);
     term.reset_term(&config).map_err(Error::Term)?;
     result
+}
+
+/// gitu draws on its output, which must be a terminal.
+pub(crate) fn needs_terminal(stdout_is_terminal: bool) -> Res<()> {
+    if stdout_is_terminal {
+        Ok(())
+    } else {
+        Err(Error::NotATerminal)
+    }
 }
 
 /// Whether gitu browses a patch on stdin, as git's pager, rather than opening

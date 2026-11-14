@@ -574,6 +574,12 @@ impl App {
                 self.close_menu();
             }
             self.state.inhibit_close_menu = false;
+        } else if matches!(op, Op::Show | Op::ShowOrUnfold) {
+            let hint = self.screen().unmarked_commits_hint();
+            self.display_error(match hint {
+                Some(hint) => format!("No commit to open: {hint}"),
+                None => "Nothing to open here".to_owned(),
+            });
         }
 
         Ok(())

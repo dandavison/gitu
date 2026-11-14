@@ -36,9 +36,7 @@ pub(crate) fn run(app: &mut App, term: &mut Term, name: &str) -> Res<()> {
     }) {
         Ok(command) => command,
         Err(placeholder) => {
-            app.display_error(format!(
-                "{name}: nothing under the cursor for {placeholder}"
-            ));
+            app.display_error(nothing_for(app, name, placeholder));
             return Ok(());
         }
     };
@@ -95,9 +93,7 @@ pub(crate) fn open_view(app: &mut App, term: &mut Term, name: &str) -> Res<()> {
     let argv = match argv {
         Ok(argv) => argv,
         Err(placeholder) => {
-            app.display_error(format!(
-                "{name}: nothing under the cursor for {placeholder}"
-            ));
+            app.display_error(nothing_for(app, name, placeholder));
             return Ok(());
         }
     };
@@ -136,6 +132,16 @@ fn shown_command(app: &App) -> Option<(String, String)> {
 
 fn no_command(name: &str) -> String {
     format!("{name}: this screen shows no git command, for {COMMAND}")
+}
+
+/// What to say when the command or view `name` asks for `placeholder` and the
+/// cursor is on nothing that has one.
+fn nothing_for(app: &App, name: &str, placeholder: &str) -> String {
+    let message = format!("{name}: nothing under the cursor for {placeholder}");
+    match app.screen().unmarked_commits_hint() {
+        Some(hint) if placeholder == "{commit}" => format!("{message}: {hint}"),
+        _ => message,
+    }
 }
 
 /// `template` with each placeholder replaced by `written` of its value for

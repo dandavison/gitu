@@ -90,16 +90,20 @@ pub(crate) fn create_diff_items(
     default_collapsed: bool,
     commit: Option<String>,
 ) -> Vec<Item> {
-    let rendered = (!config.general.diff_renderer.command.is_empty() && !diff.text.is_empty())
-        .then(|| {
-            crate::diff_renderer::run(
-                &config.general.diff_renderer.command,
-                Some(&diff.text),
-                params,
-                None,
-            )
-        })
-        .flatten();
+    let (rendered, failed) = match (!config.general.diff_renderer.command.is_empty()
+        && !diff.text.is_empty())
+    .then(|| {
+        crate::diff_renderer::run(
+            &config.general.diff_renderer.command,
+            Some(&diff.text),
+            params,
+            None,
+        )
+    }) {
+        Some(Ok(rendered)) => (rendered, None),
+        Some(Err(failed)) => (None, Some(failed)),
+        None => (None, None),
+    };
     let items = drawn_diff_items(
         config,
         diff,
@@ -109,7 +113,11 @@ pub(crate) fn create_diff_items(
         default_collapsed,
         commit,
     );
-    headed_as_configured(config, params, items)
+    failed
+        .map(|failed| error_row(config, failed))
+        .into_iter()
+        .chain(headed_as_configured(config, params, items))
+        .collect()
 }
 
 /// A diff's items with each file headed as `general.file_header` says.
@@ -961,29 +969,33 @@ pub(crate) struct RenderedCommit {
 }
 
 /// `git log` of the commits `revs`, through the renderer, grouped per commit.
-/// `None` if either fails or the renderer marks no commits.
+/// `None` if git fails or the renderer marks no commits, and what to tell the
+/// user if the renderer fails.
 fn rendered_commits(
     config: &Config,
     repo: &Repository,
     params: &RenderParams,
     revs: &[String],
-) -> Option<Vec<RenderedCommit>> {
+) -> Result<Option<Vec<RenderedCommit>>, String> {
     let dir = repo.workdir().unwrap_or_else(|| repo.path());
-    let log = Command::new("git")
+    let Some(log) = Command::new("git")
         .current_dir(dir)
         .args(["-c", "color.ui=always", "log", "--no-walk=unsorted"])
         .args(&config.general.log_args)
         .args(revs)
         .output()
         .ok()
-        .filter(|output| output.status.success())?;
+        .filter(|output| output.status.success())
+    else {
+        return Ok(None);
+    };
     let output = crate::diff_renderer::run(
         &config.general.diff_renderer.command,
         Some(&String::from_utf8_lossy(&log.stdout)),
         params,
         Some(dir),
     )?;
-    commits_in(&output)
+    Ok(output.as_deref().and_then(commits_in))
 }
 
 /// Group rendered rows per commit, as the commit records in them say. `None`
@@ -1014,20 +1026,21 @@ fn commits_in(rendered: &str) -> Option<Vec<RenderedCommit>> {
 
 /// The rendered log's rows for each commit in `revs`, keyed by oid, for views
 /// that lay the commits out themselves (the interactive rebase todo). Empty when
-/// there is no renderer or it fails; the caller renders those commits.
+/// there is no renderer or it fails, and the caller renders those commits; what
+/// to tell the user if it fails.
 pub(crate) fn rendered_commit_rows(
     config: &Config,
     repo: &Repository,
     params: &RenderParams,
     revs: &[String],
-) -> HashMap<String, Vec<Rc<RenderedRow>>> {
+) -> Result<HashMap<String, Vec<Rc<RenderedRow>>>, String> {
     if config.general.diff_renderer.command.is_empty() || revs.is_empty() {
-        return HashMap::new();
+        return Ok(HashMap::new());
     }
 
     // A renderer states the commit as git printed it, which is abbreviated in
     // most log formats, so it is resolved to the full id the todo uses.
-    rendered_commits(config, repo, params, revs)
+    Ok(rendered_commits(config, repo, params, revs)?
         .unwrap_or_default()
         .into_iter()
         .filter_map(|block| {
@@ -1038,7 +1051,7 @@ pub(crate) fn rendered_commit_rows(
                 .ok()?;
             Some((commit.id().to_string(), block.rows))
         })
-        .collect()
+        .collect())
 }
 
 /// One commit's rendered rows as items: blank rows leading the block stay
@@ -1229,6 +1242,19 @@ fn commit_data(commit: &git2::Commit, references: &[(git2::Commit, Ref)]) -> Ite
         summary: commit.summary().unwrap_or("").to_string(),
         author: commit.author().name().unwrap_or("").to_string(),
         age: short_age(commit.author().when()),
+    }
+}
+
+/// A row of gitu's own at the top of a view, saying what went wrong in making
+/// it.
+pub(crate) fn error_row(config: &Config, message: String) -> Item {
+    Item {
+        unselectable: true,
+        rendered: Some(Rc::new(vec![(
+            message,
+            Style::from(&config.style.error_msg),
+        )])),
+        ..Default::default()
     }
 }
 

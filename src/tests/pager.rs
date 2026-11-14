@@ -307,6 +307,56 @@ fn a_command_git_refuses_says_so_and_changes_nothing() {
     assert!(buffer.contains("+changed"), "{buffer}");
 }
 
+/// A renderer that cannot draw (delta refuses a style in the user's config, say)
+/// leaves rows with no records, on which the cursor has nothing to stop at. The
+/// user is told what the renderer said, rather than left with a view that does
+/// nothing.
+#[test]
+fn a_renderer_that_fails_says_why() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+    ctx.config().general.diff_renderer.command = [
+        "sh",
+        "-c",
+        "[ -z \"$(cat)\" ] || { echo 'Invalid color or style attribute: line' >&2; exit 2; }",
+    ]
+    .map(String::from)
+    .to_vec();
+
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("ll"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(
+        buffer.contains("Invalid color or style attribute: line"),
+        "{buffer}"
+    );
+}
+
+/// gitu as git's pager with a renderer that fails still shows git's output, so
+/// that the user is not left with nothing, and says why it is not drawn.
+#[test]
+fn a_renderer_that_fails_leaves_the_output_shown() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+    ctx.config().general.diff_renderer.command = [
+        "sh",
+        "-c",
+        "[ -z \"$(cat)\" ] || { echo 'Invalid color or style attribute: line' >&2; exit 2; }",
+    ]
+    .map(String::from)
+    .to_vec();
+
+    ctx.init_app_as_pager_of(&["git", "log"]);
+
+    let buffer = ctx.redact_buffer();
+    assert!(
+        buffer.contains("Invalid color or style attribute: line"),
+        "{buffer}"
+    );
+    assert!(buffer.contains("add firstfile"), "{buffer}");
+}
+
 /// The editing keys reach the line being edited, rather than the view behind
 /// it: `ctrl+w` in a prompt takes back a word, and does not scroll.
 #[test]

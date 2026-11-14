@@ -26,9 +26,8 @@ impl TryFrom<BTreeMap<Menu, BTreeMap<Op, Vec<String>>>> for Bindings {
                     if let Some(binding) = Binding::parse(menu, &keys, op.clone()) {
                         bindings.push(binding);
                     } else {
-                        // Format bad key bindings like " - {menu}.{op} = {keys}"
                         bad_bindings.push(format!(
-                            "- {}.{} = {}",
+                            "- {}.{} = {} (not a key)",
                             menu.as_ref(),
                             op.as_ref(),
                             keys

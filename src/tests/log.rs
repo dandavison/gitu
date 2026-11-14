@@ -531,3 +531,17 @@ fn folding_everything_in_a_log_of_patches_cycles_through_its_levels() {
     let buffer = ctx.redact_buffer();
     assert!(buffer.contains("+alpha changed"), "{buffer}");
 }
+
+/// A log format whose commits the renderer does not mark (its first line does
+/// not match `delta.commit-regex`) leaves no commit to open. `right` on one says
+/// so, and what to set, rather than doing nothing.
+#[test]
+fn opening_a_commit_the_renderer_did_not_mark_says_what_to_set() {
+    let mut ctx = with_log_args(setup(setup_clone!()), &["--pretty=format:>> %h %s"]);
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("ll<right>"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains(">> "), "{buffer}");
+    assert!(buffer.contains("delta.commit-regex"), "{buffer}");
+}

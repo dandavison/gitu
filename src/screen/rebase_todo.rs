@@ -4,7 +4,8 @@ use crate::{Res, config::Config, items, items::RenderedRow, menu::Menu, rebase_t
 use git2::Repository;
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
-type CommitRows = HashMap<String, Vec<Rc<RenderedRow>>>;
+/// The commits' rendered rows, or what to tell the user if the renderer failed.
+type CommitRows = Result<HashMap<String, Vec<Rc<RenderedRow>>>, String>;
 
 pub(crate) fn create(
     config: Arc<Config>,
@@ -32,7 +33,20 @@ pub(crate) fn create(
             }
 
             let (_, rows) = cache.as_ref().expect("just populated");
-            Ok(items::rebase_todo_items(&screen_config, &repo, &todo, rows))
+            // A renderer that failed leaves gitu's own rows for the commits,
+            // under what went wrong.
+            let empty = HashMap::new();
+            let (rows, failed) = match rows {
+                Ok(rows) => (rows, None),
+                Err(failed) => (
+                    &empty,
+                    Some(items::error_row(&screen_config, failed.clone())),
+                ),
+            };
+            Ok(failed
+                .into_iter()
+                .chain(items::rebase_todo_items(&screen_config, &repo, &todo, rows))
+                .collect())
         }),
     )?;
 

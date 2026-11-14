@@ -254,6 +254,34 @@ fn show_stash() {
     snapshot!(ctx, "jj<enter>");
 }
 
+/// A renderer that fails to draw a stash's diffs says why.
+#[test]
+fn a_renderer_that_fails_to_draw_a_stash_says_why() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "unstaged.txt", "");
+    fs::write(ctx.dir.join("unstaged.txt"), "unstaged\n").unwrap();
+    run(
+        &ctx.dir,
+        &["git", "stash", "push", "--message", "firststash"],
+    );
+    ctx.config().general.diff_renderer.command = [
+        "sh",
+        "-c",
+        "[ -z \"$(cat)\" ] || { echo 'Invalid color or style attribute: line' >&2; exit 2; }",
+    ]
+    .map(String::from)
+    .to_vec();
+    let mut app = ctx.init_app();
+    ctx.update(&mut app, keys("jj<enter>"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(buffer.contains("firststash"), "{buffer}");
+    assert!(
+        buffer.contains("Invalid color or style attribute: line"),
+        "{buffer}"
+    );
+}
+
 #[test]
 fn rebase_conflict() {
     let mut ctx = setup_clone!();
@@ -745,4 +773,32 @@ fn mouse_wheel_scroll_down() {
         ],
     );
     insta::assert_snapshot!(ctx.redact_buffer());
+}
+
+/// Run outside a repository, gitu says so and where to run it.
+#[test]
+fn outside_a_repository_says_where_to_run() {
+    let error = crate::error::Error::OpenRepo(git2::Error::new(
+        git2::ErrorCode::NotFound,
+        git2::ErrorClass::Repository,
+        "could not find repository",
+    ));
+
+    assert_eq!(
+        error.to_string(),
+        "Not in a git repository: run delta --tui inside one"
+    );
+}
+
+/// With its output not a terminal (`delta --tui > file`), there is nowhere to
+/// draw, and gitu says what to use instead.
+#[test]
+fn output_that_is_not_a_terminal_says_what_to_use() {
+    let error = crate::needs_terminal(false).unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "delta --tui needs a terminal to draw in. To write a diff to a file or a pipe, use delta without --tui"
+    );
+    assert!(crate::needs_terminal(true).is_ok());
 }

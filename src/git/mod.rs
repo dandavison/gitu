@@ -451,7 +451,10 @@ pub(crate) fn blame(
         .map_err(Error::GitBlame)?;
 
     if !output.status.success() {
-        return Ok(vec![]);
+        let said = String::from_utf8_lossy(&output.stderr);
+        return Err(Error::GitRefusedTheCommand(
+            said.lines().next().unwrap_or_default().to_owned(),
+        ));
     }
 
     let text = String::from_utf8_lossy(&output.stdout).into_owned();

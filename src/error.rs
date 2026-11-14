@@ -74,6 +74,7 @@ pub enum Error {
     EditedCommandFixed,
     EditedCommandWrites(String),
     GitRefusedTheCommand(String),
+    NotATerminal,
 }
 
 impl std::error::Error for Error {}
@@ -93,7 +94,9 @@ impl Display for Error {
                 f.write_fmt(format_args!("Couldn't write the rebase todo list: {e}"))
             }
             Error::OpenRepo(e) => match e.code() {
-                git2::ErrorCode::NotFound => f.write_str("No .git found in the current directory"),
+                git2::ErrorCode::NotFound => {
+                    f.write_str("Not in a git repository: run delta --tui inside one")
+                }
                 _ => f.write_fmt(format_args!("Couldn't open repo: {e:?}")),
             },
             Error::Term(e) => f.write_fmt(format_args!("Terminal error: {}", e)),
@@ -102,7 +105,9 @@ impl Display for Error {
                 f.write_fmt(format_args!("Couldn't save to the config file: {e}"))
             }
             Error::Bindings { bad_key_bindings } => {
-                let mut error_string = String::from("Errors while parsing key bindings:");
+                let mut error_string = String::from(
+                    "Fix these key bindings in git config's delta-tui section or gitu's config file:",
+                );
                 for item in bad_key_bindings {
                     error_string.push_str(&format!("\n{item}"));
                 }
@@ -215,6 +220,10 @@ impl Display for Error {
                 "gitu re-runs this command on every refresh, so it must only report: {subcommand}"
             )),
             Error::GitRefusedTheCommand(stderr) => f.write_str(stderr),
+            Error::NotATerminal => f.write_str(
+                "delta --tui needs a terminal to draw in. \
+                 To write a diff to a file or a pipe, use delta without --tui",
+            ),
         }
     }
 }

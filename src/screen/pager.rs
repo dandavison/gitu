@@ -326,6 +326,9 @@ fn built(
     // arrived.
     let drawn = snapshot.rendered.as_deref().unwrap_or(&snapshot.text);
 
+    // A renderer that failed has drawn nothing; what it failed to draw is
+    // shown as it arrived, under what went wrong.
+    let failed = snapshot.renderer_failed.clone();
     let (mut items, truncated) = match shape {
         Shape::Rows { truncated } => (rows(repo, drawn), *truncated),
         Shape::Diff {
@@ -415,6 +418,9 @@ fn built(
     };
 
     items.extend(truncated_rows(truncated || snapshot.truncated, limit));
+    if let Some(failed) = failed {
+        items.insert(0, items::error_row(config, failed));
+    }
     Ok(items)
 }
 
@@ -492,12 +498,16 @@ fn render(config: &Config, params: &RenderParams, text: &str) -> String {
         return text.to_owned();
     }
 
+    // A renderer that fails here fails on the rest of the view too, which says
+    // so.
     crate::diff_renderer::run(
         &config.general.diff_renderer.command,
         Some(text),
         params,
         None,
     )
+    .ok()
+    .flatten()
     .unwrap_or_else(|| text.to_owned())
 }
 

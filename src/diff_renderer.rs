@@ -18,6 +18,7 @@ use crate::style::{Color, Modifier, Style};
 use anstyle_parse::{DefaultCharAccumulator, Params, Parser, Perform};
 use regex::Regex;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::io::Write;
 use std::mem;
 use std::ops::Range;
@@ -278,8 +279,9 @@ pub(crate) fn drawing_env(params: &crate::items::RenderParams) -> Vec<(&'static 
 }
 
 /// Run `command` in `dir`, feeding it `input` on stdin (a diff to render; the
-/// log command takes none) and returning its stdout. `None` if the command can't
-/// be spawned or exits non-zero.
+/// log command takes none) and returning its stdout: `None` if there is no
+/// command, and what to tell the user if it can't be started or exits
+/// non-zero.
 ///
 /// `params` supplies the width gitu will render the output into. A renderer that
 /// reflows (delta side-by-side/wrapping) can't detect this over a pipe and
@@ -292,7 +294,7 @@ pub(crate) fn run(
     input: Option<&str>,
     params: &crate::items::RenderParams,
     dir: Option<&Path>,
-) -> Option<String> {
+) -> Result<Option<String>, String> {
     run_with_env(command, input, params, dir, &[])
 }
 
@@ -303,9 +305,13 @@ pub(crate) fn run_with_env(
     params: &crate::items::RenderParams,
     dir: Option<&Path>,
     env: &[(&str, String)],
-) -> Option<String> {
-    let program = command.first()?;
-    let mut command = renderer_command(command, params, dir)?;
+) -> Result<Option<String>, String> {
+    let Some(program) = command.first() else {
+        return Ok(None);
+    };
+    let Some(mut command) = renderer_command(command, params, dir) else {
+        return Ok(None);
+    };
     command.envs(env.iter().map(|(name, value)| (name, value)));
     command
         .stdin(if input.is_some() {
@@ -314,12 +320,12 @@ pub(crate) fn run_with_env(
             Stdio::null()
         })
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(Stdio::piped());
 
     let mut child = command
         .spawn()
         .inspect_err(|e| log::warn!("renderer '{program}' failed to spawn: {e}"))
-        .ok()?;
+        .map_err(|e| not_started_message(program.as_ref(), &e))?;
 
     // Write stdin on a separate thread so a full stdout pipe can't deadlock us.
     let writer = input.map(|input| {
@@ -328,17 +334,52 @@ pub(crate) fn run_with_env(
         thread::spawn(move || stdin.write_all(input.as_bytes()))
     });
 
-    let output = child.wait_with_output().ok()?;
+    let output = child.wait_with_output();
     if let Some(writer) = writer {
         let _ = writer.join();
     }
+    let Ok(output) = output else {
+        return Ok(None);
+    };
 
     if !output.status.success() {
         log::warn!("renderer '{program}' exited with {}", output.status);
-        return None;
+        return Err(failure_message(
+            program.as_ref(),
+            &String::from_utf8_lossy(&output.stderr),
+            output.status,
+        ));
     }
 
-    Some(String::from_utf8_lossy(&output.stdout).into_owned())
+    Ok(Some(String::from_utf8_lossy(&output.stdout).into_owned()))
+}
+
+/// What to tell the user when the renderer `program` could not be started.
+pub(crate) fn not_started_message(program: &OsStr, error: &std::io::Error) -> String {
+    let name = Path::new(program)
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy();
+    format!("{name} could not be started: {error}")
+}
+
+/// What to tell the user when the renderer `program` exited unsuccessfully
+/// with `status`, having said `said`: the first thing it said, else its status.
+pub(crate) fn failure_message(
+    program: &OsStr,
+    said: &str,
+    status: impl std::fmt::Display,
+) -> String {
+    let name = Path::new(program)
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy();
+    let reason = said
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map_or_else(|| format!("it exited with {status}"), str::to_owned);
+    format!("{name} could not draw this view: {reason}. Check your {name} config.")
 }
 
 /// The value to give [`FEATURES_VAR`] for `features`, or `None` to leave the
@@ -771,11 +812,11 @@ mod tests {
                 &params_with(&["side-by-side"]),
                 None
             ),
-            Some("+side-by-side".to_string())
+            Ok(Some("+side-by-side".to_string()))
         );
         assert_eq!(
             run(&echo_features(), None, &params_with(&["a", "b"]), None),
-            Some("+a b".to_string())
+            Ok(Some("+a b".to_string()))
         );
     }
 
@@ -789,7 +830,7 @@ mod tests {
                 &params_with(&["-side-by-side", "-plus-minus-markers"]),
                 None
             ),
-            Some("+-side-by-side -keep-plus-minus-markers".to_string())
+            Ok(Some("+-side-by-side -keep-plus-minus-markers".to_string()))
         );
     }
 
@@ -803,7 +844,23 @@ mod tests {
                 &params_with(&["plus-minus-markers", "side-by-side"]),
                 None
             ),
-            Some("+keep-plus-minus-markers side-by-side".to_string())
+            Ok(Some("+keep-plus-minus-markers side-by-side".to_string()))
+        );
+    }
+
+    /// A renderer that cannot be started says why, as one that fails does.
+    #[test]
+    fn a_renderer_that_cannot_be_started_says_why() {
+        let failed = run(
+            &["/no/such/renderer".to_string()],
+            Some("a\n"),
+            &params_with(&[]),
+            None,
+        )
+        .unwrap_err();
+        assert!(
+            failed.starts_with("renderer could not be started: "),
+            "{failed}"
         );
     }
 
@@ -812,7 +869,7 @@ mod tests {
         // Not "+": the user's configuration must apply entirely untouched.
         assert_eq!(
             run(&echo_features(), None, &params_with(&[]), None),
-            Some(String::new())
+            Ok(Some(String::new()))
         );
     }
 

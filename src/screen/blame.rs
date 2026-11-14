@@ -26,8 +26,15 @@ pub(crate) fn create(
         Box::new(move |params: RenderParams| {
             let commit_display = commit.as_deref().unwrap_or("HEAD").to_string();
             let blame_lines = git::blame(repo.as_ref(), &file_path, commit.as_deref())?;
-            let rendered = rendered_blame(&config, &params, &repo, &file_path, commit.as_deref())
-                .filter(|rows| rows.len() == blame_lines.len());
+            let (rendered, failed) =
+                match rendered_blame(&config, &params, &repo, &file_path, commit.as_deref()) {
+                    Ok(rendered) => (rendered, None),
+                    Err(failed) => (None, Some(failed)),
+                };
+            let rendered = rendered.filter(|rows| rows.len() == blame_lines.len());
+            // A renderer that failed leaves gitu's own drawing, under what went
+            // wrong.
+            let failed = failed.map(|failed| crate::items::error_row(&config, failed));
 
             let header = Item {
                 id: hash(("blame_header", file_path.as_str(), commit_display.as_str())),
@@ -74,7 +81,7 @@ pub(crate) fn create(
                         ..Default::default()
                     }
                 });
-                return Ok(std::iter::once(header).chain(lines).collect());
+                return Ok(failed.into_iter().chain([header]).chain(lines).collect());
             }
 
             let entries = blame_lines
@@ -121,7 +128,7 @@ pub(crate) fn create(
                     items
                 });
 
-            Ok(std::iter::once(header).chain(entries).collect())
+            Ok(failed.into_iter().chain([header]).chain(entries).collect())
         }),
     )?;
 
@@ -156,16 +163,18 @@ fn delta_config_parameters(file_path: &str, given: Option<&str>) -> String {
     }
 }
 
-/// The rows the renderer draws for git blame's output, one per line of the file,
-/// or `None` if it draws none.
+/// The rows the renderer draws for git blame's output, one per line of the file:
+/// `None` if it draws none, and what to tell the user if it fails.
 fn rendered_blame(
     config: &Config,
     params: &RenderParams,
     repo: &Repository,
     file_path: &str,
     commit: Option<&str>,
-) -> Option<Vec<Rc<crate::items::RenderedRow>>> {
-    let text = git::blame_text(repo, file_path, commit)?;
+) -> Result<Option<Vec<Rc<crate::items::RenderedRow>>>, String> {
+    let Some(text) = git::blame_text(repo, file_path, commit) else {
+        return Ok(None);
+    };
     let given = std::env::var("GIT_CONFIG_PARAMETERS").ok();
     let parameters = delta_config_parameters(file_path, given.as_deref());
     let output = crate::diff_renderer::run_with_env(
@@ -175,10 +184,12 @@ fn rendered_blame(
         repo.workdir(),
         &[("GIT_CONFIG_PARAMETERS", parameters)],
     )?;
-    crate::items::plain_rows(&output)
-        .into_iter()
-        .map(|item| item.rendered)
-        .collect()
+    Ok(output.and_then(|output| {
+        crate::items::plain_rows(&output)
+            .into_iter()
+            .map(|item| item.rendered)
+            .collect()
+    }))
 }
 
 #[cfg(test)]

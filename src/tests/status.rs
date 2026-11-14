@@ -264,3 +264,57 @@ fn the_branch_is_labelled_branch() {
         "{buffer}"
     );
 }
+
+/// The status view's diffs are drawn by the renderer too; one that cannot draw
+/// them says why.
+#[test]
+fn a_renderer_that_fails_to_draw_status_says_why() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+    ctx.config().general.diff_renderer.command = [
+        "sh",
+        "-c",
+        "input=$(cat); case \"$input\" in *'diff --git'*) \
+         echo 'Invalid color or style attribute: line' >&2; exit 2;; esac; \
+         printf '%s\\n' \"$input\"",
+    ]
+    .map(String::from)
+    .to_vec();
+
+    let mut app = ctx.init_app();
+    fs::write(ctx.dir.join("firstfile"), "changed\n").unwrap();
+    ctx.update(&mut app, keys("gr"));
+
+    let buffer = ctx.redact_buffer();
+    assert!(
+        buffer.contains("Invalid color or style attribute: line"),
+        "{buffer}"
+    );
+}
+
+/// Status started with a renderer that fails still shows what it can: the
+/// branch, the changed files, the commits. It says why their diffs are not
+/// drawn.
+#[test]
+fn status_with_a_renderer_that_fails_still_starts() {
+    let mut ctx = setup_clone!();
+    commit(&ctx.dir, "firstfile", "testing\n");
+    fs::write(ctx.dir.join("firstfile"), "changed\n").unwrap();
+    ctx.config().general.diff_renderer.command = [
+        "sh",
+        "-c",
+        "[ -z \"$(cat)\" ] || { echo 'Invalid color or style attribute: line' >&2; exit 2; }",
+    ]
+    .map(String::from)
+    .to_vec();
+
+    ctx.init_app();
+
+    let buffer = ctx.redact_buffer();
+    assert!(
+        buffer.contains("Invalid color or style attribute: line"),
+        "{buffer}"
+    );
+    assert!(buffer.contains("firstfile"), "{buffer}");
+    assert!(buffer.contains("add firstfile"), "{buffer}");
+}

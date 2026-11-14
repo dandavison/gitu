@@ -2,6 +2,7 @@
 //! pipeline would: what the renderer has drawn can be shown while the rest of
 //! it is still being written and drawn.
 
+use std::ffi::OsStr;
 use std::io::{self, Read, Write};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
@@ -42,6 +43,8 @@ pub(crate) struct Snapshot {
     pub done: bool,
     /// What git said when it exited unsuccessfully having written nothing.
     pub refused: Option<String>,
+    /// What to tell the user when the renderer exited unsuccessfully.
+    pub renderer_failed: Option<String>,
 }
 
 struct Shared {
@@ -60,6 +63,7 @@ struct State {
     rendered: Option<Vec<u8>>,
     rendered_rows: usize,
     rendered_done: bool,
+    renderer_failed: Option<String>,
     /// How many bytes of the input have been written to the renderer.
     fed: usize,
     abandoned: bool,
@@ -120,8 +124,8 @@ impl Drop for OnExit<'_> {
 
 impl Stream {
     /// Start `input` writing into `renderer`, reading at most `limit` bytes of
-    /// it. Without a renderer, or with one that cannot be started, the input is
-    /// only read.
+    /// it. Without a renderer, or with one that cannot be started (which is
+    /// said, as a renderer failing is), the input is only read.
     pub(crate) fn start(input: Input, renderer: Option<Command>, limit: u64) -> io::Result<Self> {
         let shared = Arc::new(Shared {
             state: Mutex::new(State::default()),
@@ -145,13 +149,21 @@ impl Stream {
             }
         };
 
+        let renderer_name = renderer
+            .as_ref()
+            .map(|command| command.get_program().to_owned());
         let mut renderer = renderer.and_then(|mut command| {
             command
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
-                .stderr(Stdio::null())
+                .stderr(Stdio::piped())
                 .spawn()
-                .inspect_err(|e| log::warn!("renderer failed to spawn: {e}"))
+                .inspect_err(|e| {
+                    log::warn!("renderer failed to spawn: {e}");
+                    let failed =
+                        crate::diff_renderer::not_started_message(command.get_program(), e);
+                    shared.update(|state| state.renderer_failed = Some(failed));
+                })
                 .ok()
         });
         let sink = renderer.as_mut().and_then(|child| child.stdin.take());
@@ -159,6 +171,7 @@ impl Stream {
         match renderer {
             Some(mut child) => {
                 let stdout = child.stdout.take().expect("stdout was piped");
+                let name = renderer_name.unwrap_or_default();
                 shared.update(|state| {
                     state.has_renderer = true;
                     state.rendered = Some(Vec::new());
@@ -166,7 +179,7 @@ impl Stream {
                 let shared = Arc::clone(&shared);
                 thread::spawn(move || {
                     let _done = OnExit(&shared, |state| state.rendered_done = true);
-                    draw(&shared, stdout, child);
+                    draw(&shared, stdout, child, &name);
                 });
             }
             None => shared.update(|state| state.rendered_done = true),
@@ -248,6 +261,7 @@ impl Stream {
             rendered,
             done,
             refused: state.refused.clone(),
+            renderer_failed: state.renderer_failed.clone(),
         }
     }
 }
@@ -418,8 +432,17 @@ fn feed(shared: &Shared, mut stdin: ChildStdin, chunks: Receiver<Vec<u8>>) {
     }
 }
 
-/// Read the renderer's output into the shared state as it draws it.
-fn draw(shared: &Shared, mut stdout: ChildStdout, mut child: Child) {
+/// Read the renderer's output into the shared state as it draws it. `program`
+/// is the renderer's, for saying what went wrong if it fails.
+fn draw(shared: &Shared, mut stdout: ChildStdout, mut child: Child, program: &OsStr) {
+    // Read stderr on its own thread, as for the input's command.
+    let complaint = child.stderr.take().map(|mut pipe| {
+        thread::spawn(move || {
+            let mut said = String::new();
+            let _ = pipe.read_to_string(&mut said);
+            said
+        })
+    });
     let mut buffer = vec![0; 64 * 1024];
     loop {
         let read = match stdout.read(&mut buffer) {
@@ -435,13 +458,24 @@ fn draw(shared: &Shared, mut stdout: ChildStdout, mut child: Child) {
         });
     }
 
-    let succeeded = child.wait().is_ok_and(|status| status.success());
-    if !succeeded {
-        log::warn!("renderer exited unsuccessfully");
+    let status = child.wait();
+    let said = complaint
+        .and_then(|thread| thread.join().ok())
+        .unwrap_or_default();
+    let failed = match status {
+        Ok(status) if status.success() => None,
+        Ok(status) => Some(crate::diff_renderer::failure_message(
+            program, &said, status,
+        )),
+        Err(e) => Some(crate::diff_renderer::failure_message(program, "", e)),
+    };
+    if let Some(failed) = &failed {
+        log::warn!("renderer exited unsuccessfully: {failed}");
     }
     shared.update(|state| {
-        if !succeeded {
+        if let Some(failed) = failed {
             state.rendered = None;
+            state.renderer_failed = Some(failed);
         }
         state.rendered_done = true;
     });
@@ -596,6 +630,24 @@ mod tests {
 
         assert!(snapshot.done);
         assert_eq!(snapshot.rendered, None);
+    }
+
+    /// A renderer that cannot be started has drawn nothing, and says why.
+    #[test]
+    fn a_renderer_that_cannot_be_started_says_why() {
+        let snapshot = finished(
+            Input::Text("a\n".into()),
+            Some(command(&["/no/such/renderer"])),
+            1_000,
+        );
+
+        assert_eq!(snapshot.rendered, None);
+        let failed = snapshot.renderer_failed.unwrap_or_default();
+        assert!(
+            failed.starts_with("renderer could not be started: "),
+            "{failed}"
+        );
+        assert_eq!(snapshot.text, "a\n");
     }
 
     #[test]
